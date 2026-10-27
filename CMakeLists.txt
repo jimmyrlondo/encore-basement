@@ -1,7 +1,8 @@
 # Encore: Basement, an open-source DAW (AGPLv3).
 # Built on JUCE (AGPLv3) and Tracktion Engine (GPLv3), both git submodules.
 #
-#   git clone --recurse-submodules https://github.com/jimmyrlondo/encore-basement.git
+#   git clone https://github.com/jimmyrlondo/encore-basement.git
+#   git submodule update --init --depth 1 external/JUCE external/tracktion_engine
 #   cmake -B build -G "Visual Studio 17 2022" -A x64
 #   cmake --build build --config Release
 cmake_minimum_required(VERSION 3.22)

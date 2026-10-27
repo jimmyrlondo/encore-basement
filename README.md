@@ -38,13 +38,21 @@ undo / redo, Delete removes the selected clip or track.
 Needs Visual Studio 2022 (or its Build Tools) with the C++ workload, and CMake.
 
 ```
-git clone --recurse-submodules https://github.com/jimmyrlondo/encore-basement.git
+git clone https://github.com/jimmyrlondo/encore-basement.git
 cd encore-basement
+git submodule update --init --depth 1 external/JUCE external/tracktion_engine
 cmake -B build -G "Visual Studio 17 2022" -A x64
 cmake --build build --config Release
 ```
 
+(Don't use `--recurse-submodules`: Tracktion Engine has its own copy of JUCE as
+a submodule with an SSH address; Basement uses `external/JUCE`, pinned to the
+same commit, instead.)
+
 The app ends up in `build/Basement_artefacts/Release/Encore Basement.exe`.
+`"Encore Basement.exe" --selftest <folder>` checks import, mixing, export and
+reopening without opening a window (exit code 0 = all good, details in
+`<folder>/selftest.log`).
 macOS and Linux should build the same way (JUCE and Tracktion support both);
 they haven't been tried yet.
 
