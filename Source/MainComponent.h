@@ -1,5 +1,5 @@
 // Encore: Basement
-// Copyright (C) 2026 the Encore: Basement contributors. AGPLv3 (see LICENSE).
+// Copyright (C) 2026 Encore Studio. AGPLv3 (see LICENSE).
 //
 // The main window: a song (a Tracktion "Edit") with its tracks, the transport,
 // and the things you do to a song (record, import, add effects, export).

@@ -1,5 +1,5 @@
 // Encore: Basement
-// Copyright (C) 2026 the Encore: Basement contributors. AGPLv3 (see LICENSE).
+// Copyright (C) 2026 Encore Studio. AGPLv3 (see LICENSE).
 //
 // Encore's look on the desktop: the same warm near-black surfaces, paper text
 // and accent colours as encoremusic.studio (design-tokens.css), so moving

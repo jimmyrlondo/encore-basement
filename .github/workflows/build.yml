@@ -1,0 +1,57 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Only the two top-level submodules (Tracktion's own nested JUCE uses an SSH address)
+      - name: Fetch JUCE and Tracktion Engine
+        run: git submodule update --init --depth 1 external/JUCE external/tracktion_engine
+
+      - name: Configure
+        run: cmake -B build -A x64
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Self-test
+        shell: pwsh
+        run: |
+          $exe = "build/Basement_artefacts/Release/Encore Basement.exe"
+          $dir = Join-Path $env:RUNNER_TEMP "selftest"
+          $p = Start-Process -FilePath $exe -ArgumentList "--selftest", "`"$dir`"" -PassThru
+          if (-not $p.WaitForExit(300000)) { $p.Kill(); throw "self-test timed out" }
+          Get-Content (Join-Path $dir "selftest.log")
+          if ($p.ExitCode -ne 0) { throw "self-test failed ($($p.ExitCode))" }
+
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory dist | Out-Null
+          Copy-Item "build/Basement_artefacts/Release/Encore Basement.exe", LICENSE, README.md dist/
+          Compress-Archive dist/* Encore-Basement-windows.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Encore-Basement-windows
+          path: Encore-Basement-windows.zip
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Encore-Basement-windows.zip
+          prerelease: true
+          generate_release_notes: true

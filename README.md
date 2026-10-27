@@ -7,6 +7,14 @@ built for it, and (soon) send finished songs straight to your Encore account.
 Basement is built on [Tracktion Engine](https://github.com/Tracktion/tracktion_engine)
 and [JUCE](https://juce.com).
 
+## Download
+
+Grab the latest `Encore-Basement-windows.zip` from
+[Releases](https://github.com/jimmyrlondo/encore-basement/releases), unzip it
+anywhere and run `Encore Basement.exe`. Nothing to install. It's an early
+build and not code-signed yet, so Windows SmartScreen will warn the first time:
+click **More info**, then **Run anyway**.
+
 ## What it does today (0.1)
 
 - **Record** any number of tracks at once from any audio interface. Every input
@@ -63,5 +71,5 @@ Basement is free software under the GNU Affero General Public License v3 (see
 The arrange view in `Source/edit/` started from Tracktion Engine's example
 code (GPLv3) and is marked where it was changed.
 
-The Encore name and logo belong to Encore; forks are welcome
+Copyright (C) 2026 Encore Studio. The Encore name and logo belong to Encore Studio; forks are welcome
 under the license but should use their own name.

@@ -1,5 +1,5 @@
 // Encore: Basement
-// Copyright (C) 2026 the Encore: Basement contributors. AGPLv3 (see LICENSE).
+// Copyright (C) 2026 Encore Studio. AGPLv3 (see LICENSE).
 //
 // "Encore Basement.exe --selftest <folder>" runs the core of the app without
 // a window and exits 0 when everything works: make a song, import audio as
