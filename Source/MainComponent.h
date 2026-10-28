@@ -173,45 +173,193 @@ public:
     }
 };
 
+
+#include "Hub.h"
+
+//==============================================================================
+/** Small dialogs: Song Setup and Preferences */
+class SongSetupComponent : public juce::Component
+{
+public:
+    std::function<void (SongInfo)> onSave;
+
+    SongSetupComponent (const SongInfo& i) : info (i)
+    {
+        fields.set (i);
+        addAndMakeVisible (fields);
+        hubui::styleLabel (format, 13.0f, theme::muted);
+        format.setText ("Recorded at " + i.formatText() + ".  Started " + i.created.formatted ("%b %d, %Y"), juce::dontSendNotification);
+        addAndMakeVisible (format);
+        saveButton.setColour (juce::TextButton::buttonColourId, theme::brand);
+        saveButton.onClick = [this] { if (onSave) onSave (fields.get (info)); close(); };
+        cancelButton.onClick = [this] { close(); };
+        addAndMakeVisible (saveButton);
+        addAndMakeVisible (cancelButton);
+        setSize (640, SongFields::heightFor() + 120);
+    }
+
+    void paint (juce::Graphics& g) override { g.fillAll (theme::surface); }
+    void resized() override
+    {
+        auto r = getLocalBounds().reduced (24);
+        fields.setBounds (r.removeFromTop (SongFields::heightFor()));
+        r.removeFromTop (10);
+        format.setBounds (r.removeFromTop (20));
+        auto b = r.removeFromBottom (36);
+        saveButton.setBounds (b.removeFromRight (110));
+        b.removeFromRight (8);
+        cancelButton.setBounds (b.removeFromRight (90));
+    }
+
+private:
+    SongInfo info;
+    SongFields fields;
+    juce::Label format;
+    juce::TextButton saveButton { "Save" }, cancelButton { "Cancel" };
+    void close() { if (auto* d = findParentComponentOfClass<juce::DialogWindow>()) d->exitModalState (0); }
+};
+
+class PreferencesComponent : public juce::Component
+{
+public:
+    PreferencesComponent (juce::PropertiesFile& p) : props (p)
+    {
+        for (auto* l : { &startL, &folderL, &folderPath, &recentL })
+        {
+            hubui::styleLabel (*l);
+            addAndMakeVisible (l);
+        }
+        hubui::styleLabel (folderPath, 13.0f, theme::paper);
+        startWith.addItem ("The Hub (recent songs and New song)", 1);
+        startWith.addItem ("The last song I had open", 2);
+        startWith.setSelectedId (props.getValue ("startWith", "hub") == "last" ? 2 : 1, juce::dontSendNotification);
+        startWith.onChange = [this] { props.setValue ("startWith", startWith.getSelectedId() == 2 ? "last" : "hub"); };
+        hubui::styleCombo (startWith);
+        addAndMakeVisible (startWith);
+        changeFolder.onClick = [this]
+        {
+            auto chooser = std::make_shared<juce::FileChooser> ("Where should Basement keep your songs?", juce::File (props.getValue ("projectsFolder")));
+            chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories, [this, chooser] (const juce::FileChooser&)
+            {
+                if (chooser->getResult() == juce::File()) return;
+                props.setValue ("projectsFolder", chooser->getResult().getFullPathName());
+                update();
+            });
+        };
+        clearRecent.onClick = [this] { recent::save (props, {}); update(); };
+        for (auto* b : { &changeFolder, &clearRecent }) addAndMakeVisible (b);
+        update();
+        setSize (620, 230);
+    }
+
+    void paint (juce::Graphics& g) override { g.fillAll (theme::surface); }
+    void resized() override
+    {
+        auto r = getLocalBounds().reduced (24);
+        auto row = [&r] { auto x = r.removeFromTop (34); r.removeFromTop (16); return x; };
+        auto a = row(); startL.setBounds (a.removeFromLeft (150)); startWith.setBounds (a);
+        auto b = row(); folderL.setBounds (b.removeFromLeft (150)); changeFolder.setBounds (b.removeFromRight (100)); folderPath.setBounds (b.withTrimmedRight (8));
+        auto c = row(); recentL.setBounds (c.removeFromLeft (150)); clearRecent.setBounds (c.removeFromLeft (180));
+    }
+
+private:
+    juce::PropertiesFile& props;
+    juce::ComboBox startWith;
+    juce::TextButton changeFolder { "Change..." }, clearRecent { "Clear recent songs" };
+    juce::Label startL { {}, "When Basement opens" }, folderL { {}, "Songs folder" }, folderPath, recentL { {}, "Recent list" };
+    void update()
+    {
+        folderPath.setText (props.getValue ("projectsFolder", "(not chosen yet)"), juce::dontSendNotification);
+        clearRecent.setButtonText ("Clear recent songs (" + juce::String (recent::load (props).size()) + ")");
+    }
+};
+
+inline void showDialog (const juce::String& title, juce::Component* content, juce::Component* over)
+{
+    juce::DialogWindow::LaunchOptions o;
+    o.dialogTitle = title;
+    o.dialogBackgroundColour = theme::surface;
+    o.escapeKeyTriggersCloseButton = true;
+    o.useNativeTitleBar = true;
+    o.resizable = false;
+    o.componentToCentreAround = over;
+    o.content.setOwned (content);
+    o.launchAsync();
+}
+
 //==============================================================================
 class MainComponent : public juce::Component,
                       public juce::FileDragAndDropTarget,
                       public juce::KeyListener,
+                      public juce::ApplicationCommandTarget,
+                      public juce::MenuBarModel,
                       private juce::ChangeListener,
                       private juce::Timer
 {
 public:
     std::function<void (const juce::String&)> onTitleChange;
 
+    enum Commands
+    {
+        // File
+        cmdHub = 0x2000, cmdNew, cmdOpen, cmdClose, cmdSave, cmdSaveAs, cmdSaveVersion, cmdSaveTemplate, cmdRevert,
+        cmdImportAudio, cmdExportMix, cmdExportZip, cmdPreferences, cmdQuit,
+        // Edit
+        cmdUndo, cmdRedo, cmdCut, cmdCopy, cmdPaste, cmdDuplicate, cmdDelete, cmdSplit, cmdSelectAll, cmdSelectNone, cmdMuteClip,
+        // Project
+        cmdAddTrack, cmdDuplicateTrack, cmdRenameTrack, cmdRemoveTrack, cmdSongSetup,
+        // Audio
+        cmdNormalize, cmdGainUp, cmdGainDown, cmdGainReset, cmdFadeIn, cmdFadeOut, cmdRemoveFades, cmdReverse,
+        // Media
+        cmdShowSongFolder, cmdShowRecordings, cmdShowAudio, cmdChangeProjectsFolder,
+        // Transport
+        cmdPlay, cmdRecord, cmdToStart, cmdToEnd, cmdBarBack, cmdBarForward, cmdLoop, cmdLoopToSelection, cmdClick,
+        cmdCountNone, cmdCount1Beat, cmdCount2Beats, cmdCount1Bar, cmdCount2Bars,
+        // Studio
+        cmdAudioSetup, cmdPlugins, cmdReassignInputs,
+        // Window
+        cmdEffects, cmdZoomIn, cmdZoomOut, cmdZoomFit,
+        // Help
+        cmdShortcuts, cmdGuide, cmdReport, cmdUpdates, cmdLogFolder, cmdAbout
+    };
+
     MainComponent()
     {
         behaviour->songFolder = [this] { return songFile.getParentDirectory(); };
 
-        for (auto* b : { &newButton, &openButton, &saveButton, &importButton, &addTrackButton, &pluginsButton, &audioButton, &exportButton,
-                         &homeButton, &playButton, &recordButton, &clickButton })
+        commandManager.registerAllCommandsForTarget (this);
+        commandManager.setFirstCommandTarget (this);
+        setApplicationCommandManagerToWatch (&commandManager);
+        addAndMakeVisible (menuBar);
+
+        hub = std::make_unique<HubComponent> (engine, props());
+        hub->onOpen = [this] (juce::File f) { loadSong (f); };
+        hub->onOpenOther = [this] { openSong(); };
+        hub->onBack = [this] { showHub (false); };
+        hub->onAudioSetup = [this] { EngineHelpers::showAudioDeviceSettings (engine); };
+        hub->onCreate = [this] (SongPlan p) { createSong (p); };
+        addChildComponent (*hub);
+
+        for (auto* b : { &homeButton, &playButton, &recordButton, &loopButton, &clickButton, &addTrackButton, &importButton, &exportButton })
         {
-            addAndMakeVisible (b);
+            addChildComponent (b);
             b->setMouseClickGrabsKeyboardFocus (false);
         }
-        Helpers::addAndMakeVisible (*this, { &timeLabel, &barLabel, &tempoLabel, &tempoCaption, &statusLabel });
+        for (auto* l : { &timeLabel, &barLabel, &tempoLabel, &tempoCaption, &statusLabel })
+            addChildComponent (l);
 
         exportButton.setColour (juce::TextButton::buttonColourId, theme::brand);
         recordButton.setColour (juce::TextButton::buttonOnColourId, theme::record);
         recordButton.setColour (juce::TextButton::textColourOnId, theme::paper);
-        clickButton.setClickingTogglesState (false);
 
-        newButton.setTooltip ("Start a new song (Ctrl+N)");
-        openButton.setTooltip ("Open a song (Ctrl+O)");
-        saveButton.setTooltip ("Save (Ctrl+S). Basement also saves when you stop recording and when you quit.");
-        importButton.setTooltip ("Add audio files as new tracks (or drag them in) (Ctrl+I)");
-        addTrackButton.setTooltip ("Add a track to record on (Ctrl+T)");
-        pluginsButton.setTooltip ("Find your VST3 plugins (Encore plugins included)");
-        audioButton.setTooltip ("Pick your audio interface, inputs and outputs");
-        exportButton.setTooltip ("Mix the whole song down to a WAV");
         homeButton.setTooltip ("Back to the start (Home)");
         playButton.setTooltip ("Play / stop (Space)");
         recordButton.setTooltip ("Record on the armed tracks (R)");
-        clickButton.setTooltip ("Metronome click");
+        loopButton.setTooltip ("Loop the selected clips, or the whole song (L)");
+        clickButton.setTooltip ("Metronome click (C)");
+        addTrackButton.setTooltip ("Add a track to record on (Ctrl+T)");
+        importButton.setTooltip ("Add audio files as new tracks, or drag them in (Ctrl+I)");
+        exportButton.setTooltip ("Mix the whole song down to a WAV (Ctrl+E)");
 
         timeLabel.setFont (juce::FontOptions (22.0f, juce::Font::bold));
         barLabel.setFont (juce::FontOptions (13.0f));
@@ -225,39 +373,39 @@ public:
         statusLabel.setColour (juce::Label::textColourId, theme::muted);
         statusLabel.setJustificationType (juce::Justification::centredRight);
 
-        newButton.onClick = [this] { askForNewSong(); };
-        openButton.onClick = [this] { openSong(); };
-        saveButton.onClick = [this] { save(); };
-        importButton.onClick = [this] { browseForImport(); };
-        addTrackButton.onClick = [this] { addTrack(); };
-        pluginsButton.onClick = [this] { showPluginList(); };
-        audioButton.onClick = [this] { EngineHelpers::showAudioDeviceSettings (engine); };
-        exportButton.onClick = [this] { exportMix(); };
-        homeButton.onClick = [this] { if (edit) edit->getTransport().setPosition (0s); };
-        playButton.onClick = [this] { togglePlay(); };
-        recordButton.onClick = [this] { toggleRecord(); };
-        clickButton.onClick = [this] { if (edit) edit->clickTrackEnabled = ! edit->clickTrackEnabled.get(); };
+        homeButton.onClick = [this] { invoke (cmdToStart); };
+        playButton.onClick = [this] { invoke (cmdPlay); };
+        recordButton.onClick = [this] { invoke (cmdRecord); };
+        loopButton.onClick = [this] { invoke (cmdLoop); };
+        clickButton.onClick = [this] { invoke (cmdClick); };
+        addTrackButton.onClick = [this] { invoke (cmdAddTrack); };
+        importButton.onClick = [this] { invoke (cmdImportAudio); };
+        exportButton.onClick = [this] { invoke (cmdExportMix); };
 
         setupInputs();
         engine.getDeviceManager().addChangeListener (this);
         setSize (1400, 860);
         startTimerHz (20);
 
-        // pick up where you left off, or start fresh
         auto last = juce::File (props().getValue ("lastSong"));
-        if (last.existsAsFile())
+        if (last.existsAsFile() && recent::load (props()).isEmpty()) // songs made before the Hub existed
+            if (auto e = songs::open (engine, last, te::Edit::forExamining)) recent::remember (props(), *e, last, last.getLastModificationTime());
+        if (props().getValue ("startWith", "hub") == "last" && last.existsAsFile())
             loadSong (last);
         else
-            juce::MessageManager::callAsync ([this] { ensureProjectsFolder ([this] { newSong ("Untitled"); }); });
+        {
+            showHub (true);
+            hub->showTab (hub->recentCount() > 0 ? 0 : 1);
+        }
     }
 
     ~MainComponent() override
     {
         stopTimer();
+        setApplicationCommandManagerToWatch (nullptr);
         engine.getDeviceManager().removeChangeListener (this);
-        if (edit) { save(); edit->getTransport().removeChangeListener (this); }
-        editComponent = nullptr;
-        edit = nullptr;
+        closeSong (true);
+        hub = nullptr;
         engine.getTemporaryFileManager().getTempDirectory().deleteRecursively();
     }
 
@@ -265,14 +413,19 @@ public:
     void paint (juce::Graphics& g) override
     {
         g.fillAll (theme::base);
-        auto top = getLocalBounds().removeFromTop (topBarH);
         g.setColour (theme::surface);
-        g.fillRect (top);
-        g.setColour (theme::strong);
-        g.fillRect (top.removeFromBottom (1));
+        g.fillRect (getLocalBounds().removeFromTop (menuH));
+        if (hubShown) return;
 
-        // wordmark: ENCORE: in the brand square's spirit, BASEMENT in paper
-        auto mark = getLocalBounds().removeFromTop (topBarH).reduced (16, 0).removeFromLeft (180);
+        auto bar = getLocalBounds().withTrimmedTop (menuH).removeFromTop (toolbarH);
+        g.setColour (theme::surface);
+        g.fillRect (bar);
+        g.setColour (theme::strong);
+        g.fillRect (bar.removeFromBottom (1));
+        g.fillRect (getLocalBounds().withTrimmedTop (menuH).removeFromTop (1));
+
+        // wordmark
+        auto mark = getLocalBounds().withTrimmedTop (menuH).removeFromTop (toolbarH).reduced (16, 0).removeFromLeft (160);
         g.setColour (theme::brand);
         g.fillRect (mark.getX(), mark.getCentreY() + 4, 7, 7);
         g.setColour (theme::text2);
@@ -281,67 +434,64 @@ public:
         g.setColour (theme::paper);
         g.setFont (juce::FontOptions (20.0f, juce::Font::bold));
         g.drawText ("BASEMENT", mark.withTrimmedLeft (12).withTrimmedTop (mark.getHeight() / 2 - 2), juce::Justification::topLeft);
-
-        auto bar = getLocalBounds().withTrimmedTop (topBarH).removeFromTop (transportH);
-        g.setColour (theme::surface);
-        g.fillRect (bar);
-        g.setColour (theme::strong);
-        g.fillRect (bar.removeFromBottom (1));
     }
 
     void resized() override
     {
         auto r = getLocalBounds();
-        auto top = r.removeFromTop (topBarH).reduced (12, 12);
-        top.removeFromLeft (190);
-        auto place = [&top] (juce::Button& b, int w) { b.setBounds (top.removeFromLeft (w)); top.removeFromLeft (6); };
-        place (newButton, 96); place (openButton, 70); place (saveButton, 62);
-        top.removeFromLeft (14);
-        place (addTrackButton, 98); place (importButton, 116); place (pluginsButton, 78); place (audioButton, 104);
-        exportButton.setBounds (top.removeFromRight (118));
-        statusLabel.setBounds (top.withTrimmedRight (10));
+        menuBar.setBounds (r.removeFromTop (menuH));
+        if (hubShown)
+        {
+            hub->setBounds (r);
+            for (auto* c : { (juce::Component*) &importButton, (juce::Component*) &addTrackButton, (juce::Component*) &statusLabel }) c->setVisible (false);
+            return;
+        }
 
-        auto t = r.removeFromTop (transportH).reduced (12, 9);
-        homeButton.setBounds (t.removeFromLeft (40)); t.removeFromLeft (6);
-        playButton.setBounds (t.removeFromLeft (84)); t.removeFromLeft (6);
-        recordButton.setBounds (t.removeFromLeft (90)); t.removeFromLeft (20);
-        timeLabel.setBounds (t.removeFromLeft (130));
-        barLabel.setBounds (t.removeFromLeft (90)); t.removeFromLeft (16);
-        auto tempo = t.removeFromLeft (70);
+        auto t = r.removeFromTop (toolbarH).reduced (12, 10);
+        t.removeFromLeft (170);
+        auto place = [&t] (juce::Component& c, int w, int gapAfter = 6) { c.setBounds (t.removeFromLeft (w)); t.removeFromLeft (gapAfter); };
+        place (homeButton, 40); place (playButton, 76); place (recordButton, 84); place (loopButton, 62, 18);
+        place (timeLabel, 112); place (barLabel, 80, 10);
+        auto tempo = t.removeFromLeft (64);
         tempoCaption.setBounds (tempo.removeFromTop (12));
         tempoLabel.setBounds (tempo);
         t.removeFromLeft (8);
-        clickButton.setBounds (t.removeFromLeft (70));
+        place (clickButton, 62);
+        // narrow windows drop the extras first (they're all in the menus too)
+        exportButton.setBounds (t.removeFromRight (110)); t.removeFromRight (6);
+        const bool roomy = t.getWidth() >= 98 + 116 + 16 + 120;
+        importButton.setVisible (roomy && ! hubShown);
+        addTrackButton.setVisible (roomy && ! hubShown);
+        if (roomy)
+        {
+            importButton.setBounds (t.removeFromRight (116)); t.removeFromRight (6);
+            addTrackButton.setBounds (t.removeFromRight (98)); t.removeFromRight (10);
+        }
+        statusLabel.setVisible (t.getWidth() >= 120 && ! hubShown);
+        statusLabel.setBounds (t);
 
         if (editComponent) editComponent->setBounds (r);
     }
 
     //==============================================================================
-    // Keyboard: Space play/stop, R record, Home to start, Ctrl+S/O/N/T/I/Z/Y, Delete
+    // Keys go through the same commands as the menus. Some keyboards and tools
+    // send Ctrl+letter as a control code (Ctrl+T arrives as 20), so letters are
+    // normalised first.
     bool keyPressed (const juce::KeyPress& k, juce::Component*) override
     {
-        using KP = juce::KeyPress;
-        auto cmd = k.getModifiers().isCommandDown();
-        auto key = (int) juce::CharacterFunctions::toUpperCase ((juce::juce_wchar) k.getKeyCode()); // letters can arrive in either case
-        if (key >= 1 && key <= 26) { key = 'A' + key - 1; cmd = true; } // some keyboards/tools send Ctrl+letter as a control code
-        if (! edit) return false;
-        if (k == KP::spaceKey) { togglePlay(); return true; }
-        if (k == KP::homeKey) { edit->getTransport().setPosition (0s); return true; }
-        if (! cmd && key == 'R') { toggleRecord(); return true; }
-        if (cmd && key == 'S') { save(); return true; }
-        if (cmd && key == 'O') { openSong(); return true; }
-        if (cmd && key == 'N') { askForNewSong(); return true; }
-        if (cmd && key == 'T') { addTrack(); return true; }
-        if (cmd && key == 'I') { browseForImport(); return true; }
-        if (cmd && key == 'Z' && ! k.getModifiers().isShiftDown()) { edit->getUndoManager().undo(); return true; }
-        if (cmd && (key == 'Y' || (key == 'Z' && k.getModifiers().isShiftDown()))) { edit->getUndoManager().redo(); return true; }
-        if (k == KP::deleteKey || k == KP::backspaceKey) { deleteSelection(); return true; }
+        auto mods = k.getModifiers();
+        int code = k.getKeyCode();
+        if (code >= 1 && code <= 26) { code = 'a' + code - 1; mods = mods.withFlags (juce::ModifierKeys::commandModifier); }
+        if (code >= 'A' && code <= 'Z') code += 'a' - 'A';
+        if (auto id = commandManager.getKeyMappings()->findCommandForKeyPress (juce::KeyPress (code, mods, 0)))
+            return commandManager.invokeDirectly (id, false);
         return false;
     }
 
     // Drop audio files anywhere: each becomes a track
     bool isInterestedInFileDrag (const juce::StringArray& files) override
     {
+        if (! edit || hubShown) return false;
         for (auto& f : files) if (isAudioFile (juce::File (f))) return true;
         return false;
     }
@@ -352,9 +502,348 @@ public:
         importFiles (list);
     }
 
+    void updateTitle()
+    {
+        if (onTitleChange) onTitleChange (edit ? "Encore: Basement - " + songTitle() : juce::String ("Encore: Basement"));
+    }
+
+    //==============================================================================
+    // Menus
+    juce::StringArray getMenuBarNames() override
+    {
+        return { "File", "Edit", "Project", "Audio", "MIDI", "Score", "Media", "Transport", "Studio", "Window", "Help" };
+    }
+
+    juce::PopupMenu getMenuForIndex (int index, const juce::String&) override
+    {
+        juce::PopupMenu m;
+        auto add = [&] (int id) { addCommand (m, id); };
+        auto later = [&m] (std::initializer_list<const char*> items)
+        {
+            m.addSectionHeader ("Coming in a later version");
+            for (auto* s : items) m.addItem (comingSoonId, s, false);
+        };
+        switch (index)
+        {
+            case 0: // File
+            {
+                add (cmdHub); m.addSeparator();
+                add (cmdNew); add (cmdOpen);
+                juce::PopupMenu recentMenu;
+                recentFiles.clear();
+                for (auto& e : recent::load (props()))
+                {
+                    if (recentFiles.size() >= 12) break;
+                    recentFiles.add (e.file);
+                    recentMenu.addItem (recentBaseId + recentFiles.size() - 1, e.title + (e.artist.isNotEmpty() ? "  (" + e.artist + ")" : juce::String()), e.file.existsAsFile());
+                }
+                m.addSubMenu ("Open Recent", recentMenu, ! recentFiles.isEmpty());
+                add (cmdClose); m.addSeparator();
+                add (cmdSave); add (cmdSaveAs); add (cmdSaveVersion); add (cmdSaveTemplate); add (cmdRevert); m.addSeparator();
+                juce::PopupMenu imp; addCommand (imp, cmdImportAudio); imp.addItem (comingSoonId, "MIDI File... (coming soon)", false);
+                m.addSubMenu ("Import", imp);
+                juce::PopupMenu exp; addCommand (exp, cmdExportMix); addCommand (exp, cmdExportZip);
+                exp.addItem (comingSoonId, "Send to Encore... (coming soon)", false);
+                m.addSubMenu ("Export", exp);
+                m.addSeparator(); add (cmdPreferences); m.addSeparator(); add (cmdQuit);
+                break;
+            }
+            case 1: // Edit
+                add (cmdUndo); add (cmdRedo); m.addSeparator();
+                add (cmdCut); add (cmdCopy); add (cmdPaste); add (cmdDuplicate); add (cmdDelete); m.addSeparator();
+                add (cmdSplit); add (cmdMuteClip); m.addSeparator();
+                add (cmdSelectAll); add (cmdSelectNone);
+                break;
+            case 2: // Project
+                add (cmdAddTrack); add (cmdDuplicateTrack); add (cmdRenameTrack); add (cmdRemoveTrack); m.addSeparator();
+                add (cmdSongSetup);
+                later ({ "Add Instrument Track", "Add Group Track", "Add FX Track", "Markers", "Arranger Track" });
+                break;
+            case 3: // Audio
+                add (cmdNormalize); add (cmdGainUp); add (cmdGainDown); add (cmdGainReset); m.addSeparator();
+                add (cmdFadeIn); add (cmdFadeOut); add (cmdRemoveFades); m.addSeparator();
+                add (cmdReverse);
+                later ({ "Time Stretch", "Pitch Shift", "Detect Tempo", "Bounce Selection" });
+                break;
+            case 4: // MIDI
+                later ({ "Open Key Editor", "Open Drum Editor", "Quantize", "Transpose", "Velocity", "Import MIDI File" });
+                break;
+            case 5: // Score
+                later ({ "Open Score Editor", "Chord Track", "Lyrics", "Print / Export Score" });
+                break;
+            case 6: // Media
+                add (cmdImportAudio); m.addSeparator();
+                add (cmdShowSongFolder); add (cmdShowRecordings); add (cmdShowAudio); m.addSeparator();
+                add (cmdChangeProjectsFolder);
+                break;
+            case 7: // Transport
+            {
+                add (cmdPlay); add (cmdRecord); m.addSeparator();
+                add (cmdToStart); add (cmdToEnd); add (cmdBarBack); add (cmdBarForward); m.addSeparator();
+                add (cmdLoop); add (cmdLoopToSelection); m.addSeparator();
+                add (cmdClick);
+                juce::PopupMenu count;
+                for (auto id : { cmdCountNone, cmdCount1Beat, cmdCount2Beats, cmdCount1Bar, cmdCount2Bars }) addCommand (count, id);
+                m.addSubMenu ("Count-in", count);
+                break;
+            }
+            case 8: // Studio
+                add (cmdAudioSetup); add (cmdPlugins); add (cmdReassignInputs); m.addSeparator();
+                m.addItem (comingSoonId, "Sign in to Encore (coming soon)", false);
+                m.addSeparator(); add (cmdPreferences);
+                break;
+            case 9: // Window
+                add (cmdHub); m.addSeparator();
+                add (cmdEffects); m.addSeparator();
+                add (cmdZoomIn); add (cmdZoomOut); add (cmdZoomFit);
+                later ({ "Mixer", "Clip Editor" });
+                break;
+            case 10: // Help
+                add (cmdShortcuts); add (cmdGuide); m.addSeparator();
+                add (cmdReport); add (cmdUpdates); add (cmdLogFolder); m.addSeparator();
+                add (cmdAbout);
+                break;
+            default: break;
+        }
+        return m;
+    }
+
+    /** A command in a menu, with its shortcut written the way DAWs write them (R, Ctrl+Shift+H, Space) */
+    void addCommand (juce::PopupMenu& m, int id)
+    {
+        juce::ApplicationCommandInfo info (id);
+        getCommandInfo (id, info);
+        juce::PopupMenu::Item item (info.shortName);
+        item.itemID = id;
+        item.commandManager = &commandManager;
+        item.isEnabled = (info.flags & juce::ApplicationCommandInfo::isDisabled) == 0;
+        item.isTicked = (info.flags & juce::ApplicationCommandInfo::isTicked) != 0;
+        juce::StringArray keys;
+        for (auto& k : info.defaultKeypresses) keys.add (keyText (k));
+        item.shortcutKeyDescription = keys.joinIntoString (", ");
+        m.addItem (item);
+    }
+
+    static juce::String keyText (const juce::KeyPress& k)
+    {
+        juce::StringArray parts;
+        auto mods = k.getModifiers();
+        if (mods.isCommandDown()) parts.add ("Ctrl");
+        if (mods.isAltDown()) parts.add ("Alt");
+        if (mods.isShiftDown()) parts.add ("Shift");
+        using KP = juce::KeyPress;
+        auto c = k.getKeyCode();
+        juce::String key;
+        if (c == KP::spaceKey) key = "Space";
+        else if (c == KP::homeKey) key = "Home";
+        else if (c == KP::endKey) key = "End";
+        else if (c == KP::leftKey) key = "Left";
+        else if (c == KP::rightKey) key = "Right";
+        else if (c == KP::deleteKey) key = "Del";
+        else if (c == KP::backspaceKey) key = "Backspace";
+        else if (c == KP::F2Key) key = "F2";
+        else key = juce::String::charToString ((juce::juce_wchar) c).toUpperCase();
+        parts.add (key);
+        return parts.joinIntoString ("+");
+    }
+
+    void menuItemSelected (int id, int) override
+    {
+        if (id >= recentBaseId && id < recentBaseId + recentFiles.size())
+            if (recentFiles[id - recentBaseId].existsAsFile()) loadSong (recentFiles[id - recentBaseId]);
+    }
+
+    //==============================================================================
+    // Commands
+    juce::ApplicationCommandTarget* getNextCommandTarget() override { return nullptr; }
+
+    void getAllCommands (juce::Array<juce::CommandID>& c) override
+    {
+        for (int id = cmdHub; id <= cmdAbout; ++id) c.add (id);
+    }
+
+    void getCommandInfo (juce::CommandID id, juce::ApplicationCommandInfo& info) override
+    {
+        using KP = juce::KeyPress;
+        const int cmd = juce::ModifierKeys::commandModifier, shift = juce::ModifierKeys::shiftModifier, alt = juce::ModifierKeys::altModifier, none = 0;
+        const bool song = edit != nullptr, songShown = song && ! hubShown;
+        auto clips = selectedClips();
+        const bool anyClip = songShown && ! clips.isEmpty();
+        auto set = [&] (const char* name, const char* cat, bool active = true) { info.setInfo (name, {}, cat, 0); info.setActive (active); };
+        auto key = [&] (int k, int mods) { info.addDefaultKeypress (k, mods); };
+
+        switch (id)
+        {
+            case cmdHub:            set ("Hub", "File"); key ('h', cmd | shift); info.setTicked (hubShown); break;
+            case cmdNew:            set ("New Song...", "File"); key ('n', cmd); break;
+            case cmdOpen:           set ("Open...", "File"); key ('o', cmd); break;
+            case cmdClose:          set ("Close", "File", song); key ('w', cmd); break;
+            case cmdSave:           set ("Save", "File", song); key ('s', cmd); break;
+            case cmdSaveAs:         set ("Save As...", "File", song); key ('s', cmd | shift); break;
+            case cmdSaveVersion:    set ("Save New Version", "File", song); key ('s', cmd | alt); break;
+            case cmdSaveTemplate:   set ("Save as Template...", "File", song); break;
+            case cmdRevert:         set ("Revert", "File", song); break;
+            case cmdImportAudio:    set ("Audio File...", "File", song); key ('i', cmd); break;
+            case cmdExportMix:      set ("Audio Mixdown...", "File", song && ! currentExport); key ('e', cmd); break;
+            case cmdExportZip:      set ("Song Folder as Zip...", "File", song); break;
+            case cmdPreferences:    set ("Preferences...", "File"); key (',', cmd); break;
+            case cmdQuit:           set ("Quit", "File"); key ('q', cmd); break;
+
+            case cmdUndo:           set ("Undo", "Edit", songShown && edit->getUndoManager().canUndo()); key ('z', cmd); break;
+            case cmdRedo:           set ("Redo", "Edit", songShown && edit->getUndoManager().canRedo()); key ('y', cmd); key ('z', cmd | shift); break;
+            case cmdCut:            set ("Cut", "Edit", anyClip); key ('x', cmd); break;
+            case cmdCopy:           set ("Copy", "Edit", anyClip); key ('c', cmd); break;
+            case cmdPaste:          set ("Paste at Playhead", "Edit", songShown && ! clipboard.isEmpty()); key ('v', cmd); break;
+            case cmdDuplicate:      set ("Duplicate", "Edit", anyClip); key ('d', cmd); break;
+            case cmdDelete:         set ("Delete", "Edit", songShown && selectionManager.getNumObjectsSelected() > 0); key (KP::deleteKey, none); key (KP::backspaceKey, none); break;
+            case cmdSplit:          set ("Split at Playhead", "Edit", songShown); key ('x', alt); break;
+            case cmdMuteClip:       set ("Mute / Unmute Clip", "Edit", anyClip); key ('m', shift); break;
+            case cmdSelectAll:      set ("Select All", "Edit", songShown); key ('a', cmd); break;
+            case cmdSelectNone:     set ("Select None", "Edit", songShown); key ('a', cmd | shift); break;
+
+            case cmdAddTrack:       set ("Add Audio Track", "Project", songShown); key ('t', cmd); break;
+            case cmdDuplicateTrack: set ("Duplicate Track", "Project", songShown && selectedTrack() != nullptr); key ('d', cmd | shift); break;
+            case cmdRenameTrack:    set ("Rename Track...", "Project", songShown && selectedTrack() != nullptr); key (KP::F2Key, none); break;
+            case cmdRemoveTrack:    set ("Remove Selected Track", "Project", songShown && selectedTrack() != nullptr); break;
+            case cmdSongSetup:      set ("Song Setup...", "Project", song); key ('s', shift); break;
+
+            case cmdNormalize:      set ("Normalize Clip (to -0.3 dB)", "Audio", anyClip); break;
+            case cmdGainUp:         set ("Clip Gain +1 dB", "Audio", anyClip); key ('=', alt); break;
+            case cmdGainDown:       set ("Clip Gain -1 dB", "Audio", anyClip); key ('-', alt); break;
+            case cmdGainReset:      set ("Reset Clip Gain", "Audio", anyClip); break;
+            case cmdFadeIn:         set ("Fade In to Playhead", "Audio", anyClip); key ('f', alt); break;
+            case cmdFadeOut:        set ("Fade Out from Playhead", "Audio", anyClip); key ('g', alt); break;
+            case cmdRemoveFades:    set ("Remove Fades", "Audio", anyClip); break;
+            case cmdReverse:        set ("Reverse", "Audio", anyClip); break;
+
+            case cmdShowSongFolder: set ("Show Song Folder", "Media", song); break;
+            case cmdShowRecordings: set ("Show Recordings Folder", "Media", song); break;
+            case cmdShowAudio:      set ("Show Imported Audio Folder", "Media", song); break;
+            case cmdChangeProjectsFolder: set ("Change Songs Folder...", "Media"); break;
+
+            case cmdPlay:           set ("Play / Stop", "Transport", songShown); key (KP::spaceKey, none); break;
+            case cmdRecord:         set ("Record", "Transport", songShown); key ('r', none); key ('*', none); break;
+            case cmdToStart:        set ("Go to Start", "Transport", songShown); key (KP::homeKey, none); break;
+            case cmdToEnd:          set ("Go to End", "Transport", songShown); key (KP::endKey, none); break;
+            case cmdBarBack:        set ("Back One Bar", "Transport", songShown); key (KP::leftKey, none); break;
+            case cmdBarForward:     set ("Forward One Bar", "Transport", songShown); key (KP::rightKey, none); break;
+            case cmdLoop:           set ("Loop", "Transport", songShown); key ('l', none); info.setTicked (song && edit->getTransport().looping.get()); break;
+            case cmdLoopToSelection:set ("Set Loop to Selection", "Transport", anyClip); key ('p', none); break;
+            case cmdClick:          set ("Metronome Click", "Transport", songShown); key ('c', none); info.setTicked (song && edit->clickTrackEnabled.get()); break;
+            case cmdCountNone:      set ("No Count-in", "Transport", song); info.setTicked (song && edit->getCountInMode() == te::Edit::CountIn::none); break;
+            case cmdCount1Beat:     set ("1 Beat", "Transport", song); info.setTicked (song && edit->getCountInMode() == te::Edit::CountIn::oneBeat); break;
+            case cmdCount2Beats:    set ("2 Beats", "Transport", song); info.setTicked (song && edit->getCountInMode() == te::Edit::CountIn::twoBeat); break;
+            case cmdCount1Bar:      set ("1 Bar", "Transport", song); info.setTicked (song && edit->getCountInMode() == te::Edit::CountIn::oneBar); break;
+            case cmdCount2Bars:     set ("2 Bars", "Transport", song); info.setTicked (song && edit->getCountInMode() == te::Edit::CountIn::twoBar); break;
+
+            case cmdAudioSetup:     set ("Audio Setup...", "Studio"); break;
+            case cmdPlugins:        set ("Plugin Manager...", "Studio"); break;
+            case cmdReassignInputs: set ("Give Tracks Their Inputs", "Studio", songShown); break;
+
+            case cmdEffects:        set ("Effects Column", "Window", songShown); info.setTicked (editComponent && editComponent->getEditViewState().showFooters.get()); break;
+            case cmdZoomIn:         set ("Zoom In", "Window", songShown); key ('=', cmd); break;
+            case cmdZoomOut:        set ("Zoom Out", "Window", songShown); key ('-', cmd); break;
+            case cmdZoomFit:        set ("Zoom to Song", "Window", songShown); key ('f', shift); break;
+
+            case cmdShortcuts:      set ("Keyboard Shortcuts...", "Help"); break;
+            case cmdGuide:          set ("User Guide", "Help"); break;
+            case cmdReport:         set ("Report a Problem...", "Help"); break;
+            case cmdUpdates:        set ("Check for Updates...", "Help"); break;
+            case cmdLogFolder:      set ("Open Log Folder", "Help"); break;
+            case cmdAbout:          set ("About Encore: Basement", "Help"); break;
+            default: break;
+        }
+    }
+
+    bool perform (const InvocationInfo& i) override
+    {
+        auto url = [] (const char* u) { juce::URL (u).launchInDefaultBrowser(); };
+        switch (i.commandID)
+        {
+            case cmdHub:            showHub (! hubShown || edit == nullptr); return true;
+            case cmdNew:            showHub (true); hub->showTab (1); return true;
+            case cmdOpen:           openSong(); return true;
+            case cmdClose:          closeSong (true); showHub (true); return true;
+            case cmdSave:           save(); status ("Saved"); return true;
+            case cmdSaveAs:         saveAs(); return true;
+            case cmdSaveVersion:    saveNewVersion(); return true;
+            case cmdSaveTemplate:   saveTemplate(); return true;
+            case cmdRevert:         revert(); return true;
+            case cmdImportAudio:    browseForImport(); return true;
+            case cmdExportMix:      exportMix(); return true;
+            case cmdExportZip:      exportZip(); return true;
+            case cmdPreferences:    showDialog ("Preferences", new PreferencesComponent (props()), this); return true;
+            case cmdQuit:           juce::JUCEApplication::getInstance()->systemRequestedQuit(); return true;
+
+            case cmdUndo:           edit->getUndoManager().undo(); return true;
+            case cmdRedo:           edit->getUndoManager().redo(); return true;
+            case cmdCut:            copyClips(); removeClips (selectedClips(), "Cut"); return true;
+            case cmdCopy:           copyClips(); return true;
+            case cmdPaste:          pasteClips (edit->getTransport().getPosition(), selectedTrack()); return true;
+            case cmdDuplicate:      duplicateClips(); return true;
+            case cmdDelete:         deleteSelection(); return true;
+            case cmdSplit:          splitAtPlayhead(); return true;
+            case cmdMuteClip:       forClips ("Mute clip", [] (te::AudioClipBase& c) { c.setMuted (! c.isMuted()); }); return true;
+            case cmdSelectAll:      selectAll(); return true;
+            case cmdSelectNone:     selectionManager.deselectAll(); return true;
+
+            case cmdAddTrack:       addTrack(); return true;
+            case cmdDuplicateTrack: duplicateTrack(); return true;
+            case cmdRenameTrack:    renameTrack(); return true;
+            case cmdRemoveTrack:    if (auto t = selectedTrack()) { edit->deleteTrack (t); selectionManager.deselectAll(); } return true;
+            case cmdSongSetup:      songSetup(); return true;
+
+            case cmdNormalize:      normalizeClips(); return true;
+            case cmdGainUp:         forClips ("Clip gain", [] (te::AudioClipBase& c) { c.setGainDB (juce::jmin (24.0f, c.getGainDB() + 1.0f)); }); return true;
+            case cmdGainDown:       forClips ("Clip gain", [] (te::AudioClipBase& c) { c.setGainDB (juce::jmax (-60.0f, c.getGainDB() - 1.0f)); }); return true;
+            case cmdGainReset:      forClips ("Clip gain", [] (te::AudioClipBase& c) { c.setGainDB (0.0f); }); return true;
+            case cmdFadeIn:         fadeToPlayhead (true); return true;
+            case cmdFadeOut:        fadeToPlayhead (false); return true;
+            case cmdRemoveFades:    forClips ("Remove fades", [] (te::AudioClipBase& c) { c.setFadeIn ({}); c.setFadeOut ({}); }); return true;
+            case cmdReverse:        forClips ("Reverse", [] (te::AudioClipBase& c) { c.setIsReversed (! c.getIsReversed()); }); return true;
+
+            case cmdShowSongFolder: songFile.revealToUser(); return true;
+            case cmdShowRecordings: revealFolder ("Recordings"); return true;
+            case cmdShowAudio:      revealFolder ("Audio"); return true;
+            case cmdChangeProjectsFolder: showDialog ("Preferences", new PreferencesComponent (props()), this); return true;
+
+            case cmdPlay:           togglePlay(); return true;
+            case cmdRecord:         toggleRecord(); return true;
+            case cmdToStart:        edit->getTransport().setPosition (0s); return true;
+            case cmdToEnd:          edit->getTransport().setPosition (te::toPosition (edit->getLength())); return true;
+            case cmdBarBack:        moveBars (-1); return true;
+            case cmdBarForward:     moveBars (1); return true;
+            case cmdLoop:           toggleLoop(); return true;
+            case cmdLoopToSelection:loopToSelection(); edit->getTransport().looping = true; return true;
+            case cmdClick:          edit->clickTrackEnabled = ! edit->clickTrackEnabled.get(); return true;
+            case cmdCountNone:      edit->setCountInMode (te::Edit::CountIn::none); return true;
+            case cmdCount1Beat:     edit->setCountInMode (te::Edit::CountIn::oneBeat); return true;
+            case cmdCount2Beats:    edit->setCountInMode (te::Edit::CountIn::twoBeat); return true;
+            case cmdCount1Bar:      edit->setCountInMode (te::Edit::CountIn::oneBar); return true;
+            case cmdCount2Bars:     edit->setCountInMode (te::Edit::CountIn::twoBar); return true;
+
+            case cmdAudioSetup:     EngineHelpers::showAudioDeviceSettings (engine); return true;
+            case cmdPlugins:        showPluginList(); return true;
+            case cmdReassignInputs: assignInputs (true); return true;
+
+            case cmdEffects:        { auto& v = editComponent->getEditViewState(); v.showFooters = ! v.showFooters.get(); editComponent->setBounds (editComponent->getBounds().withWidth (editComponent->getWidth() - 1)); resized(); return true; }
+            case cmdZoomIn:         zoom (0.5); return true;
+            case cmdZoomOut:        zoom (2.0); return true;
+            case cmdZoomFit:        zoomToSong(); return true;
+
+            case cmdShortcuts:      showShortcuts(); return true;
+            case cmdGuide:          url ("https://github.com/jimmyrlondo/encore-basement#readme"); return true;
+            case cmdReport:         url ("https://github.com/jimmyrlondo/encore-basement/issues/new"); return true;
+            case cmdUpdates:        url ("https://github.com/jimmyrlondo/encore-basement/releases"); return true;
+            case cmdLogFolder:      juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory).getChildFile ("Encore Basement").startAsProcess(); return true;
+            case cmdAbout:          showAbout(); return true;
+            default: return false;
+        }
+    }
+
 private:
     //==============================================================================
-    static constexpr int topBarH = 60, transportH = 52;
+    static constexpr int menuH = 26, toolbarH = 56, recentBaseId = 0x5000, comingSoonId = 0x5fff;
     BasementBehaviour* behaviour = new BasementBehaviour(); // owned by the engine
     te::Engine engine { "Encore Basement", std::make_unique<BasementUIBehaviour>(), std::unique_ptr<te::EngineBehaviour> (behaviour) };
     te::SelectionManager selectionManager { engine };
@@ -362,24 +851,41 @@ private:
     std::unique_ptr<EditComponent> editComponent;
     juce::File songFile;
     juce::TooltipWindow tooltips { this, 600 };
+    juce::ApplicationCommandManager commandManager;
+    juce::MenuBarComponent menuBar { this };
+    std::unique_ptr<HubComponent> hub;
+    bool hubShown = false;
+    juce::Array<juce::File> recentFiles;
 
-    juce::TextButton newButton { "New song" }, openButton { "Open" }, saveButton { "Save" },
-                     importButton { "Import audio" }, addTrackButton { "Add track" }, pluginsButton { "Plugins" },
-                     audioButton { "Audio setup" }, exportButton { "Export mix" },
-                     homeButton { "|<" }, playButton { "Play" }, recordButton { "Record" }, clickButton { "Click" };
+    juce::TextButton homeButton { "|<" }, playButton { "Play" }, recordButton { "Record" }, loopButton { "Loop" }, clickButton { "Click" },
+                     addTrackButton { "Add track" }, importButton { "Import audio" }, exportButton { "Export mix" };
     juce::Label timeLabel { {}, "0:00.0" }, barLabel { {}, "Bar 1.1" }, tempoLabel { {}, "120" }, tempoCaption { {}, "BPM" }, statusLabel;
 
     juce::PropertiesFile& props() { return engine.getPropertyStorage().getPropertiesFile(); }
-    static bool isAudioFile (const juce::File& f)
-    {
-        return f.hasFileExtension ("wav;aif;aiff;flac;mp3;ogg;m4a;caf;w64;bwf");
-    }
+    static bool isAudioFile (const juce::File& f) { return f.hasFileExtension ("wav;aif;aiff;flac;mp3;ogg;m4a;caf;w64;bwf"); }
     void status (const juce::String& s) { statusLabel.setText (s, juce::dontSendNotification); }
+    void invoke (int id) { commandManager.invokeDirectly (id, false); }
+    juce::String songTitle() { return edit ? SongInfo::readFrom (*edit, songFile).title : juce::String(); }
+
+    void showHub (bool show)
+    {
+        hubShown = show;
+        hub->setVisible (show);
+        if (show) hub->refresh (edit ? songTitle() : juce::String());
+        const bool tools = ! show && edit != nullptr;
+        for (auto* c : std::initializer_list<juce::Component*> { &homeButton, &playButton, &recordButton, &loopButton, &clickButton,
+                                                                 &exportButton, &timeLabel, &barLabel, &tempoLabel, &tempoCaption })
+            c->setVisible (tools);
+        if (editComponent) editComponent->setVisible (! show);
+        commandManager.commandStatusChanged();
+        resized();
+        repaint();
+        updateTitle();
+    }
 
     //==============================================================================
-    // Every input on the interface is its own mono input (Input 1, Input 2...),
-    // so a mic on 1 and a guitar on 2 go to separate tracks. Pairs can still be
-    // recorded as stereo by picking a stereo input on the track.
+    // Inputs. Every input on the interface is its own mono input (Input 1,
+    // Input 2...), so a mic on 1 and a guitar on 2 go to separate tracks.
     void setupInputs()
     {
         auto& dm = engine.getDeviceManager();
@@ -405,85 +911,63 @@ private:
             {
                 wip->setMonitorMode (te::InputDevice::MonitorMode::automatic);
                 wip->setEnabled (true);
+                if (edit) wip->setBitDepth (SongInfo::readFrom (*edit, songFile).bitDepth);
             }
     }
 
-    /** A new song's tracks get inputs 1, 2, 3... (the input list fills in a moment
-        after startup, so this runs again once it has) */
-    bool pendingInputs = false;
-    void assignInputsToTracksWithout()
+    /** Each track gets the input it was planned with (saved on the track), or
+        the next free one; tracks planned with no input are left alone. Inputs
+        appear a moment after startup or a device change, so this keeps trying
+        for a few seconds. */
+    juce::uint32 assignUntil = 0;
+    void assignInputs (bool force = false)
     {
         if (! edit) return;
-        {
-            juce::StringArray inst;
-            for (auto instance : edit->getAllInputDevices())
-                inst.add (instance->getInputDevice().getName() + (instance->getTargets().isEmpty() ? "" : " (in use)"));
-            basementLog ("assigning inputs; song sees: " + inst.joinIntoString (", "));
-        }
         bool all = true;
         for (auto t : te::getAudioTracks (*edit))
-            if (! EngineHelpers::trackHasInput (*t))
-            {
-                assignNextFreeInput (*t);
-                all = all && EngineHelpers::trackHasInput (*t);
-            }
-        if (all && pendingInputs) { pendingInputs = false; save(); }
+        {
+            if (EngineHelpers::trackHasInput (*t)) continue;
+            auto want = t->state.getProperty ("basementInput").toString();
+            if (want == "none" && ! force) continue;
+            if (! assignInput (*t, want == "none" ? juce::String() : want))
+                all = false;
+        }
+        if (all) assignUntil = 0;
     }
 
-    /** The first input no track is using yet */
-    void assignNextFreeInput (te::AudioTrack& t)
+    bool assignInput (te::AudioTrack& t, const juce::String& wanted)
     {
+        te::InputDeviceInstance* pick = nullptr;
         for (auto instance : edit->getAllInputDevices())
             if (instance->getInputDevice().getDeviceType() == te::InputDevice::waveDevice && instance->getTargets().isEmpty())
             {
-                auto res = instance->setTarget (t.itemID, true, &edit->getUndoManager(), 0);
-                basementLog (t.getName() + " <- " + instance->getInputDevice().getName() + (res ? " ok" : " FAILED: " + juce::String (res.error())));
-                return;
+                if (wanted.isNotEmpty() && instance->getInputDevice().getName() == wanted) { pick = instance; break; }
+                if (pick == nullptr && wanted.isEmpty()) pick = instance;
             }
+        if (pick == nullptr && wanted.isNotEmpty() && juce::Time::getMillisecondCounter() > assignUntil)
+            for (auto instance : edit->getAllInputDevices()) // that input isn't here (another interface): use the next free one
+                if (instance->getInputDevice().getDeviceType() == te::InputDevice::waveDevice && instance->getTargets().isEmpty()) { pick = instance; break; }
+        if (pick == nullptr) return false;
+        auto res = pick->setTarget (t.itemID, true, &edit->getUndoManager(), 0);
+        basementLog (t.getName() + " <- " + pick->getInputDevice().getName() + (res ? " ok" : " FAILED: " + juce::String (res.error())));
+        if (res) t.state.setProperty ("basementInput", pick->getInputDevice().getName(), nullptr);
+        return (bool) res;
     }
 
     //==============================================================================
     // Songs
-    void ensureProjectsFolder (std::function<void()> then)
+    juce::File projectsFolder()
     {
         auto f = juce::File (props().getValue ("projectsFolder"));
-        if (f.isDirectory()) { then(); return; }
-        auto chooser = std::make_shared<juce::FileChooser> ("Where should Basement keep your songs? (Pick a roomy drive)",
-                                                            juce::File::getSpecialLocation (juce::File::userMusicDirectory));
-        chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories,
-                              [this, chooser, then] (const juce::FileChooser&)
-                              {
-                                  auto dir = chooser->getResult();
-                                  if (dir == juce::File()) dir = juce::File::getSpecialLocation (juce::File::userMusicDirectory).getChildFile ("Encore Basement");
-                                  if (dir.getFileName() != "Encore Basement" && ! dir.getChildFile ("Encore Basement").exists()) dir = dir.getChildFile ("Encore Basement");
-                                  dir.createDirectory();
-                                  props().setValue ("projectsFolder", dir.getFullPathName());
-                                  then();
-                              });
-    }
-    juce::File projectsFolder() { return juce::File (props().getValue ("projectsFolder")); }
-
-    void askForNewSong()
-    {
-        ensureProjectsFolder ([this]
-        {
-            auto* w = new juce::AlertWindow ("New song", "What's it called? (You can rename it later in its folder.)", juce::MessageBoxIconType::NoIcon);
-            w->addTextEditor ("name", "Untitled");
-            w->addButton ("Create", 1, juce::KeyPress (juce::KeyPress::returnKey));
-            w->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
-            w->enterModalState (true, juce::ModalCallbackFunction::create ([this, w] (int r)
-            {
-                if (r == 1) newSong (w->getTextEditorContents ("name"));
-            }), true);
-        });
+        return f != juce::File() ? f : juce::File::getSpecialLocation (juce::File::userMusicDirectory).getChildFile ("Encore Basement");
     }
 
-    void newSong (juce::String name)
+    void createSong (SongPlan plan)
     {
-        name = juce::File::createLegalFileName (name.trim().isEmpty() ? juce::String ("Untitled") : name.trim());
-        auto folder = projectsFolder().getNonexistentChildFile (name, {}, true);
-        folder.createDirectory();
-        loadSong (folder.getChildFile (folder.getFileName() + ".basement"));
+        closeSong (true);
+        { auto made = songs::createFromPlan (engine, plan); }
+        loadSong (plan.songFile());
+        if (plan.importAfterCreate) browseForImport();
     }
 
     void openSong()
@@ -496,72 +980,227 @@ private:
                               });
     }
 
-    void loadSong (const juce::File& f)
+    void closeSong (bool saveFirst)
     {
-        if (edit) { save(); edit->getTransport().removeChangeListener (this); }
+        if (! edit) return;
+        if (saveFirst) save();
+        edit->getTransport().stop (false, true);
+        edit->getTransport().removeChangeListener (this);
         selectionManager.deselectAll();
         editComponent = nullptr;
+        edit = nullptr;
+        songFile = juce::File();
+        updateTitle();
+    }
 
-        const bool isNew = ! f.existsAsFile();
+    void loadSong (const juce::File& f, bool saveCurrent = true)
+    {
+        closeSong (saveCurrent);
         songFile = f;
-        edit = isNew ? songs::create (engine, f) : songs::open (engine, f);
-        if (edit == nullptr) { status ("Couldn't open " + f.getFileName()); edit = songs::create (engine, f.getSiblingFile (f.getFileNameWithoutExtension() + " (recovered).basement")); }
+        edit = f.existsAsFile() ? songs::open (engine, f) : songs::create (engine, f);
+        if (edit == nullptr)
+        {
+            juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Couldn't open the song", f.getFullPathName());
+            songFile = juce::File();
+            showHub (true);
+            return;
+        }
         edit->playInStopEnabled = true;
         edit->getTransport().addChangeListener (this);
         edit->getTransport().ensureContextAllocated();
 
-        if (isNew)
-        {
-            edit->ensureNumberOfAudioTracks (2);
-            int i = 0;
-            for (auto t : te::getAudioTracks (*edit))
+        // the song's format: interface sample rate and recording bit depth
+        auto info = SongInfo::readFrom (*edit, f);
+        auto& dm = engine.getDeviceManager().deviceManager;
+        if (auto* d = dm.getCurrentAudioDevice())
+            if (std::abs (d->getCurrentSampleRate() - info.sampleRate) > 1 && d->getAvailableSampleRates().contains (info.sampleRate))
             {
-                t->setName ("Track " + juce::String (i + 1));
-                t->setColour (theme::trackColour (i++));
+                auto setup = dm.getAudioDeviceSetup();
+                setup.sampleRate = info.sampleRate;
+                dm.setAudioDeviceSetup (setup, true);
+                basementLog ("switched the interface to " + juce::String (info.sampleRate) + " Hz for " + info.title);
             }
-            pendingInputs = true;
-            assignInputsToTracksWithout();
-            save();
-        }
+        setupInputs();
 
-        if (! isNew) { pendingInputs = true; assignInputsToTracksWithout(); } // inputs saved with the song may be gone (different interface)
+        int i = 0;
+        for (auto t : te::getAudioTracks (*edit)) if (t->getColour() == juce::Colour()) t->setColour (theme::trackColour (i++));
+        assignUntil = juce::Time::getMillisecondCounter() + 4000;
+        assignInputs();
 
         editComponent = std::make_unique<EditComponent> (*edit, selectionManager);
         addAndMakeVisible (*editComponent);
         props().setValue ("lastSong", f.getFullPathName());
+        recent::remember (props(), *edit, songFile);
         edit->restartPlayback();
-        updateTitle();
-        status (isNew ? "New song in " + f.getParentDirectory().getFullPathName() : "Opened " + f.getFileNameWithoutExtension());
-        resized();
+        showHub (false);
+        status ("Opened " + info.title + "  (" + info.formatText() + ")");
     }
 
     void save()
     {
         if (! edit) return;
         te::EditFileOperations (*edit).save (true, true, false);
+        recent::remember (props(), *edit, songFile);
         updateTitle();
     }
 
-public:
-    void updateTitle()
+    void askForText (const juce::String& title, const juce::String& message, const juce::String& initial, std::function<void (juce::String)> then)
     {
-        if (onTitleChange) onTitleChange ("Encore: Basement - " + songFile.getFileNameWithoutExtension());
+        auto* w = new juce::AlertWindow (title, message, juce::MessageBoxIconType::NoIcon);
+        w->addTextEditor ("text", initial);
+        w->addButton ("OK", 1, juce::KeyPress (juce::KeyPress::returnKey));
+        w->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+        w->enterModalState (true, juce::ModalCallbackFunction::create ([w, then] (int r)
+        {
+            auto text = w->getTextEditorContents ("text").trim();
+            if (r == 1 && text.isNotEmpty()) then (text);
+        }), true);
     }
 
-private:
+    /** A copy of the whole song folder under a new name, then work on the copy */
+    void saveAs()
+    {
+        askForText ("Save As", "Save a copy of this song (its whole folder) as:", songTitle() + " copy", [this] (juce::String name)
+        {
+            save();
+            auto from = songFile.getParentDirectory();
+            auto to = projectsFolder().getNonexistentChildFile (juce::File::createLegalFileName (name), {}, true);
+            if (! from.copyDirectoryTo (to)) { status ("Couldn't copy the song folder"); return; }
+            auto copied = to.getChildFile (songFile.getFileName());
+            auto renamed = to.getChildFile (to.getFileName() + ".basement");
+            copied.moveFileTo (renamed);
+            loadSong (renamed);
+            auto info = SongInfo::readFrom (*edit, songFile);
+            info.title = name;
+            info.writeTo (*edit);
+            save();
+            status ("Now working on " + name);
+        });
+    }
+
+    /** Song v2, v3... in the same folder (the earlier versions stay as they were) */
+    void saveNewVersion()
+    {
+        save();
+        auto base = songFile.getFileNameWithoutExtension();
+        int v = 2;
+        if (auto at = base.lastIndexOf (" v"); at > 0 && base.substring (at + 2).containsOnly ("0123456789"))
+        {
+            v = base.substring (at + 2).getIntValue() + 1;
+            base = base.substring (0, at);
+        }
+        auto next = songFile.getSiblingFile (base + " v" + juce::String (v) + ".basement");
+        while (next.exists()) next = songFile.getSiblingFile (base + " v" + juce::String (++v) + ".basement");
+        if (! songFile.copyFileTo (next)) { status ("Couldn't save a new version"); return; }
+        loadSong (next);
+        status ("Saved " + next.getFileNameWithoutExtension() + ". The earlier version is still in the folder.");
+    }
+
+    /** The song's tracks, names, colours, effects, tempo and routing, without any audio */
+    void saveTemplate()
+    {
+        askForText ("Save as Template", "Name this template. It shows up under Start from when you make a new song.", songTitle(), [this] (juce::String name)
+        {
+            save();
+            templates::folder().createDirectory();
+            auto file = templates::folder().getChildFile (juce::File::createLegalFileName (name) + ".basement");
+            songFile.copyFileTo (file);
+            if (auto t = songs::open (engine, file))
+            {
+                for (auto track : te::getAudioTracks (*t))
+                    for (auto* c : juce::Array<te::Clip*> (track->getClips())) // a copy: removing changes the list
+                        c->removeFromParent();
+                auto info = SongInfo::readFrom (*t, file);
+                info.title = {};
+                info.notes = {};
+                info.writeTo (*t);
+                te::EditFileOperations (*t).save (true, true, false);
+            }
+            status ("Saved the template " + name);
+        });
+    }
+
+    void revert()
+    {
+        juce::AlertWindow::showOkCancelBox (juce::MessageBoxIconType::QuestionIcon, "Revert", "Go back to the last saved version of this song? Changes since then are lost.",
+                                            "Revert", "Cancel", this, juce::ModalCallbackFunction::create ([this] (int r)
+        {
+            if (r == 1) { auto f = songFile; loadSong (f, false); status ("Reverted to the last save"); }
+        }));
+    }
+
+    void songSetup()
+    {
+        auto* c = new SongSetupComponent (SongInfo::readFrom (*edit, songFile));
+        c->onSave = [this] (SongInfo info) { if (! edit) return; info.writeTo (*edit); save(); status ("Song details saved"); };
+        showDialog ("Song Setup", c, this);
+    }
+
+    void revealFolder (const juce::String& sub)
+    {
+        auto d = songFile.getParentDirectory().getChildFile (sub);
+        (d.isDirectory() ? d : songFile).revealToUser();
+        if (! d.isDirectory()) status ("No " + sub + " folder yet");
+    }
+
     //==============================================================================
     // Tracks and audio
+    te::AudioTrack* selectedTrack()
+    {
+        if (! edit) return nullptr;
+        for (auto* s : selectionManager.getSelectedObjects())
+        {
+            if (auto t = dynamic_cast<te::AudioTrack*> (s)) return t;
+            if (auto c = dynamic_cast<te::Clip*> (s)) if (auto t = dynamic_cast<te::AudioTrack*> (c->getTrack())) return t;
+        }
+        return nullptr;
+    }
+
+    juce::Array<te::AudioClipBase*> selectedClips()
+    {
+        juce::Array<te::AudioClipBase*> out;
+        if (! edit) return out;
+        for (auto* s : selectionManager.getSelectedObjects())
+            if (auto c = dynamic_cast<te::AudioClipBase*> (s)) out.add (c);
+        return out;
+    }
+
+    void forClips (const juce::String& what, std::function<void (te::AudioClipBase&)> fn)
+    {
+        edit->getUndoManager().beginNewTransaction (what);
+        for (auto* c : selectedClips()) fn (*c);
+    }
+
     void addTrack()
     {
-        if (! edit) return;
         auto tracks = te::getAudioTracks (*edit);
-        basementLog ("add track (have " + juce::String (tracks.size()) + ")");
-        if (auto t = edit->insertNewAudioTrack (te::TrackInsertPoint (nullptr, tracks.isEmpty() ? nullptr : tracks.getLast()), nullptr))
+        auto after = selectedTrack() ? selectedTrack() : (tracks.isEmpty() ? nullptr : tracks.getLast());
+        if (auto t = edit->insertNewAudioTrack (te::TrackInsertPoint (nullptr, after), &selectionManager))
         {
             t->setName ("Track " + juce::String (tracks.size() + 1));
             t->setColour (theme::trackColour (tracks.size()));
-            assignNextFreeInput (*t);
+            assignInput (*t, {});
         }
+    }
+
+    void duplicateTrack()
+    {
+        auto src = selectedTrack();
+        if (src == nullptr) return;
+        auto copy = src->state.createCopy();
+        te::EditItemID::remapIDs (copy, nullptr, *edit);
+        copy.setProperty (te::IDs::name, src->getName() + " copy", nullptr);
+        copy.removeProperty ("basementInput", nullptr);
+        if (auto t = edit->insertTrack (te::TrackInsertPoint (nullptr, src), copy, &selectionManager))
+            status ("Duplicated " + src->getName());
+    }
+
+    void renameTrack()
+    {
+        auto t = selectedTrack();
+        if (t == nullptr) return;
+        juce::Component::SafePointer<MainComponent> safe (this);
+        askForText ("Rename Track", "New name:", t->getName(), [safe, t] (juce::String name) { if (safe != nullptr) t->setName (name); });
     }
 
     void browseForImport()
@@ -618,19 +1257,139 @@ private:
 
     void deleteSelection()
     {
-        auto sel = selectionManager.getSelectedObject (0);
-        if (auto clip = dynamic_cast<te::Clip*> (sel))
-            clip->removeFromParent();
-        else if (auto track = dynamic_cast<te::Track*> (sel))
-            if (! (track->isMasterTrack() || track->isMarkerTrack() || track->isTempoTrack() || track->isChordTrack()))
-                edit->deleteTrack (track);
+        auto clips = selectedClips();
+        if (! clips.isEmpty()) { removeClips (clips, "Delete"); return; }
+        if (auto track = selectedTrack()) edit->deleteTrack (track);
         selectionManager.deselectAll();
+    }
+
+    void removeClips (juce::Array<te::AudioClipBase*> clips, const juce::String& what)
+    {
+        edit->getUndoManager().beginNewTransaction (what);
+        selectionManager.deselectAll();
+        for (auto* c : clips) c->removeFromParent();
+    }
+
+    //==============================================================================
+    // Clipboard: audio clips, pasted at the playhead keeping their spacing
+    struct ClipCopy
+    {
+        juce::File file;
+        juce::String name;
+        te::TimeDuration startFromFirst, length, offset, fadeIn, fadeOut;
+        float gainDb = 0;
+        bool reversed = false, muted = false;
+    };
+    juce::Array<ClipCopy> clipboard;
+
+    void copyClips()
+    {
+        auto clips = selectedClips();
+        if (clips.isEmpty()) return;
+        clipboard.clear();
+        auto first = clips[0]->getPosition().getStart();
+        for (auto* c : clips) first = juce::jmin (first, c->getPosition().getStart());
+        for (auto* c : clips)
+            if (auto w = dynamic_cast<te::WaveAudioClip*> (c))
+                clipboard.add ({ w->getAudioFile().getFile(), w->getName(), w->getPosition().getStart() - first, w->getPosition().getLength(),
+                                 w->getPosition().getOffset(), w->getFadeIn(), w->getFadeOut(), w->getGainDB(), w->getIsReversed(), w->isMuted() });
+        status ("Copied " + juce::String (clipboard.size()) + (clipboard.size() == 1 ? " clip" : " clips"));
+    }
+
+    void pasteClips (te::TimePosition at, te::AudioTrack* track)
+    {
+        if (clipboard.isEmpty()) return;
+        if (track == nullptr) { auto all = te::getAudioTracks (*edit); if (all.isEmpty()) return; track = all[0]; }
+        edit->getUndoManager().beginNewTransaction ("Paste");
+        selectionManager.deselectAll();
+        for (auto& c : clipboard)
+            if (auto w = track->insertWaveClip (c.name, c.file, { { at + c.startFromFirst, c.length }, c.offset }, false))
+            {
+                w->setGainDB (c.gainDb);
+                w->setFadeIn (c.fadeIn);
+                w->setFadeOut (c.fadeOut);
+                w->setIsReversed (c.reversed);
+                w->setMuted (c.muted);
+                selectionManager.select (w.get(), true);
+            }
+    }
+
+    void duplicateClips()
+    {
+        auto clips = selectedClips();
+        if (clips.isEmpty()) return;
+        auto end = clips[0]->getPosition().getEnd();
+        for (auto* c : clips) end = juce::jmax (end, c->getPosition().getEnd());
+        auto track = dynamic_cast<te::AudioTrack*> (clips[0]->getTrack());
+        auto keep = clipboard;
+        copyClips();
+        pasteClips (end, track);
+        clipboard = keep;
+    }
+
+    /** Splits the selected clips at the playhead, or every clip under it if none are selected */
+    void splitAtPlayhead()
+    {
+        auto t = edit->getTransport().getPosition();
+        auto clips = selectedClips();
+        if (clips.isEmpty())
+            for (auto track : te::getAudioTracks (*edit))
+                for (auto* c : track->getClips())
+                    if (auto a = dynamic_cast<te::AudioClipBase*> (c)) clips.add (a);
+        edit->getUndoManager().beginNewTransaction ("Split");
+        int n = 0;
+        for (auto* c : clips)
+            if (c->getPosition().time.contains (t) && t > c->getPosition().getStart())
+                if (auto ct = c->getClipTrack()) { ct->splitClip (*c, t); ++n; }
+        status (n == 0 ? juce::String ("Nothing under the playhead to split") : "Split " + juce::String (n) + (n == 1 ? " clip" : " clips"));
+    }
+
+    void selectAll()
+    {
+        selectionManager.deselectAll();
+        for (auto track : te::getAudioTracks (*edit))
+            for (auto* c : track->getClips()) selectionManager.select (c, true);
+    }
+
+    /** Clip gain so the loudest peak in the clip lands at -0.3 dBFS */
+    void normalizeClips()
+    {
+        juce::AudioFormatManager fm;
+        fm.registerBasicFormats();
+        edit->getUndoManager().beginNewTransaction ("Normalize");
+        int done = 0;
+        for (auto* c : selectedClips())
+            if (auto w = dynamic_cast<te::WaveAudioClip*> (c))
+                if (std::unique_ptr<juce::AudioFormatReader> r { fm.createReaderFor (w->getAudioFile().getFile()) })
+                {
+                    auto from = (juce::int64) (w->getPosition().getOffset().inSeconds() * r->sampleRate);
+                    auto num = (juce::int64) (w->getPosition().getLength().inSeconds() * r->sampleRate);
+                    juce::Range<float> ranges[8];
+                    const int ch = juce::jmin (8, (int) r->numChannels);
+                    r->readMaxLevels (from, juce::jmin (num, r->lengthInSamples - from), ranges, ch);
+                    float peak = 0;
+                    for (int i = 0; i < ch; ++i) peak = juce::jmax (peak, std::abs (ranges[i].getStart()), std::abs (ranges[i].getEnd()));
+                    if (peak > 0.00001f) { w->setGainDB (juce::jlimit (-60.0f, 24.0f, -0.3f - juce::Decibels::gainToDecibels (peak))); ++done; }
+                }
+        status (done ? "Normalized " + juce::String (done) + (done == 1 ? " clip" : " clips") + " to -0.3 dB" : juce::String ("Nothing to normalize"));
+    }
+
+    void fadeToPlayhead (bool in)
+    {
+        auto t = edit->getTransport().getPosition();
+        forClips (in ? "Fade in" : "Fade out", [t, in] (te::AudioClipBase& c)
+        {
+            auto pos = c.getPosition();
+            if (! pos.time.contains (t)) return;
+            if (in) c.setFadeIn (t - pos.getStart());
+            else    c.setFadeOut (pos.getEnd() - t);
+        });
     }
 
     void showPluginList()
     {
         juce::DialogWindow::LaunchOptions o;
-        o.dialogTitle = "Plugins";
+        o.dialogTitle = "Plugin Manager";
         o.dialogBackgroundColour = theme::surface;
         o.escapeKeyTriggersCloseButton = true;
         o.useNativeTitleBar = true;
@@ -649,11 +1408,10 @@ private:
     // Export: the whole song (every track, every effect) to a 24-bit WAV
     void exportMix()
     {
-        if (! edit) return;
         if (currentExport) { status ("Already exporting..."); return; }
         if (edit->getLength() <= 0s) { status ("Nothing to export yet: record or import something first."); return; }
         save();
-        auto def = songFile.getParentDirectory().getChildFile (songFile.getFileNameWithoutExtension() + " mix.wav");
+        auto def = songFile.getParentDirectory().getChildFile (songTitle() + " mix.wav");
         auto chooser = std::make_shared<juce::FileChooser> ("Export the mix", def, "*.wav");
         chooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::warnAboutOverwriting,
                               [this, chooser] (const juce::FileChooser&)
@@ -674,18 +1432,50 @@ private:
     }
     std::shared_ptr<SongExport> currentExport;
 
+    /** The whole song folder in one zip (audio stored, not recompressed): for backups and sending to a studio */
+    void exportZip()
+    {
+        save();
+        auto def = songFile.getParentDirectory().getSiblingFile (songFile.getParentDirectory().getFileName() + ".zip");
+        auto chooser = std::make_shared<juce::FileChooser> ("Zip the song folder", def, "*.zip");
+        chooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::warnAboutOverwriting, [this, chooser] (const juce::FileChooser&)
+        {
+            if (chooser->getResult() == juce::File()) return;
+            auto dest = chooser->getResult().withFileExtension ("zip");
+            struct Zipper : public juce::ThreadWithProgressWindow
+            {
+                Zipper (juce::File d, juce::File o) : ThreadWithProgressWindow ("Zipping " + d.getFileName(), true, true), dir (d), out (o) {}
+                void run() override
+                {
+                    juce::ZipFile::Builder b;
+                    for (auto& f : dir.findChildFiles (juce::File::findFiles, true))
+                        b.addFile (f, isAudio (f) ? 0 : 6, dir.getFileName() + "/" + f.getRelativePathFrom (dir).replaceCharacter ('\\', '/'));
+                    out.deleteFile();
+                    juce::FileOutputStream os (out);
+                    double progress = 0;
+                    ok = os.openedOk() && b.writeToStream (os, &progress);
+                    if (threadShouldExit()) ok = false;
+                }
+                static bool isAudio (const juce::File& f) { return f.hasFileExtension ("wav;aif;aiff;flac;mp3;ogg;m4a"); }
+                juce::File dir, out;
+                bool ok = false;
+            } z (songFile.getParentDirectory(), dest);
+            z.runThread();
+            if (z.ok) { status ("Zipped to " + dest.getFileName()); dest.revealToUser(); }
+            else { dest.deleteFile(); status ("The zip didn't finish"); }
+        });
+    }
+
     //==============================================================================
     // Transport
     void togglePlay()
     {
-        if (! edit) return;
         const bool wasRecording = edit->getTransport().isRecording();
         EngineHelpers::togglePlay (*edit);
         if (wasRecording) save();
     }
     void toggleRecord()
     {
-        if (! edit) return;
         auto& tr = edit->getTransport();
         if (tr.isRecording()) { tr.stop (false, false); save(); return; }
         bool anyArmed = false;
@@ -693,19 +1483,104 @@ private:
         if (! anyArmed) { status ("Arm a track first: the R button on the track, after choosing its input."); return; }
         tr.record (false);
     }
+    void moveBars (int n)
+    {
+        auto& ts = edit->tempoSequence;
+        const int num = juce::jmax (1, ts.getTimeSig (0)->numerator.get());
+        auto beats = ts.toBeats (edit->getTransport().getPosition()).inBeats();
+        auto bar = n < 0 ? std::ceil (beats / num - 0.001) - 1 : std::floor (beats / num + 0.001) + 1;
+        edit->getTransport().setPosition (ts.toTime (te::BeatPosition::fromBeats (juce::jmax (0.0, bar) * num)));
+    }
+    void loopToSelection()
+    {
+        auto clips = selectedClips();
+        te::TimeRange r { 0_tp, edit->getLength() };
+        if (! clips.isEmpty())
+        {
+            r = clips[0]->getPosition().time;
+            for (auto* c : clips) r = r.getUnionWith (c->getPosition().time);
+        }
+        if (r.getLength() > 0s) edit->getTransport().setLoopRange (r);
+    }
+    void toggleLoop()
+    {
+        auto& tr = edit->getTransport();
+        if (! tr.looping.get() && (tr.getLoopRange().getLength() <= 0s || ! selectedClips().isEmpty())) loopToSelection();
+        tr.looping = ! tr.looping.get();
+    }
     void setTempo (double bpm)
     {
         if (! edit) return;
         if (bpm >= 20 && bpm <= 400) edit->tempoSequence.getTempo (0)->setBpm (bpm);
-        tempoLabel.setText (juce::String (edit->tempoSequence.getTempo (0)->getBpm(), 1).trimCharactersAtEnd ("0").trimCharactersAtEnd ("."), juce::dontSendNotification);
+        SongInfo i;
+        i.bpm = edit->tempoSequence.getTempo (0)->getBpm();
+        tempoLabel.setText (i.bpmText(), juce::dontSendNotification);
     }
 
+    //==============================================================================
+    // View
+    void zoom (double factor)
+    {
+        auto& v = editComponent->getEditViewState();
+        auto centre = edit->getTransport().getPosition().inSeconds();
+        auto x1 = v.viewX1.get().inSeconds(), x2 = v.viewX2.get().inSeconds();
+        if (centre < x1 || centre > x2) centre = (x1 + x2) * 0.5;
+        auto w = juce::jlimit (0.5, 3600.0, (x2 - x1) * factor);
+        auto start = juce::jmax (0.0, centre - (centre - x1) * (w / (x2 - x1)));
+        v.viewX1 = te::TimePosition::fromSeconds (start);
+        v.viewX2 = te::TimePosition::fromSeconds (start + w);
+    }
+    void zoomToSong()
+    {
+        auto& v = editComponent->getEditViewState();
+        v.viewX1 = 0s;
+        v.viewX2 = te::TimePosition::fromSeconds (juce::jmax (10.0, edit->getLength().inSeconds() * 1.05));
+    }
+
+    //==============================================================================
+    // Help
+    void showShortcuts()
+    {
+        juce::String text;
+        juce::String category;
+        juce::Array<juce::CommandID> ids;
+        getAllCommands (ids);
+        for (auto id : ids)
+        {
+            juce::ApplicationCommandInfo info (id);
+            getCommandInfo (id, info);
+            if (info.defaultKeypresses.isEmpty()) continue;
+            if (info.categoryName != category) { category = info.categoryName; text << (text.isEmpty() ? "" : "\n") << category.toUpperCase() << "\n"; }
+            juce::StringArray keys;
+            for (auto& k : info.defaultKeypresses) keys.add (keyText (k));
+            text << "  " << info.shortName.paddedRight (' ', 30) << keys.joinIntoString ("  or  ") << "\n";
+        }
+        auto* ed = new juce::TextEditor();
+        ed->setMultiLine (true);
+        ed->setReadOnly (true);
+        ed->setFont (juce::FontOptions (juce::Font::getDefaultMonospacedFontName(), 14.0f, juce::Font::plain));
+        ed->setText (text);
+        ed->setSize (560, 620);
+        showDialog ("Keyboard Shortcuts", ed, this);
+    }
+
+    void showAbout()
+    {
+        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::NoIcon, "Encore: Basement " + juce::String (ProjectInfo::versionString),
+            "A free, open-source DAW from Encore Studio.\n\n"
+            "Copyright (C) 2026 Encore Studio. Free software under the GNU AGPLv3.\n"
+            "Built on Tracktion Engine (GPLv3) and JUCE (AGPLv3).\n\n"
+            "github.com/jimmyrlondo/encore-basement");
+    }
+
+    //==============================================================================
     void changeListenerCallback (juce::ChangeBroadcaster* b) override
     {
         if (b == &engine.getDeviceManager()) // an interface was added, removed or switched
         {
             setupInputs();
-            if (pendingInputs) assignInputsToTracksWithout();
+            assignUntil = juce::Time::getMillisecondCounter() + 4000;
+            if (edit) assignInputs();
             return;
         }
         timerCallback();
@@ -714,7 +1589,8 @@ private:
     void timerCallback() override
     {
         if (! edit) return;
-        if (pendingInputs) assignInputsToTracksWithout();
+        if (assignUntil != 0 && juce::Time::getMillisecondCounter() < assignUntil + 1000) assignInputs();
+        if (hubShown) return;
         auto& tr = edit->getTransport();
         const auto pos = tr.getPosition().inSeconds();
         timeLabel.setText (juce::String ((int) pos / 60) + ":" + juce::String (std::fmod (pos, 60.0), 1).paddedLeft ('0', 4), juce::dontSendNotification);
@@ -726,10 +1602,12 @@ private:
         if (currentExport) status ("Exporting... " + juce::String (juce::roundToInt (currentExport->progress() * 100)) + "%");
         recordButton.setToggleState (tr.isRecording(), juce::dontSendNotification);
         clickButton.setToggleState (edit->clickTrackEnabled.get(), juce::dontSendNotification);
+        loopButton.setToggleState (tr.looping.get(), juce::dontSendNotification);
         if (! tempoLabel.isBeingEdited())
         {
-            auto bpm = juce::String (ts.getTempo (0)->getBpm(), 1);
-            if (bpm.endsWith (".0")) bpm = bpm.dropLastCharacters (2);
+            SongInfo i;
+            i.bpm = ts.getTempo (0)->getBpm();
+            auto bpm = i.bpmText();
             if (tempoLabel.getText() != bpm) tempoLabel.setText (bpm, juce::dontSendNotification);
         }
     }

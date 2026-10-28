@@ -342,6 +342,36 @@ void AudioClipComponent::paint (Graphics& g)
     if (editViewState.drawWaveforms && thumbnail != nullptr)
         drawWaveform (g, *getWaveAudioClip(), *thumbnail, theme::paper.withAlpha (0.7f),
                       0, getWidth(), 18, getHeight() - 22, 0);
+
+    // fades, mute, reverse and clip gain (Audio menu)
+    auto& c = *getWaveAudioClip();
+    const double len = c.getPosition().getLength().inSeconds();
+    if (len > 0)
+    {
+        const float w = (float) getWidth(), h = (float) getHeight();
+        g.setColour (theme::base.withAlpha (0.55f));
+        if (auto fi = (float) (c.getFadeIn().inSeconds() / len * w); fi > 1.0f)
+        {
+            Path p; p.startNewSubPath (0, 0); p.lineTo (fi, 0); p.lineTo (0, h); p.closeSubPath();
+            g.fillPath (p);
+        }
+        if (auto fo = (float) (c.getFadeOut().inSeconds() / len * w); fo > 1.0f)
+        {
+            Path p; p.startNewSubPath (w, 0); p.lineTo (w - fo, 0); p.lineTo (w, h); p.closeSubPath();
+            g.fillPath (p);
+        }
+    }
+    StringArray tags;
+    if (c.isMuted()) tags.add ("Muted");
+    if (c.getIsReversed()) tags.add ("Reversed");
+    if (std::abs (c.getGainDB()) > 0.05f) tags.add ((c.getGainDB() > 0 ? "+" : "") + String (c.getGainDB(), 1) + " dB");
+    if (c.isMuted()) g.fillAll (theme::base.withAlpha (0.5f));
+    if (! tags.isEmpty())
+    {
+        g.setColour (theme::paper.withAlpha (0.85f));
+        g.setFont (FontOptions (11.0f, Font::bold));
+        g.drawText (tags.joinIntoString ("  "), getLocalBounds().reduced (6, 2), Justification::topRight, true);
+    }
 }
 
 void AudioClipComponent::drawWaveform (Graphics& g, te::AudioClipBase& c, te::SmartThumbnail& thumb, Colour colour,
@@ -1447,6 +1477,17 @@ void EditComponent::buildTracks()
 void TimeRulerComponent::paint (Graphics& g)
 {
     g.fillAll (theme::surface);
+    // the loop range, while looping is on
+    if (edit.getTransport().looping.get())
+    {
+        auto lr = edit.getTransport().getLoopRange();
+        const int x1 = editViewState.timeToX (lr.getStart(), getWidth()), x2 = editViewState.timeToX (lr.getEnd(), getWidth());
+        g.setColour (theme::accent.withAlpha (0.25f));
+        g.fillRect (x1, 0, jmax (1, x2 - x1), getHeight());
+        g.setColour (theme::accent);
+        g.fillRect (x1, 0, 1, getHeight());
+        g.fillRect (x2, 0, 1, getHeight());
+    }
     auto& ts = edit.tempoSequence;
     const int num = jmax (1, ts.getTimeSig (0)->numerator.get());
     // label every bar, or every 2nd/4th/... bar when zoomed out

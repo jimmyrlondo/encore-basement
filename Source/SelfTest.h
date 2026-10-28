@@ -140,6 +140,48 @@ namespace selftest
             expect ("volume and pan saved", std::abs (tracks[0]->getVolumePlugin()->getVolumeDb() + 6.0f) < 0.1f && tracks[1]->getVolumePlugin()->getPan() < -0.99f);
         }
 
+        // a song made by the New song form: details, tempo, tracks and planned inputs
+        {
+            SongPlan plan;
+            plan.folder = dir.getChildFile ("Planned Song");
+            plan.folder.deleteRecursively();
+            plan.info.title = "Planned Song";
+            plan.info.artist = "The Selftests";
+            plan.info.album = "Basement Tapes";
+            plan.info.genre = "Polka";
+            plan.info.key = "A minor";
+            plan.info.notes = "line one\nline two";
+            plan.info.bpm = 92;
+            plan.info.sigNum = 6; plan.info.sigDen = 8;
+            plan.info.sampleRate = 44100;
+            plan.info.bitDepth = 32;
+            plan.tracks.add ({ "Vocal", "Input 1" });
+            plan.tracks.add ({ "Guitar", "Input 2" });
+            plan.tracks.add ({ "Spare", {} });
+            { auto made = songs::createFromPlan (engine, plan); }
+            expect ("planned song saved in its own folder", plan.songFile().existsAsFile(), plan.songFile().getFullPathName());
+            if (auto e = songs::open (engine, plan.songFile()))
+            {
+                auto info = SongInfo::readFrom (*e, plan.songFile());
+                expect ("song details saved", info.title == "Planned Song" && info.artist == "The Selftests" && info.album == "Basement Tapes"
+                                               && info.genre == "Polka" && info.key == "A minor" && info.notes == "line one\nline two",
+                        info.title + " / " + info.artist + " / " + info.key);
+                expect ("tempo, time signature and format saved", std::abs (info.bpm - 92) < 0.01 && info.sigNum == 6 && info.sigDen == 8
+                                                                   && info.sampleRate == 44100 && info.bitDepth == 32,
+                        info.bpmText() + " " + info.sigText() + " " + info.formatText());
+                auto tracks = te::getAudioTracks (*e);
+                expect ("planned tracks with names and inputs", tracks.size() == 3 && tracks[0]->getName() == "Vocal" && tracks[2]->getName() == "Spare"
+                                                                 && tracks[1]->state["basementInput"].toString() == "Input 2"
+                                                                 && tracks[2]->state["basementInput"].toString() == "none",
+                        String (tracks.size()) + " tracks");
+            }
+            else expect ("planned song reopens", false);
+
+            // the template list includes the built-in starting points
+            auto all = templates::all();
+            expect ("built-in templates", all.size() >= 6 && all[2].trackNames.size() == 10 && all[3].allInputs && all[5].importStems);
+        }
+
         out.appendText (String (failures == 0 ? "ALL PASSED" : "FAILED") + ": " + String (failures) + " failure(s)\n");
         return failures == 0 ? 0 : 1;
     }

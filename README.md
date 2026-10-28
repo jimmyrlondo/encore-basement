@@ -17,6 +17,17 @@ click **More info**, then **Run anyway**.
 
 ## What it does today (0.1)
 
+- **Hub**: Basement opens on a start page. Pick up a recent song (search,
+  show in folder) or set up a new one: start from a template (Blank,
+  Singer-songwriter, Full band, Live multitrack, Podcast, Mix stems, or your
+  own), fill in title, artist, album, genre, tempo, time signature, key and
+  notes, choose the interface you record from, its sample rate and bit depth,
+  and how many tracks to start with and which input feeds each one.
+- **Menus** like a real DAW: File, Edit, Project, Audio, MIDI, Score, Media,
+  Transport, Studio, Window and Help, with keyboard shortcuts (Help > Keyboard
+  Shortcuts lists them all). Cut, copy, paste, duplicate and split clips,
+  clip gain, normalize, fades, reverse, loop, count-in, Save As, Save New
+  Version, Save as Template, zip the whole song folder, and more.
 - **Record** any number of tracks at once from any audio interface. Every input
   is its own input (a mic on 1 and a guitar on 2 go to separate tracks).
 - **Import** WAV, AIFF, FLAC, MP3 and OGG files as tracks (drag them in). Stems
@@ -29,9 +40,10 @@ click **More info**, then **Run anyway**.
 - Songs save as one folder each (the song file, its recordings, copies of
   imported audio), so a song can be backed up or moved in one piece.
 
-Keys: Space play/stop, R record, Home back to the start, Ctrl+S save,
-Ctrl+N new song, Ctrl+O open, Ctrl+T add track, Ctrl+I import, Ctrl+Z / Ctrl+Y
-undo / redo, Delete removes the selected clip or track.
+Keys: Space play/stop, R record, L loop, C click, Home back to the start,
+Ctrl+S save, Ctrl+N new song, Ctrl+O open, Ctrl+T add track, Ctrl+I import,
+Ctrl+E export, Alt+X split, Ctrl+Z / Ctrl+Y undo / redo, Delete removes the
+selected clips or track. Help > Keyboard Shortcuts has the full list.
 
 ## Coming next
 
