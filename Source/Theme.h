@@ -42,6 +42,8 @@ inline juce::String& basementProfile() { static juce::String p { "Encore Basemen
 
 inline void basementLog (const juce::String& line)
 {
+    static juce::CriticalSection lock;   // lines come from several threads (plugin search, autosave, the engine)
+    const juce::ScopedLock sl (lock);
     auto f = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory).getChildFile (basementProfile()).getChildFile ("Basement.log");
     if (f.getSize() > 200000) f.deleteFile();
     f.appendText (juce::Time::getCurrentTime().toString (true, true, true, true) + "  " + line + juce::newLine);

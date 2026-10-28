@@ -51,10 +51,14 @@ foreach (entry "Vox|Encore Vox" "Verb|Encore Verb" "EQ|Encore Equalize" "Master|
 endforeach()
 target_include_directories(Basement PRIVATE encore/shared)
 
+# older VST2 plugins: FST, an open (GPLv3+) stand-in for the VST2 headers
+target_include_directories(Basement PRIVATE external/fst)
+
 target_compile_definitions(Basement PRIVATE
     $<$<PLATFORM_ID:Windows>:JUCE_ASIO=1>
     BASEMENT_BUILTIN=1
     JUCE_PLUGINHOST_VST3=1
+    JUCE_PLUGINHOST_VST=1
     JUCE_PLUGINHOST_AU=1
     JUCE_PLUGINHOST_LADSPA=1
     JUCE_MODAL_LOOPS_PERMITTED=1

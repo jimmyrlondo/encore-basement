@@ -450,7 +450,7 @@ private:
                 m.addItem (d.name, [this, add, d] { add (edit.getPluginCache().createNewPlugin (te::ExternalPlugin::xmlTypeName, d)); });
         m.addSeparator();
         std::map<String, PopupMenu> byMaker;
-        for (auto& d : edit.engine.getPluginManager().knownPluginList.getTypes())
+        for (auto& d : pluginsForMenus (edit.engine))
             if (d.pluginFormatName != "Encore" && ! d.isInstrument && ! d.manufacturerName.containsIgnoreCase ("Encore") && ! d.manufacturerName.containsIgnoreCase ("Sick & Sad"))
                 byMaker[d.manufacturerName.isEmpty() ? String ("Other") : d.manufacturerName].addItem (d.name, [this, add, d] { add (edit.getPluginCache().createNewPlugin (te::ExternalPlugin::xmlTypeName, d)); });
         for (auto& [maker, menu] : byMaker) m.addSubMenu (maker, menu);

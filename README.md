@@ -47,10 +47,11 @@ From [Releases](https://github.com/jimmyrlondo/encore-basement/releases):
   (press A). Effects on any track:
   - **Encore's plugins, built in**: Encore Vox (a whole vocal chain with tune
     and harmony), Verb, Equalize and Master. Nothing to install.
-  - **Your plugins**: Basement finds your VST3 plugins by itself (in the
+  - **Your plugins**: Basement finds your VST3 and VST2 plugins by itself (in the
     background, each checked in a separate helper process so a broken plugin
-    can't crash it) and lists them by maker. Add more plugin folders in
-    Preferences.
+    can't crash it, and one that stops to show a window, like an activation
+    prompt, is set aside) and lists them by maker. When a plugin is installed as
+    both, only the VST3 is listed. Add more plugin folders in Preferences.
   - A few simple built-in effects (EQ, compressor, reverb, delay and more).
 - **Instruments and MIDI**: Project > Add Instrument Track with any of your
   instrument plugins (drums, keys, samplers) or the built-in synth, played
@@ -102,7 +103,8 @@ The app ends up in `build/Basement_artefacts/Release/`. Checks you can run:
 - `--selftest <folder>`: makes songs, imports, mixes, exports, reopens, and
   runs each built-in Encore plugin, without a window (exit code 0 = all good,
   details in `<folder>/selftest.log`). GitHub runs it on every build.
-- `--plugintest <report file> [folder]`: loads every VST3 in a folder the way
+- `--plugintest <report file> [folder]`: loads every VST3 and VST2 in a folder
+  (default: the standard plugin folders) the way
   the Effects menu does and reports what happened with each one.
 - `--profile <name>`: keeps settings separately, for testing without touching
   your own.
@@ -113,7 +115,9 @@ The Encore plugins' code is in `encore/` (copied from the plugin repo with
 ## License
 
 Basement is free software under the GNU Affero General Public License v3 (see
-`LICENSE`). It uses JUCE under the AGPLv3 and Tracktion Engine under the GPLv3.
+`LICENSE`). It uses JUCE under the AGPLv3 and Tracktion Engine under the GPLv3. VST2 plugins are hosted through
+[FST](https://git.iem.at/zmoelnig/FST) (GPLv3 or later, in `external/fst`),
+an independent reimplementation of the VST2 interface.
 The arrange view in `Source/edit/` started from Tracktion Engine's example
 code (GPLv3) and is marked where it was changed. The Encore plugins in
 `encore/` are part of Basement under the same license.

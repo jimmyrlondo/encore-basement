@@ -304,7 +304,7 @@ inline void showEffectsMenu (te::Track::Ptr track, te::SelectionManager* sm, Com
 
     PopupMenu m, encore, instruments;
     std::map<String, PopupMenu> byMaker;
-    auto types = edit.engine.getPluginManager().knownPluginList.getTypes();
+    auto types = pluginsForMenus (edit.engine);
     std::sort (types.begin(), types.end(), [] (auto& a, auto& b) { return a.name.compareNatural (b.name) < 0; });
     for (auto& d : types)
     {

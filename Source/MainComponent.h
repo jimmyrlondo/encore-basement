@@ -29,6 +29,10 @@ public:
     bool autoInitialiseDeviceManager() override { return ! deferDevices; }
     const bool deferDevices;
 
+    /** Plugins are first opened in a helper copy of Basement, so one that crashes, hangs, or stops
+        to ask for activation can't freeze or take down the app (Tracktion's default is in-process) */
+    bool canScanPluginsOutOfProcess() override { return true; }
+
     juce::File getFileForNewAudioRecording (te::Track& t, const juce::String& ext) override
     {
         auto dir = songFolder ? songFolder() : juce::File();
@@ -265,7 +269,7 @@ public:
         clearRecent.onClick = [this] { recent::save (props, {}); update(); };
         addPluginFolder.onClick = [this]
         {
-            auto chooser = std::make_shared<juce::FileChooser> ("A folder with plugins in it (VST3)", juce::File());
+            auto chooser = std::make_shared<juce::FileChooser> ("A folder with plugins in it (VST3 or VST2)", juce::File());
             chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories, [this, chooser] (const juce::FileChooser&)
             {
                 if (chooser->getResult() == juce::File()) return;
@@ -329,7 +333,7 @@ private:
         clearRecent.setButtonText ("Clear recent songs (" + juce::String (recent::load (props).size()) + ")");
         auto added = juce::StringArray::fromLines (props.getValue ("pluginFolders"));
         added.removeEmptyStrings();
-        pluginFolders.setText ("Always searched: the standard VST3 folders. "
+        pluginFolders.setText ("Always searched: the standard VST3 and VST2 folders. "
                                + (added.isEmpty() ? juce::String ("Add any other folder you keep plugins in.") : "Also: " + added.joinIntoString ("; ")),
                                juce::dontSendNotification);
     }
@@ -744,6 +748,7 @@ public:
     ~MainComponent() override
     {
         stopTimer();
+        if (autosaveWriter.joinable()) autosaveWriter.join();
         BasementHooks::findPlugins = nullptr;
         BasementHooks::applyRecordOffset = nullptr;
         BasementHooks::showPluginManager = nullptr;
@@ -1331,6 +1336,8 @@ private:
     juce::Label deviceLabel;
     CountInOverlay countIn;
     juce::uint32 lastAutosave = 0;
+    std::thread autosaveWriter;              // writes the copy, so a slow disk never stalls the app
+    std::atomic<bool> autosaveWriting { false };
     bool crashedLastSession = false;
     static constexpr int statusH = 24;
 
@@ -1991,7 +1998,7 @@ private:
         v->setSize (800, 560);
         o.content.setOwned (v);
         o.launchAsync();
-        status ("Options > Scan for new or updated VST3 plug-ins finds everything installed, Encore's included.");
+        status ("Options > Scan for new or updated plug-ins finds everything installed, Encore's included.");
     }
 
     //==============================================================================
@@ -2276,7 +2283,7 @@ private:
         m.addItem ("Built-in synth (4OSC)", [this] { addInstrumentTrack (edit->getPluginCache().createNewPlugin (te::FourOscPlugin::xmlTypeName, {}), "Synth"); });
         m.addSeparator();
         std::map<juce::String, juce::PopupMenu> byMaker;
-        for (auto& d : engine.getPluginManager().knownPluginList.getTypes())
+        for (auto& d : pluginsForMenus (engine))
             if (d.isInstrument)
                 byMaker[d.manufacturerName.isEmpty() ? juce::String ("Other") : d.manufacturerName].addItem (d.name, [this, d]
                 {
@@ -2426,12 +2433,24 @@ private:
         const auto now = juce::Time::getMillisecondCounter();
         const auto every = (juce::uint32) juce::jlimit (5, 3600, props().getIntValue ("autosaveSeconds", 120)) * 1000;
         if (now - lastAutosave < every || edit->getTransport().isRecording()) return;
+        if (autosaveWriting) return;   // the last copy is still being written
         lastAutosave = now;
         if (! edit->hasChangedSinceSaved()) return;
         auto f = autosaveFile();
-        f.getParentDirectory().createDirectory();
-        if (te::EditFileOperations (*edit).writeToFile (f, false))
-            basementLog ("autosaved " + f.getFullPathName());
+        // the song is gathered here (quick), and written to disk on a thread of its own: writing can
+        // take seconds on a busy or slow drive, and the app (and a take in progress) shouldn't wait
+        edit->flushState();
+        std::shared_ptr<juce::XmlElement> xml (edit->state.createXml());
+        if (xml == nullptr) return;
+        if (autosaveWriter.joinable()) autosaveWriter.join();
+        autosaveWriting = true;
+        autosaveWriter = std::thread ([this, f, xml]
+        {
+            f.getParentDirectory().createDirectory();
+            if (xml->writeTo (f)) basementLog ("autosaved " + f.getFullPathName());
+            else basementLog ("autosave failed: " + f.getFullPathName());
+            autosaveWriting = false;
+        });
     }
 
     /** Called when a song opens: if a newer autosave is there from a session that

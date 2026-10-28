@@ -31,19 +31,25 @@ Everything from the first round of testing, plus a lot more.
 - A mixer (F3): channel strips, FX tracks you can send to (one shared
   reverb), and a master strip.
 - Encore's own plugins built in: Encore Vox, Verb, Equalize and Master.
+  Encore Master's styles: Balanced, Heavy, Bright, Warm, Gentle, Wide,
+  Arena and Drive.
+- Older VST2 plugins (.dll) load and open too. When a plugin is installed
+  as both VST2 and VST3, only the VST3 is listed.
+- Plugins are checked in a separate helper process, so one that crashes,
+  or stops to ask for activation, can't freeze Basement; it's set aside.
 - Volume and pan automation drawn on the tracks (A).
 - Instrument tracks: play and record your instrument plugins (drums, keys,
   samplers) or the built-in synth from MIDI, and import MIDI files.
 - Export: the mix or every track as stems, the whole song or the loop, WAV
   or FLAC, any sample rate, optionally at -14 LUFS for streaming.
 - A tuner (T), 30 Hz to 1.5 kHz.
-- Autosave every two minutes, and recovery if Basement closes unexpectedly.
+- Autosave every two minutes (written in the background, so a slow drive
+  never stalls Basement), and recovery if Basement closes unexpectedly.
 - A status bar with your interface, latency and CPU.
 - Mac builds (Apple Silicon and Intel).
 
 **Known gaps**
-- VST2 plugins (older .dll ones) don't load yet; most of yours also come as
-  VST3, which do.
+- 32-bit plugins don't load (64-bit only).
 - No piano roll for editing MIDI notes yet.
 
 ## 0.2.0

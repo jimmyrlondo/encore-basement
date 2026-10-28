@@ -77,6 +77,12 @@ namespace selftest
         auto* ui = new HeadlessUIBehaviour();
         te::Engine engine { "Encore Basement Selftest", std::unique_ptr<te::UIBehaviour> (ui), std::unique_ptr<te::EngineBehaviour> (behaviour) };
         registerEncorePlugins (engine);
+        // plugin formats: VST3 and VST2 (through FST) are both compiled in
+        {
+            StringArray names;
+            for (auto* f : engine.getPluginManager().pluginFormatManager.getFormats()) names.add (f->getName());
+            expect ("VST3 and VST2 hosting", names.contains ("VST3") && names.contains ("VST"), names.joinIntoString (", "));
+        }
         auto songFile = songDir.getChildFile ("Self Test.basement");
         behaviour->songFolder = [songFile] { return songFile.getParentDirectory(); };
 

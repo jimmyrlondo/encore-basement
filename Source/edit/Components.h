@@ -45,6 +45,26 @@ struct BasementHooks
 };
 
 //==============================================================================
+/** The plugins to offer in menus: an older VST2 copy is left out when the same
+    plugin is also installed as VST3 (most makers install both) */
+inline Array<PluginDescription> pluginsForMenus (te::Engine& engine)
+{
+    auto all = engine.getPluginManager().knownPluginList.getTypes();
+    auto key = [] (const PluginDescription& d)
+    {
+        return d.name.toLowerCase().retainCharacters ("abcdefghijklmnopqrstuvwxyz0123456789") + "|"
+             + d.manufacturerName.toLowerCase().retainCharacters ("abcdefghijklmnopqrstuvwxyz0123456789");
+    };
+    std::set<String> vst3;
+    for (auto& d : all) if (d.pluginFormatName == "VST3") vst3.insert (key (d));
+    Array<PluginDescription> out;
+    for (auto& d : all)
+        if (! (d.pluginFormatName == "VST" && vst3.count (key (d)) > 0))
+            out.add (d);
+    return out;
+}
+
+//==============================================================================
 /** Instrument tracks: an instrument plugin first on the track, fed by MIDI */
 namespace instruments
 {
