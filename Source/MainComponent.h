@@ -425,15 +425,15 @@ public:
         g.fillRect (getLocalBounds().withTrimmedTop (menuH).removeFromTop (1));
 
         // wordmark
-        auto mark = getLocalBounds().withTrimmedTop (menuH).removeFromTop (toolbarH).reduced (16, 0).removeFromLeft (160);
-        g.setColour (theme::brand);
-        g.fillRect (mark.getX(), mark.getCentreY() + 4, 7, 7);
+        auto mark = getLocalBounds().withTrimmedTop (menuH).removeFromTop (toolbarH).reduced (14, 0).removeFromLeft (172);
+        drawEncoreIcon (g, mark.removeFromLeft (36).toFloat().withSizeKeepingCentre (36.0f, 36.0f));
+        mark.removeFromLeft (10);
         g.setColour (theme::text2);
         g.setFont (juce::FontOptions (11.0f, juce::Font::bold));
-        g.drawText ("ENCORE:", mark.withTrimmedLeft (12).withTrimmedBottom (mark.getHeight() / 2 - 2), juce::Justification::bottomLeft);
+        g.drawText ("ENCORE:", mark.withTrimmedBottom (mark.getHeight() / 2 - 2), juce::Justification::bottomLeft);
         g.setColour (theme::paper);
         g.setFont (juce::FontOptions (20.0f, juce::Font::bold));
-        g.drawText ("BASEMENT", mark.withTrimmedLeft (12).withTrimmedTop (mark.getHeight() / 2 - 2), juce::Justification::topLeft);
+        g.drawText ("BASEMENT", mark.withTrimmedTop (mark.getHeight() / 2 - 2), juce::Justification::topLeft);
     }
 
     void resized() override
@@ -448,7 +448,7 @@ public:
         }
 
         auto t = r.removeFromTop (toolbarH).reduced (12, 10);
-        t.removeFromLeft (170);
+        t.removeFromLeft (180);
         auto place = [&t] (juce::Component& c, int w, int gapAfter = 6) { c.setBounds (t.removeFromLeft (w)); t.removeFromLeft (gapAfter); };
         place (homeButton, 40); place (playButton, 76); place (recordButton, 84); place (loopButton, 62, 18);
         place (timeLabel, 112); place (barLabel, 80, 10);
@@ -944,7 +944,14 @@ private:
                 if (wanted.isNotEmpty() && instance->getInputDevice().getName() == wanted) { pick = instance; break; }
                 if (pick == nullptr && wanted.isEmpty()) pick = instance;
             }
-        if (pick == nullptr && wanted.isNotEmpty() && juce::Time::getMillisecondCounter() > assignUntil)
+        bool wantedHere = false, anyHere = false;
+        for (auto instance : edit->getAllInputDevices())
+            if (instance->getInputDevice().getDeviceType() == te::InputDevice::waveDevice)
+            {
+                anyHere = true;
+                wantedHere = wantedHere || instance->getInputDevice().getName() == wanted;
+            }
+        if (pick == nullptr && wanted.isNotEmpty() && ((anyHere && ! wantedHere) || juce::Time::getMillisecondCounter() > assignUntil))
             for (auto instance : edit->getAllInputDevices()) // that input isn't here (another interface): use the next free one
                 if (instance->getInputDevice().getDeviceType() == te::InputDevice::waveDevice && instance->getTargets().isEmpty()) { pick = instance; break; }
         if (pick == nullptr) return false;
@@ -1033,7 +1040,8 @@ private:
         recent::remember (props(), *edit, songFile);
         edit->restartPlayback();
         showHub (false);
-        status ("Opened " + info.title + "  (" + info.formatText() + ")");
+        status ("Opened " + info.title);
+        statusLabel.setTooltip (info.title + ": " + info.formatText() + ", " + info.bpmText() + " BPM " + info.sigText());
     }
 
     void save()

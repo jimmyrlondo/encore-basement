@@ -63,6 +63,7 @@ private:
             : DocumentWindow ("Encore: Basement", theme::base, DocumentWindow::allButtons), app (a)
         {
             setUsingNativeTitleBar (true);
+            setIcon (encoreIconImage (256)); // title bar and taskbar (the .exe itself carries it too)
             auto* main = new MainComponent();
             main->onTitleChange = [this] (const juce::String& t) { setName (t); };
             main->updateTitle();

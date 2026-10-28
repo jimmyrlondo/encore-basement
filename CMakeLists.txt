@@ -24,8 +24,13 @@ juce_add_gui_app(Basement
     VERSION ${PROJECT_VERSION}
     MICROPHONE_PERMISSION_ENABLED TRUE
     MICROPHONE_PERMISSION_TEXT "Basement records from your audio inputs."
+    ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/Assets/encore-icon.png"
+    ICON_SMALL "${CMAKE_CURRENT_SOURCE_DIR}/Assets/encore-icon.png"
     NEEDS_CURL FALSE
     NEEDS_WEB_BROWSER FALSE)
+
+# the Encore icon, drawn in the app (SVG, so it's sharp at any size)
+juce_add_binary_data(BasementAssets SOURCES Assets/encore-icon.svg)
 
 juce_generate_juce_header(Basement)
 
@@ -44,6 +49,7 @@ target_compile_definitions(Basement PRIVATE
     TRACKTION_ENABLE_TIMESTRETCH_SOUNDTOUCH=1)
 
 target_link_libraries(Basement PRIVATE
+    BasementAssets
     tracktion::tracktion_core
     tracktion::tracktion_engine
     tracktion::tracktion_graph

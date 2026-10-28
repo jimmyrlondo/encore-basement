@@ -985,14 +985,14 @@ public:
         auto r = leftArea().reduced (28, 30);
         // wordmark
         auto mark = r.removeFromTop (64);
-        g.setColour (theme::brand);
-        g.fillRect (mark.getX(), mark.getY() + 30, 12, 12);
+        drawEncoreIcon (g, mark.removeFromLeft (60).toFloat());
+        mark.removeFromLeft (14);
         g.setColour (theme::text2);
         g.setFont (hubui::font (14.0f, true));
-        g.drawText ("ENCORE:", mark.withTrimmedLeft (20).removeFromTop (26), juce::Justification::bottomLeft);
+        g.drawText ("ENCORE:", mark.removeFromTop (26), juce::Justification::bottomLeft);
         g.setColour (theme::paper);
-        g.setFont (hubui::font (32.0f, true));
-        g.drawText ("BASEMENT", mark.withTrimmedLeft (18).withTrimmedTop (24), juce::Justification::topLeft);
+        g.setFont (hubui::font (30.0f, true));
+        g.drawText ("BASEMENT", mark.withTrimmedLeft (-2), juce::Justification::topLeft);
         r.removeFromTop (6);
         g.setColour (theme::text2);
         g.setFont (hubui::font (14.0f));

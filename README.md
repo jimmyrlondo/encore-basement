@@ -83,5 +83,5 @@ Basement is free software under the GNU Affero General Public License v3 (see
 The arrange view in `Source/edit/` started from Tracktion Engine's example
 code (GPLv3) and is marked where it was changed.
 
-Copyright (C) 2026 Encore Studio. The Encore name and logo belong to Encore Studio; forks are welcome
+Copyright (C) 2026 Encore Studio. The Encore name and logo (including `Assets/encore-icon.*`) belong to Encore Studio; forks are welcome
 under the license but should use their own name.

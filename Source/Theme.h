@@ -6,6 +6,8 @@
 // between the website and Basement feels like one product.
 #pragma once
 
+#include "BinaryData.h"
+
 namespace theme
 {
     using juce::Colour;
@@ -29,6 +31,27 @@ namespace theme
         static const juce::uint32 c[] = { 0xff22d3ee, 0xffec4899, 0xffa3e635, 0xfff59e0b, 0xff818cf8, 0xff2dd4bf, 0xfffb7185, 0xffc084fc };
         return Colour (c[(size_t) std::abs (i) % (sizeof (c) / sizeof (c[0]))]);
     }
+}
+
+/** The Encore icon (Assets/encore-icon.svg), drawn into r keeping its shape */
+inline void drawEncoreIcon (juce::Graphics& g, juce::Rectangle<float> r)
+{
+    static std::unique_ptr<juce::Drawable> icon = juce::Drawable::createFromImageData (BinaryData::encoreicon_svg, BinaryData::encoreicon_svgSize);
+    if (icon == nullptr) return;
+    // fit the artwork itself (not the SVG's empty margins) into r
+    auto art = icon->getOutlineAsPath().getBounds();
+    if (art.isEmpty()) art = icon->getDrawableBounds();
+    art = art.expanded (art.getWidth() * 0.02f);
+    icon->draw (g, 1.0f, juce::RectanglePlacement (juce::RectanglePlacement::centred).getTransformToFit (art, r));
+}
+
+/** The window and taskbar icon, rendered from the same SVG */
+inline juce::Image encoreIconImage (int size)
+{
+    juce::Image img (juce::Image::ARGB, size, size, true);
+    juce::Graphics g (img);
+    drawEncoreIcon (g, img.getBounds().toFloat());
+    return img;
 }
 
 class BasementLookAndFeel : public juce::LookAndFeel_V4
