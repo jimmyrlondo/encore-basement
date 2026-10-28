@@ -88,10 +88,15 @@ struct GenericPluginEditor : public te::Plugin::EditorComponent,
         for (auto param : plugin.getAutomatableParameters())
         {
             auto* k = knobs.add (new Knob (*param));
-            addAndMakeVisible (k);
+            area.addAndMakeVisible (k);
         }
-        const int cols = jlimit (1, 5, knobs.size()), rows = jmax (1, (knobs.size() + cols - 1) / cols);
-        setSize (jmax (300, cols * knobW + 32), 64 + rows * knobH + 16);
+        // many parameters (the built-in synth has dozens): six columns, and scroll past five rows
+        const int cols = jlimit (1, 6, knobs.size()), rows = jmax (1, (knobs.size() + cols - 1) / cols);
+        area.setSize (cols * knobW, rows * knobH);
+        viewport.setViewedComponent (&area, false);
+        viewport.setScrollBarsShown (rows > 5, false);
+        addAndMakeVisible (viewport);
+        setSize (jmax (300, cols * knobW + 32 + (rows > 5 ? 12 : 0)), 64 + jmin (rows, 5) * knobH + 16);
         startTimerHz (15);
     }
 
@@ -118,9 +123,10 @@ struct GenericPluginEditor : public te::Plugin::EditorComponent,
         onButton.setBounds (top.removeFromRight (56));
         top.removeFromRight (8);
         resetButton.setBounds (top.removeFromRight (70));
-        const int cols = jlimit (1, 5, knobs.size());
+        const int cols = jlimit (1, 6, knobs.size());
         for (int i = 0; i < knobs.size(); ++i)
-            knobs[i]->setBounds (16 + (i % cols) * knobW, 64 + (i / cols) * knobH, knobW, knobH);
+            knobs[i]->setBounds ((i % cols) * knobW, (i / cols) * knobH, knobW, knobH);
+        viewport.setBounds (getLocalBounds().withTrimmedTop (64).withTrimmedLeft (16).withTrimmedBottom (8));
     }
 
 private:
@@ -174,6 +180,8 @@ private:
     };
 
     te::Plugin& plugin;
+    Component area;           // before the viewport, so the viewport (which shows it) goes first
+    Viewport viewport;
     OwnedArray<Knob> knobs;
     TextButton onButton { "On" }, resetButton { "Reset" };
 

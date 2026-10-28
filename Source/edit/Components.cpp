@@ -315,7 +315,11 @@ inline void showEffectsMenu (te::Track::Ptr track, te::SelectionManager* sm, Com
         else if (maker.containsIgnoreCase ("Encore") || maker.containsIgnoreCase ("Sick & Sad"))
             continue; // installed VST3 copies of the same plugins: the built-in ones replace them
         else if (d.isInstrument)
-            instruments.addItem (d.name, false, false, nullptr);
+            instruments.addItem (d.name, [&edit, track, d]
+            {
+                if (auto at = dynamic_cast<te::AudioTrack*> (track.get()))
+                    instruments::makeInstrumentTrack (*at, edit.getPluginCache().createNewPlugin (te::ExternalPlugin::xmlTypeName, d));
+            });
         else
             byMaker[maker].addItem (d.name, item);
     }
@@ -324,7 +328,13 @@ inline void showEffectsMenu (te::Track::Ptr track, te::SelectionManager* sm, Com
     m.addSectionHeader ("Your plugins");
     if (byMaker.empty()) m.addItem ("None found yet", false, false, nullptr);
     for (auto& [maker, menu] : byMaker) m.addSubMenu (maker, menu);
-    if (instruments.getNumItems() > 0) m.addSubMenu ("Instruments (need MIDI, coming soon)", instruments, true);
+    instruments.addSeparator();
+    instruments.addItem ("Built-in synth (4OSC)", [&edit, track]
+    {
+        if (auto at = dynamic_cast<te::AudioTrack*> (track.get()))
+            instruments::makeInstrumentTrack (*at, edit.getPluginCache().createNewPlugin (te::FourOscPlugin::xmlTypeName, {}));
+    });
+    m.addSubMenu ("Instrument (plays this track from MIDI)", instruments, true);
 
     m.addSectionHeader ("Built in");
     auto builtIn = [&m, &edit, add] (const char* name, const char* type)

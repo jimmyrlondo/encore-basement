@@ -45,6 +45,46 @@ struct BasementHooks
 };
 
 //==============================================================================
+/** Instrument tracks: an instrument plugin first on the track, fed by MIDI */
+namespace instruments
+{
+    /** The MIDI input to play instruments from: all of them ("All MIDI Ins") if there's that, else the first */
+    inline te::InputDeviceInstance* midiInput (te::Edit& e)
+    {
+        te::InputDeviceInstance* first = nullptr;
+        for (auto instance : e.getAllInputDevices())
+        {
+            auto type = instance->getInputDevice().getDeviceType();
+            if (type != te::InputDevice::physicalMidiDevice && type != te::InputDevice::virtualMidiDevice) continue;
+            if (instance->getInputDevice().getName().containsIgnoreCase ("All MIDI")) return instance;
+            if (first == nullptr) first = instance;
+        }
+        return first;
+    }
+
+    inline bool isInstrumentTrack (te::AudioTrack& t)
+    {
+        for (auto p : t.pluginList.getPlugins()) if (p->isSynth()) return true;
+        return false;
+    }
+
+    /** Puts the instrument at the start of the track and plays it from MIDI */
+    inline void makeInstrumentTrack (te::AudioTrack& t, te::Plugin::Ptr instrument)
+    {
+        if (instrument == nullptr) return;
+        auto& e = t.edit;
+        for (auto p : t.pluginList.getPlugins()) if (p->isSynth()) p->deleteFromParent(); // one instrument per track
+        t.pluginList.insertPlugin (instrument, 0, nullptr);
+        // swap any audio input for the MIDI input
+        for (auto instance : e.getAllInputDevices())
+            if (te::isOnTargetTrack (*instance, t, 0)) [[maybe_unused]] auto r = instance->removeTarget (t.itemID, &e.getUndoManager());
+        if (auto midi = midiInput (e)) [[maybe_unused]] auto r = midi->setTarget (t.itemID, true, &e.getUndoManager(), 0);
+        t.state.setProperty ("basementInput", "midi", nullptr);
+        instrument->showWindowExplicitly();
+    }
+}
+
+//==============================================================================
 /** Song markers (Intro, Verse, Chorus...): saved in the song as BASEMENTMARKERS,
     each MARKER with a time in seconds and a name. Changes are undoable. */
 namespace markers
@@ -103,7 +143,7 @@ public:
         drawWaveforms.referTo (state, IDs::drawWaveforms, um, true);
         showHeaders.referTo (state, IDs::showHeaders, um, true);
         showFooters.referTo (state, IDs::showFooters, um, true);
-        showMidiDevices.referTo (state, IDs::showMidiDevices, um, false);
+        showMidiDevices.referTo (state, IDs::showMidiDevices, um, true);
         showWaveDevices.referTo (state, IDs::showWaveDevices, um, true);
 
         viewX1.referTo (state, IDs::viewX1, um, 0s);

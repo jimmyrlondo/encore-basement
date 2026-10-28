@@ -277,6 +277,53 @@ namespace selftest
                     String (loaded) + " of " + String (encoreOnTrack) + " loaded: " + ids.joinIntoString (", "));
         }
 
+        // an instrument track: the built-in synth plays a MIDI clip into the mix, and a MIDI file imports
+        {
+            auto synthSong = dir.getChildFile ("Synth Song").getChildFile ("Synth Song.basement");
+            synthSong.getParentDirectory().deleteRecursively();
+            synthSong.getParentDirectory().createDirectory();
+            {
+                auto e = songs::create (engine, synthSong);
+                e->ensureNumberOfAudioTracks (1);
+                auto t = te::getAudioTracks (*e)[0];
+                instruments::makeInstrumentTrack (*t, e->getPluginCache().createNewPlugin (te::FourOscPlugin::xmlTypeName, {}));
+                auto clip = t->insertMIDIClip ({ 0_tp, te::TimePosition::fromSeconds (2.0) }, nullptr);
+                for (int i = 0; i < 4; ++i) clip->getSequence().addNote (60 + i * 4, te::BeatPosition::fromBeats (i), te::BeatDuration::fromBeats (0.9), 100, 0, nullptr);
+                expect ("instrument track has its synth first", instruments::isInstrumentTrack (*t));
+
+                // a MIDI file made here, then imported onto the same track
+                juce::MidiMessageSequence seq;
+                for (int i = 0; i < 8; ++i)
+                {
+                    seq.addEvent (juce::MidiMessage::noteOn (1, 48 + i, (juce::uint8) 90), i * 480.0);
+                    seq.addEvent (juce::MidiMessage::noteOff (1, 48 + i), i * 480.0 + 400.0);
+                }
+                seq.updateMatchedPairs();
+                juce::MidiFile mf;
+                mf.setTicksPerQuarterNote (480);
+                mf.addTrack (seq);
+                auto midiFile = dir.getChildFile ("test.mid");
+                midiFile.deleteFile();
+                { juce::FileOutputStream os (midiFile); mf.writeTo (os); }
+                auto imported = te::createClipFromFile (midiFile, *t, false);
+                expect ("MIDI file import", imported != nullptr && imported->getSequence().getNumNotes() == 8,
+                        imported ? String (imported->getSequence().getNumNotes()) + " notes" : String ("no clip"));
+                if (imported) imported->removeFromParent();
+                te::EditFileOperations (*e).save (true, true, false);
+            }
+            auto out2 = synthSong.getSiblingFile ("synth.wav");
+            ExportOptions so; so.tail = false;
+            std::atomic<bool> d2 { false };
+            juce::File r2; juce::String e2;
+            auto job2 = exportSong (engine, synthSong, out2, so, [&] (juce::File f, juce::String e) { r2 = f; e2 = e; d2 = true; });
+            for (int i = 0; i < 600 && ! d2; ++i) juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+            AudioFormatManager fm2; fm2.registerBasicFormats();
+            std::unique_ptr<AudioFormatReader> rr (r2.existsAsFile() ? fm2.createReaderFor (r2) : nullptr);
+            Range<float> lv[2];
+            if (rr) rr->readMaxLevels (0, (int) rr->lengthInSamples, lv, 2);
+            expect ("the synth plays the MIDI clip into the mix", rr != nullptr && lv[0].getEnd() > 0.01f, rr ? String (lv[0].getEnd(), 3) : e2);
+        }
+
         // the tuner's pitch reading: guitar low E (82.41 Hz), bass low E (41.20 Hz), A4 with harmonics
         {
             auto centsOff = [] (double hz, std::function<float (double)> wave)

@@ -567,7 +567,7 @@ public:
     {
         // File
         cmdHub = 0x2000, cmdNew, cmdOpen, cmdClose, cmdSave, cmdSaveAs, cmdSaveVersion, cmdSaveTemplate, cmdRevert,
-        cmdImportAudio, cmdExportMix, cmdExportZip, cmdPreferences, cmdQuit,
+        cmdImportAudio, cmdImportMidi, cmdExportMix, cmdExportZip, cmdPreferences, cmdQuit,
         // Edit
         cmdUndo, cmdRedo, cmdCut, cmdCopy, cmdPaste, cmdDuplicate, cmdDelete, cmdSplit, cmdSelectAll, cmdSelectNone, cmdMuteClip,
         cmdNudgeLeft, cmdNudgeRight, cmdSnapOff, cmdSnapBar, cmdSnapBeat, cmdSnapEighth, cmdSnapSixteenth, cmdRenameClip,
@@ -904,7 +904,7 @@ public:
                 m.addSubMenu ("Open Recent", recentMenu, ! recentFiles.isEmpty());
                 add (cmdClose); m.addSeparator();
                 add (cmdSave); add (cmdSaveAs); add (cmdSaveVersion); add (cmdSaveTemplate); add (cmdRevert); m.addSeparator();
-                juce::PopupMenu imp; addCommand (imp, cmdImportAudio); imp.addItem (comingSoonId, "MIDI File... (coming soon)", false);
+                juce::PopupMenu imp; addCommand (imp, cmdImportAudio); addCommand (imp, cmdImportMidi);
                 m.addSubMenu ("Import", imp);
                 juce::PopupMenu exp; addCommand (exp, cmdExportMix); addCommand (exp, cmdExportZip);
                 exp.addItem (comingSoonId, "Send to Encore... (coming soon)", false);
@@ -931,8 +931,9 @@ public:
                 add (cmdAddTrack); add (cmdDuplicateTrack); add (cmdRenameTrack); add (cmdRemoveTrack); m.addSeparator();
                 add (cmdSongSetup); m.addSeparator();
                 add (cmdAddMarker); m.addSeparator();
-                add (cmdAddFxReverb); add (cmdAddFxDelay); add (cmdAddFxEmpty);
-                later ({ "Add Instrument Track", "Add Group Track", "Arranger Track" });
+                add (cmdAddFxReverb); add (cmdAddFxDelay); add (cmdAddFxEmpty); m.addSeparator();
+                m.addSubMenu ("Add Instrument Track", instrumentMenu(), edit != nullptr && ! hubShown);
+                later ({ "Add Group Track", "Arranger Track", "Piano Roll Editor" });
                 break;
             case 3: // Audio
                 add (cmdNormalize); add (cmdGainUp); add (cmdGainDown); add (cmdGainReset); m.addSeparator();
@@ -941,7 +942,9 @@ public:
                 later ({ "Time Stretch", "Pitch Shift", "Detect Tempo", "Bounce Selection" });
                 break;
             case 4: // MIDI
-                later ({ "Open Key Editor", "Open Drum Editor", "Quantize", "Transpose", "Velocity", "Import MIDI File" });
+                m.addSubMenu ("Add Instrument Track", instrumentMenu(), edit != nullptr && ! hubShown);
+                add (cmdImportMidi);
+                later ({ "Piano Roll Editor", "Drum Editor", "Quantize", "Transpose", "Velocity" });
                 break;
             case 5: // Score
                 later ({ "Open Score Editor", "Chord Track", "Lyrics", "Print / Export Score" });
@@ -1082,6 +1085,7 @@ public:
             case cmdSaveTemplate:   set ("Save as Template...", "File", song); break;
             case cmdRevert:         set ("Revert", "File", song); break;
             case cmdImportAudio:    set ("Audio File...", "File", song); key ('i', cmd); break;
+            case cmdImportMidi:     set ("MIDI File...", "File", songShown); break;
             case cmdExportMix:      set ("Audio Mixdown or Stems...", "File", song && ! currentExport); key ('e', cmd); break;
             case cmdExportZip:      set ("Song Folder as Zip...", "File", song); break;
             case cmdPreferences:    set ("Preferences...", "File"); key (',', cmd); break;
@@ -1197,6 +1201,7 @@ public:
             case cmdSaveTemplate:   saveTemplate(); return true;
             case cmdRevert:         revert(); return true;
             case cmdImportAudio:    browseForImport(); return true;
+            case cmdImportMidi:     importMidi(); return true;
             case cmdExportMix:      exportMix(); return true;
             case cmdExportZip:      exportZip(); return true;
             case cmdPreferences:    showDialog ("Preferences", new PreferencesComponent (props()), this); return true;
@@ -1474,6 +1479,11 @@ private:
             if (EngineHelpers::trackHasInput (*t)) continue;
             auto want = t->state.getProperty ("basementInput").toString();
             if (want == "none" && ! force) continue;
+            if (want == "midi")
+            {
+                if (auto midi = instruments::midiInput (*edit)) [[maybe_unused]] auto r = midi->setTarget (t->itemID, true, &edit->getUndoManager(), 0);
+                continue;
+            }
             if (! assignInput (*t, want == "none" ? juce::String() : want))
                 all = false;
         }
@@ -1584,6 +1594,7 @@ private:
 
         editComponent = std::make_unique<EditComponent> (*edit, selectionManager);
         editComponent->getEditViewState().automationMode = 0; // songs open showing the clips, not automation
+        editComponent->getEditViewState().waveformZoom = 1.0f; // and waveforms at their true size
         addAndMakeVisible (*editComponent);
         mixer = std::make_unique<MixerComponent> (*edit, selectionManager);
         mixer->onAddFxTrack = [this]
@@ -2257,6 +2268,56 @@ private:
         tunerWindow->setVisible (true);
     }
     std::unique_ptr<TunerWindow> tunerWindow;
+
+    /** Built-in synth first, then your instrument plugins by maker */
+    juce::PopupMenu instrumentMenu()
+    {
+        juce::PopupMenu m;
+        m.addItem ("Built-in synth (4OSC)", [this] { addInstrumentTrack (edit->getPluginCache().createNewPlugin (te::FourOscPlugin::xmlTypeName, {}), "Synth"); });
+        m.addSeparator();
+        std::map<juce::String, juce::PopupMenu> byMaker;
+        for (auto& d : engine.getPluginManager().knownPluginList.getTypes())
+            if (d.isInstrument)
+                byMaker[d.manufacturerName.isEmpty() ? juce::String ("Other") : d.manufacturerName].addItem (d.name, [this, d]
+                {
+                    addInstrumentTrack (edit->getPluginCache().createNewPlugin (te::ExternalPlugin::xmlTypeName, d), d.name);
+                });
+        for (auto& [maker, menu] : byMaker) m.addSubMenu (maker, menu);
+        if (byMaker.empty()) m.addItem ("Your instrument plugins show up here once they're found", false, false, nullptr);
+        return m;
+    }
+
+    te::AudioTrack* addInstrumentTrack (te::Plugin::Ptr instrument, const juce::String& name)
+    {
+        auto tracks = te::getAudioTracks (*edit);
+        auto t = edit->insertNewAudioTrack (te::TrackInsertPoint (nullptr, tracks.isEmpty() ? nullptr : tracks.getLast()), &selectionManager);
+        if (t == nullptr) return nullptr;
+        t->setName (name);
+        t->setColour (theme::trackColour (tracks.size()));
+        instruments::makeInstrumentTrack (*t, instrument);
+        status (instruments::midiInput (*edit) != nullptr ? "Instrument track ready: arm it (R) and play your MIDI keyboard or pads"
+                                                         : "Instrument track ready. No MIDI input found: plug in a keyboard, or import a MIDI file");
+        return t.get();
+    }
+
+    /** A MIDI file onto the selected instrument track (or a new one with the built-in synth), at the start of the song */
+    void importMidi()
+    {
+        auto chooser = std::make_shared<juce::FileChooser> ("Import a MIDI file", juce::File (props().getValue ("importFolder")), "*.mid;*.midi");
+        chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles, [this, chooser] (const juce::FileChooser&)
+        {
+            auto f = chooser->getResult();
+            if (! f.existsAsFile() || ! edit) return;
+            auto t = selectedTrack();
+            if (t == nullptr || ! instruments::isInstrumentTrack (*t))
+                t = addInstrumentTrack (edit->getPluginCache().createNewPlugin (te::FourOscPlugin::xmlTypeName, {}), f.getFileNameWithoutExtension());
+            if (t == nullptr) return;
+            if (auto clip = te::createClipFromFile (f, *t, false))
+                status ("Imported " + f.getFileName() + " (" + juce::String (clip->getSequence().getNumNotes()) + " notes) onto " + t->getName());
+            else
+                status ("Couldn't read " + f.getFileName() + " as a MIDI file");
+        });
+    }
 
     void showMixer (bool show)
     {

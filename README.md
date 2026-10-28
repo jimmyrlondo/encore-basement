@@ -52,6 +52,9 @@ From [Releases](https://github.com/jimmyrlondo/encore-basement/releases):
     can't crash it) and lists them by maker. Add more plugin folders in
     Preferences.
   - A few simple built-in effects (EQ, compressor, reverb, delay and more).
+- **Instruments and MIDI**: Project > Add Instrument Track with any of your
+  instrument plugins (drums, keys, samplers) or the built-in synth, played
+  and recorded from your MIDI keyboard or pads; import MIDI files too.
 - **Export** the mix or every track as its own file (stems), the whole song
   or just the loop, as WAV (16, 24 or 32-bit float) or FLAC, at any sample
   rate, with or without the master effects, optionally normalised to -14 LUFS
@@ -75,7 +78,7 @@ Help > Keyboard Shortcuts has the full list.
 
 - MP3 export, and mastering on export with Encore's album engine
 - Sign in with Encore and send a song to your catalog as a draft
-- MIDI and instruments
+- A piano roll for editing MIDI notes
 
 ## Build
 
