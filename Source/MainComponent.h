@@ -15,22 +15,19 @@
 
 #include "Theme.h"
 
-//==============================================================================
-/** Basement.log next to the settings: what happened with devices and songs,
-    for bug reports. Kept short (trimmed when it passes 200 KB). */
-inline void basementLog (const juce::String& line)
-{
-    auto f = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory).getChildFile ("Encore Basement").getChildFile ("Basement.log");
-    if (f.getSize() > 200000) f.deleteFile();
-    f.appendText (juce::Time::getCurrentTime().toString (true, true, true, true) + "  " + line + juce::newLine);
-}
 
 //==============================================================================
 /** Engine hooks: recordings go into the song's own folder */
 class BasementBehaviour : public te::EngineBehaviour
 {
 public:
+    BasementBehaviour (bool openAudioLater = false) : deferDevices (openAudioLater) {}
     std::function<juce::File()> songFolder;
+
+    /** The app opens the audio interface itself once its window is on screen
+        (it's the slowest part of starting up), so the window appears at once */
+    bool autoInitialiseDeviceManager() override { return ! deferDevices; }
+    const bool deferDevices;
 
     juce::File getFileForNewAudioRecording (te::Track& t, const juce::String& ext) override
     {
@@ -247,9 +244,29 @@ public:
             });
         };
         clearRecent.onClick = [this] { recent::save (props, {}); update(); };
-        for (auto* b : { &changeFolder, &clearRecent }) addAndMakeVisible (b);
+        addPluginFolder.onClick = [this]
+        {
+            auto chooser = std::make_shared<juce::FileChooser> ("A folder with plugins in it (VST3)", juce::File());
+            chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories, [this, chooser] (const juce::FileChooser&)
+            {
+                if (chooser->getResult() == juce::File()) return;
+                auto folders = juce::StringArray::fromLines (props.getValue ("pluginFolders"));
+                folders.removeEmptyStrings();
+                folders.addIfNotAlreadyThere (chooser->getResult().getFullPathName());
+                props.setValue ("pluginFolders", folders.joinIntoString ("\n"));
+                update();
+                if (BasementHooks::findPlugins) BasementHooks::findPlugins();
+            });
+        };
+        clearPluginFolders.onClick = [this] { props.setValue ("pluginFolders", juce::String()); update(); };
+        for (auto* b : { &changeFolder, &clearRecent, &addPluginFolder, &clearPluginFolders }) addAndMakeVisible (b);
+        hubui::styleLabel (pluginsL);
+        hubui::styleLabel (pluginFolders, 12.0f, theme::paper);
+        pluginFolders.setJustificationType (juce::Justification::topLeft);
+        addAndMakeVisible (pluginsL);
+        addAndMakeVisible (pluginFolders);
         update();
-        setSize (620, 230);
+        setSize (660, 340);
     }
 
     void paint (juce::Graphics& g) override { g.fillAll (theme::surface); }
@@ -260,17 +277,126 @@ public:
         auto a = row(); startL.setBounds (a.removeFromLeft (150)); startWith.setBounds (a);
         auto b = row(); folderL.setBounds (b.removeFromLeft (150)); changeFolder.setBounds (b.removeFromRight (100)); folderPath.setBounds (b.withTrimmedRight (8));
         auto c = row(); recentL.setBounds (c.removeFromLeft (150)); clearRecent.setBounds (c.removeFromLeft (180));
+        auto d = r.removeFromTop (90);
+        pluginsL.setBounds (d.removeFromLeft (150).removeFromTop (34));
+        auto buttons = d.removeFromTop (34);
+        addPluginFolder.setBounds (buttons.removeFromLeft (170));
+        buttons.removeFromLeft (8);
+        clearPluginFolders.setBounds (buttons.removeFromLeft (120));
+        pluginFolders.setBounds (d.withTrimmedTop (6));
     }
 
 private:
     juce::PropertiesFile& props;
     juce::ComboBox startWith;
-    juce::TextButton changeFolder { "Change..." }, clearRecent { "Clear recent songs" };
-    juce::Label startL { {}, "When Basement opens" }, folderL { {}, "Songs folder" }, folderPath, recentL { {}, "Recent list" };
+    juce::TextButton changeFolder { "Change..." }, clearRecent { "Clear recent songs" }, addPluginFolder { "Add a plugin folder..." }, clearPluginFolders { "Clear added" };
+    juce::Label startL { {}, "When Basement opens" }, folderL { {}, "Songs folder" }, folderPath, recentL { {}, "Recent list" },
+                pluginsL { {}, "Plugin folders" }, pluginFolders;
     void update()
     {
         folderPath.setText (props.getValue ("projectsFolder", "(not chosen yet)"), juce::dontSendNotification);
         clearRecent.setButtonText ("Clear recent songs (" + juce::String (recent::load (props).size()) + ")");
+        auto added = juce::StringArray::fromLines (props.getValue ("pluginFolders"));
+        added.removeEmptyStrings();
+        pluginFolders.setText ("Always searched: the standard VST3 folders. "
+                               + (added.isEmpty() ? juce::String ("Add any other folder you keep plugins in.") : "Also: " + added.joinIntoString ("; ")),
+                               juce::dontSendNotification);
+    }
+};
+
+/** Transport > Metronome Settings: how loud, accent on beat one, when it plays, count-in */
+class MetronomeComponent : public juce::Component
+{
+public:
+    MetronomeComponent (te::Edit& e) : edit (e)
+    {
+        for (auto* l : { &volumeL, &countL }) { hubui::styleLabel (*l); addAndMakeVisible (l); }
+        volume.setRange (0.2, 1.0, 0.01);
+        volume.setValue (edit.getClickTrackVolume(), juce::dontSendNotification);
+        volume.setSliderStyle (juce::Slider::LinearHorizontal);
+        volume.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
+        volume.onValueChange = [this] { edit.setClickTrackVolume ((float) volume.getValue()); };
+        addAndMakeVisible (volume);
+        accent.setToggleState (edit.clickTrackEmphasiseBars.get(), juce::dontSendNotification);
+        accent.onClick = [this] { edit.clickTrackEmphasiseBars = accent.getToggleState(); };
+        recordingOnly.setToggleState (edit.clickTrackRecordingOnly.get(), juce::dontSendNotification);
+        recordingOnly.onClick = [this] { edit.clickTrackRecordingOnly = recordingOnly.getToggleState(); };
+        enabled.setToggleState (edit.clickTrackEnabled.get(), juce::dontSendNotification);
+        enabled.onClick = [this] { edit.clickTrackEnabled = enabled.getToggleState(); };
+        for (auto* b : { &enabled, &accent, &recordingOnly })
+        {
+            b->setColour (juce::ToggleButton::textColourId, theme::paper);
+            b->setColour (juce::ToggleButton::tickColourId, theme::accent);
+            addAndMakeVisible (b);
+        }
+        count.addItemList ({ "No count-in", "1 beat", "2 beats", "1 bar", "2 bars" }, 1);
+        auto mode = edit.getCountInMode();
+        count.setSelectedId (mode == te::Edit::CountIn::none ? 1 : mode == te::Edit::CountIn::oneBeat ? 2 : mode == te::Edit::CountIn::twoBeat ? 3
+                             : mode == te::Edit::CountIn::oneBar ? 4 : 5, juce::dontSendNotification);
+        count.onChange = [this]
+        {
+            const te::Edit::CountIn modes[] = { te::Edit::CountIn::none, te::Edit::CountIn::oneBeat, te::Edit::CountIn::twoBeat, te::Edit::CountIn::oneBar, te::Edit::CountIn::twoBar };
+            edit.setCountInMode (modes[juce::jlimit (0, 4, count.getSelectedId() - 1)]);
+        };
+        hubui::styleCombo (count);
+        addAndMakeVisible (count);
+        setSize (440, 250);
+    }
+
+    void paint (juce::Graphics& g) override { g.fillAll (theme::surface); }
+    void resized() override
+    {
+        auto r = getLocalBounds().reduced (24, 20);
+        enabled.setBounds (r.removeFromTop (28)); r.removeFromTop (10);
+        auto v = r.removeFromTop (28); volumeL.setBounds (v.removeFromLeft (110)); volume.setBounds (v); r.removeFromTop (10);
+        accent.setBounds (r.removeFromTop (28)); r.removeFromTop (6);
+        recordingOnly.setBounds (r.removeFromTop (28)); r.removeFromTop (12);
+        auto c = r.removeFromTop (30); countL.setBounds (c.removeFromLeft (110)); count.setBounds (c.removeFromLeft (180));
+    }
+
+private:
+    te::Edit& edit;
+    juce::Slider volume;
+    juce::ToggleButton enabled { "Click on" }, accent { "Accent the first beat of each bar" }, recordingOnly { "Only while recording" };
+    juce::ComboBox count;
+    juce::Label volumeL { {}, "Volume" }, countL { {}, "Count-in" };
+};
+
+/** The big count-in numbers over the song while the click counts you in */
+class CountInOverlay : public juce::Component, private juce::Timer
+{
+public:
+    CountInOverlay() { setInterceptsMouseClicks (false, false); }
+    void start (int beats, double secondsPerBeat)
+    {
+        total = beats; spb = secondsPerBeat; started = juce::Time::getMillisecondCounterHiRes();
+        setVisible (true); startTimerHz (30); repaint();
+    }
+    void paint (juce::Graphics& g) override
+    {
+        const double elapsed = (juce::Time::getMillisecondCounterHiRes() - started) / 1000.0;
+        const int beat = (int) (elapsed / spb);
+        if (beat >= total) return;
+        const float pulse = 1.0f - (float) std::fmod (elapsed / spb, 1.0);
+        auto box = getLocalBounds().withSizeKeepingCentre (220, 220).toFloat();
+        g.setColour (theme::base.withAlpha (0.75f));
+        g.fillRoundedRectangle (box, 24.0f);
+        g.setColour (theme::record.withAlpha (0.5f + 0.5f * pulse));
+        g.drawRoundedRectangle (box.reduced (2.0f), 24.0f, 3.0f);
+        g.setColour (theme::paper);
+        g.setFont (juce::FontOptions (120.0f, juce::Font::bold));
+        g.drawText (juce::String (beat + 1), box.toNearestInt().withTrimmedBottom (30), juce::Justification::centred);
+        g.setColour (theme::text2);
+        g.setFont (juce::FontOptions (16.0f));
+        g.drawText ("Recording in " + juce::String (total - beat), box.toNearestInt().removeFromBottom (54), juce::Justification::centred);
+    }
+private:
+    int total = 0;
+    double spb = 0.5, started = 0;
+    void timerCallback() override
+    {
+        if ((juce::Time::getMillisecondCounterHiRes() - started) / 1000.0 >= total * spb) { stopTimer(); setVisible (false); }
+        repaint();
     }
 };
 
@@ -306,6 +432,7 @@ public:
         cmdImportAudio, cmdExportMix, cmdExportZip, cmdPreferences, cmdQuit,
         // Edit
         cmdUndo, cmdRedo, cmdCut, cmdCopy, cmdPaste, cmdDuplicate, cmdDelete, cmdSplit, cmdSelectAll, cmdSelectNone, cmdMuteClip,
+        cmdNudgeLeft, cmdNudgeRight, cmdSnapOff, cmdSnapBar, cmdSnapBeat, cmdSnapEighth, cmdSnapSixteenth, cmdRenameClip,
         // Project
         cmdAddTrack, cmdDuplicateTrack, cmdRenameTrack, cmdRemoveTrack, cmdSongSetup,
         // Audio
@@ -314,17 +441,18 @@ public:
         cmdShowSongFolder, cmdShowRecordings, cmdShowAudio, cmdChangeProjectsFolder,
         // Transport
         cmdPlay, cmdRecord, cmdToStart, cmdToEnd, cmdBarBack, cmdBarForward, cmdLoop, cmdLoopToSelection, cmdClick,
-        cmdCountNone, cmdCount1Beat, cmdCount2Beats, cmdCount1Bar, cmdCount2Bars,
+        cmdCountNone, cmdCount1Beat, cmdCount2Beats, cmdCount1Bar, cmdCount2Bars, cmdMetronome, cmdPunch,
         // Studio
-        cmdAudioSetup, cmdPlugins, cmdReassignInputs,
+        cmdAudioSetup, cmdPlugins, cmdFindPlugins, cmdReassignInputs,
         // Window
-        cmdEffects, cmdZoomIn, cmdZoomOut, cmdZoomFit,
+        cmdEffects, cmdZoomIn, cmdZoomOut, cmdZoomFit, cmdHeightSmall, cmdHeightMedium, cmdHeightLarge, cmdHeightHuge,
         // Help
         cmdShortcuts, cmdGuide, cmdReport, cmdUpdates, cmdLogFolder, cmdAbout
     };
 
     MainComponent()
     {
+        basementLog ("startup: engine ready in " + juce::String (juce::Time::getMillisecondCounterHiRes() - constructionStarted, 0) + " ms");
         behaviour->songFolder = [this] { return songFile.getParentDirectory(); };
 
         commandManager.registerAllCommandsForTarget (this);
@@ -347,6 +475,21 @@ public:
         }
         for (auto* l : { &timeLabel, &barLabel, &tempoLabel, &tempoCaption, &statusLabel })
             addChildComponent (l);
+        addChildComponent (masterMeter);
+        addChildComponent (countIn);
+        deviceLabel.setColour (juce::Label::textColourId, theme::muted);
+        deviceLabel.setJustificationType (juce::Justification::centredRight);
+        deviceLabel.setFont (juce::FontOptions (12.0f));
+        addAndMakeVisible (deviceLabel);
+        statusLabel.setFont (juce::FontOptions (12.0f));
+        statusLabel.setJustificationType (juce::Justification::centredLeft);
+        addChildComponent (snapBox);
+        snapBox.addItemList ({ "Snap: Off", "Snap: Bar", "Snap: Beat", "Snap: 1/8", "Snap: 1/16" }, 1);
+        snapBox.setTooltip ("What clips line up to when you drag them (hold Shift to ignore it)");
+        snapBox.setColour (juce::ComboBox::textColourId, theme::paper);
+        snapBox.setMouseClickGrabsKeyboardFocus (false);
+        snapBox.onChange = [this] { setSnap (snapBox.getSelectedId() - 1); };
+        masterMeter.setTooltip ("The whole mix. Red at the end means it clipped: click to reset.");
 
         exportButton.setColour (juce::TextButton::buttonColourId, theme::brand);
         recordButton.setColour (juce::TextButton::buttonOnColourId, theme::record);
@@ -371,7 +514,6 @@ public:
         tempoLabel.setTooltip ("Tempo: double-click to type a new one");
         tempoLabel.onTextChange = [this] { setTempo (tempoLabel.getText().getDoubleValue()); };
         statusLabel.setColour (juce::Label::textColourId, theme::muted);
-        statusLabel.setJustificationType (juce::Justification::centredRight);
 
         homeButton.onClick = [this] { invoke (cmdToStart); };
         playButton.onClick = [this] { invoke (cmdPlay); };
@@ -382,30 +524,70 @@ public:
         importButton.onClick = [this] { invoke (cmdImportAudio); };
         exportButton.onClick = [this] { invoke (cmdExportMix); };
 
+        BasementHooks::commands = &commandManager;
+        BasementHooks::fillClipMenu = [this] (juce::PopupMenu& m, te::Clip& c) { fillClipMenu (m, c); };
+        BasementHooks::findPlugins = [this] { startPluginSearch(); };
+        BasementHooks::showPluginManager = [this] { showPluginList(); };
+        BasementHooks::pluginScanStatus = [this] { return pluginFinder.status(); };
+        pluginFinder.onProgress = [this] (juce::String s) { status (s); };
+        pluginFinder.onFinished = [this] (int found)
+        {
+            status (found > 0 ? "Found " + juce::String (found) + (found == 1 ? " new plugin" : " new plugins") + ": they're in every track's Effects menu"
+                              : juce::String ("Plugins up to date"));
+            commandManager.commandStatusChanged();
+        };
+        // look for new plugins once things have settled (the window is up first)
+        juce::Timer::callAfterDelay (2500, [safe = juce::Component::SafePointer<MainComponent> (this)] { if (safe) safe->startPluginSearch(); });
+
+        // the interface opens a moment after startup; then see if it has its own ASIO driver
+        juce::Timer::callAfterDelay (1200, [safe = juce::Component::SafePointer<MainComponent> (this)] { if (safe) safe->preferInterfaceAsio(); });
         setupInputs();
         engine.getDeviceManager().addChangeListener (this);
         setSize (1400, 860);
+        juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MainComponent> (this)]
+        {
+            // set after the first song has opened (and checked for a crash), cleared on a clean exit
+            if (safe) { safe->props().setValue ("running", true); safe->props().saveIfNeeded(); }
+        });
         startTimerHz (20);
 
+        crashedLastSession = props().getBoolValue ("running", false);
         auto last = juce::File (props().getValue ("lastSong"));
         if (last.existsAsFile() && recent::load (props()).isEmpty()) // songs made before the Hub existed
             if (auto e = songs::open (engine, last, te::Edit::forExamining)) recent::remember (props(), *e, last, last.getLastModificationTime());
-        if (props().getValue ("startWith", "hub") == "last" && last.existsAsFile())
-            loadSong (last);
-        else
+        const bool openLast = props().getValue ("startWith", "hub") == "last" && last.existsAsFile();
+        if (! openLast)
         {
             showHub (true);
             hub->showTab (hub->recentCount() > 0 ? 0 : 1);
         }
+        // the window shows first; then the audio interface opens, then the last song (if that's the setting)
+        juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MainComponent> (this), openLast, last]
+        {
+            if (safe == nullptr) return;
+            const auto t = juce::Time::getMillisecondCounterHiRes();
+            safe->engine.getDeviceManager().initialise();
+            basementLog ("startup: audio interface opened in " + juce::String (juce::Time::getMillisecondCounterHiRes() - t, 0) + " ms");
+            safe->setupInputs();
+            if (openLast) safe->loadSong (last);
+            if (safe->hub) safe->hub->repaint();
+        });
     }
 
     ~MainComponent() override
     {
         stopTimer();
+        BasementHooks::findPlugins = nullptr;
+        BasementHooks::showPluginManager = nullptr;
+        BasementHooks::pluginScanStatus = nullptr;
+        BasementHooks::commands = nullptr;
+        BasementHooks::fillClipMenu = nullptr;
         setApplicationCommandManagerToWatch (nullptr);
         engine.getDeviceManager().removeChangeListener (this);
         closeSong (true);
         hub = nullptr;
+        props().setValue ("running", false);
+        props().saveIfNeeded();
         engine.getTemporaryFileManager().getTempDirectory().deleteRecursively();
     }
 
@@ -415,6 +597,9 @@ public:
         g.fillAll (theme::base);
         g.setColour (theme::surface);
         g.fillRect (getLocalBounds().removeFromTop (menuH));
+        g.fillRect (getLocalBounds().removeFromBottom (statusH));
+        g.setColour (theme::strong);
+        g.fillRect (getLocalBounds().removeFromBottom (statusH).removeFromTop (1));
         if (hubShown) return;
 
         auto bar = getLocalBounds().withTrimmedTop (menuH).removeFromTop (toolbarH);
@@ -440,26 +625,34 @@ public:
     {
         auto r = getLocalBounds();
         menuBar.setBounds (r.removeFromTop (menuH));
+        {
+            auto bar = r.removeFromBottom (statusH).reduced (12, 0);
+            deviceLabel.setBounds (bar.removeFromRight (juce::jmin (520, bar.getWidth() / 2)));
+            statusLabel.setBounds (bar);
+            statusLabel.setVisible (! hubShown && edit != nullptr);
+        }
         if (hubShown)
         {
             hub->setBounds (r);
-            for (auto* c : { (juce::Component*) &importButton, (juce::Component*) &addTrackButton, (juce::Component*) &statusLabel }) c->setVisible (false);
+            for (auto* c : { (juce::Component*) &importButton, (juce::Component*) &addTrackButton }) c->setVisible (false);
             return;
         }
 
         auto t = r.removeFromTop (toolbarH).reduced (12, 10);
         t.removeFromLeft (180);
         auto place = [&t] (juce::Component& c, int w, int gapAfter = 6) { c.setBounds (t.removeFromLeft (w)); t.removeFromLeft (gapAfter); };
-        place (homeButton, 40); place (playButton, 76); place (recordButton, 84); place (loopButton, 62, 18);
-        place (timeLabel, 112); place (barLabel, 80, 10);
+        place (homeButton, 40); place (playButton, 72); place (recordButton, 80); place (loopButton, 60, 14);
+        place (timeLabel, 100); place (barLabel, 70, 6);
         auto tempo = t.removeFromLeft (64);
         tempoCaption.setBounds (tempo.removeFromTop (12));
         tempoLabel.setBounds (tempo);
         t.removeFromLeft (8);
-        place (clickButton, 62);
+        place (clickButton, 60, 8);
+        place (snapBox, 112);
         // narrow windows drop the extras first (they're all in the menus too)
-        exportButton.setBounds (t.removeFromRight (110)); t.removeFromRight (6);
-        const bool roomy = t.getWidth() >= 98 + 116 + 16 + 120;
+        exportButton.setBounds (t.removeFromRight (110)); t.removeFromRight (10);
+        masterMeter.setBounds (t.removeFromRight (100).withSizeKeepingCentre (100, 14)); t.removeFromRight (10);
+        const bool roomy = t.getWidth() >= 98 + 116 + 16;
         importButton.setVisible (roomy && ! hubShown);
         addTrackButton.setVisible (roomy && ! hubShown);
         if (roomy)
@@ -467,10 +660,9 @@ public:
             importButton.setBounds (t.removeFromRight (116)); t.removeFromRight (6);
             addTrackButton.setBounds (t.removeFromRight (98)); t.removeFromRight (10);
         }
-        statusLabel.setVisible (t.getWidth() >= 120 && ! hubShown);
-        statusLabel.setBounds (t);
 
         if (editComponent) editComponent->setBounds (r);
+        countIn.setBounds (r);
     }
 
     //==============================================================================
@@ -551,7 +743,16 @@ public:
             case 1: // Edit
                 add (cmdUndo); add (cmdRedo); m.addSeparator();
                 add (cmdCut); add (cmdCopy); add (cmdPaste); add (cmdDuplicate); add (cmdDelete); m.addSeparator();
-                add (cmdSplit); add (cmdMuteClip); m.addSeparator();
+                add (cmdSplit); add (cmdMuteClip); add (cmdRenameClip); m.addSeparator();
+                add (cmdNudgeLeft); add (cmdNudgeRight);
+                {
+                    juce::PopupMenu snapMenu;
+                    for (auto id : { cmdSnapOff, cmdSnapBar, cmdSnapBeat, cmdSnapEighth, cmdSnapSixteenth }) addCommand (snapMenu, id);
+                    snapMenu.addSeparator();
+                    snapMenu.addItem (comingSoonId, "Hold Shift while dragging to ignore the grid", false);
+                    m.addSubMenu ("Snap to Grid", snapMenu);
+                }
+                m.addSeparator();
                 add (cmdSelectAll); add (cmdSelectNone);
                 break;
             case 2: // Project
@@ -580,22 +781,29 @@ public:
             {
                 add (cmdPlay); add (cmdRecord); m.addSeparator();
                 add (cmdToStart); add (cmdToEnd); add (cmdBarBack); add (cmdBarForward); m.addSeparator();
-                add (cmdLoop); add (cmdLoopToSelection); m.addSeparator();
-                add (cmdClick);
+                add (cmdLoop); add (cmdLoopToSelection); add (cmdPunch); m.addSeparator();
+                add (cmdClick); add (cmdMetronome);
                 juce::PopupMenu count;
                 for (auto id : { cmdCountNone, cmdCount1Beat, cmdCount2Beats, cmdCount1Bar, cmdCount2Bars }) addCommand (count, id);
                 m.addSubMenu ("Count-in", count);
                 break;
             }
             case 8: // Studio
-                add (cmdAudioSetup); add (cmdPlugins); add (cmdReassignInputs); m.addSeparator();
+                add (cmdAudioSetup); add (cmdPlugins); add (cmdFindPlugins); add (cmdReassignInputs); m.addSeparator();
                 m.addItem (comingSoonId, "Sign in to Encore (coming soon)", false);
                 m.addSeparator(); add (cmdPreferences);
                 break;
             case 9: // Window
                 add (cmdHub); m.addSeparator();
                 add (cmdEffects); m.addSeparator();
-                add (cmdZoomIn); add (cmdZoomOut); add (cmdZoomFit);
+                add (cmdZoomIn); add (cmdZoomOut); add (cmdZoomFit); m.addSeparator();
+                {
+                    juce::PopupMenu heights;
+                    for (auto id : { cmdHeightSmall, cmdHeightMedium, cmdHeightLarge, cmdHeightHuge }) addCommand (heights, id);
+                    heights.addSeparator();
+                    heights.addItem (comingSoonId, "Or drag a track's bottom edge (Alt: all tracks)", false);
+                    m.addSubMenu ("Track Height", heights, edit != nullptr && ! hubShown);
+                }
                 later ({ "Mixer", "Clip Editor" });
                 break;
             case 10: // Help
@@ -669,7 +877,11 @@ public:
         const bool song = edit != nullptr, songShown = song && ! hubShown;
         auto clips = selectedClips();
         const bool anyClip = songShown && ! clips.isEmpty();
-        auto set = [&] (const char* name, const char* cat, bool active = true) { info.setInfo (name, {}, cat, 0); info.setActive (active); };
+        auto set = [&] (const char* name, const char* cat, bool active = true)
+        {
+            info.setInfo (name, {}, cat, juce::ApplicationCommandInfo::dontTriggerVisualFeedback); // keys don't flash the menu bar
+            info.setActive (active);
+        };
         auto key = [&] (int k, int mods) { info.addDefaultKeypress (k, mods); };
 
         switch (id)
@@ -700,6 +912,14 @@ public:
             case cmdMuteClip:       set ("Mute / Unmute Clip", "Edit", anyClip); key ('m', shift); break;
             case cmdSelectAll:      set ("Select All", "Edit", songShown); key ('a', cmd); break;
             case cmdSelectNone:     set ("Select None", "Edit", songShown); key ('a', cmd | shift); break;
+            case cmdNudgeLeft:      set ("Nudge Left", "Edit", anyClip); key (KP::leftKey, cmd); break;
+            case cmdNudgeRight:     set ("Nudge Right", "Edit", anyClip); key (KP::rightKey, cmd); break;
+            case cmdRenameClip:     set ("Rename Clip...", "Edit", anyClip); break;
+            case cmdSnapOff:        set ("Off", "Edit", songShown); info.setTicked (snapIs (0)); break;
+            case cmdSnapBar:        set ("Bar", "Edit", songShown); info.setTicked (snapIs (1)); break;
+            case cmdSnapBeat:       set ("Beat", "Edit", songShown); info.setTicked (snapIs (2)); break;
+            case cmdSnapEighth:     set ("1/8", "Edit", songShown); info.setTicked (snapIs (3)); break;
+            case cmdSnapSixteenth:  set ("1/16", "Edit", songShown); info.setTicked (snapIs (4)); break;
 
             case cmdAddTrack:       set ("Add Audio Track", "Project", songShown); key ('t', cmd); break;
             case cmdDuplicateTrack: set ("Duplicate Track", "Project", songShown && selectedTrack() != nullptr); key ('d', cmd | shift); break;
@@ -735,15 +955,22 @@ public:
             case cmdCount2Beats:    set ("2 Beats", "Transport", song); info.setTicked (song && edit->getCountInMode() == te::Edit::CountIn::twoBeat); break;
             case cmdCount1Bar:      set ("1 Bar", "Transport", song); info.setTicked (song && edit->getCountInMode() == te::Edit::CountIn::oneBar); break;
             case cmdCount2Bars:     set ("2 Bars", "Transport", song); info.setTicked (song && edit->getCountInMode() == te::Edit::CountIn::twoBar); break;
+            case cmdMetronome:      set ("Metronome Settings...", "Transport", song); break;
+            case cmdPunch:          set ("Punch In/Out (records only inside the loop range)", "Transport", songShown); key ('i', none); info.setTicked (song && edit->recordingPunchInOut.get()); break;
 
             case cmdAudioSetup:     set ("Audio Setup...", "Studio"); break;
             case cmdPlugins:        set ("Plugin Manager...", "Studio"); break;
+            case cmdFindPlugins:    set ("Find New Plugins", "Studio", ! pluginFinder.isRunning()); break;
             case cmdReassignInputs: set ("Give Tracks Their Inputs", "Studio", songShown); break;
 
             case cmdEffects:        set ("Effects Column", "Window", songShown); info.setTicked (editComponent && editComponent->getEditViewState().showFooters.get()); break;
             case cmdZoomIn:         set ("Zoom In", "Window", songShown); key ('=', cmd); break;
             case cmdZoomOut:        set ("Zoom Out", "Window", songShown); key ('-', cmd); break;
             case cmdZoomFit:        set ("Zoom to Song", "Window", songShown); key ('f', shift); break;
+            case cmdHeightSmall:    set ("Small", "Window", songShown); break;
+            case cmdHeightMedium:   set ("Medium", "Window", songShown); break;
+            case cmdHeightLarge:    set ("Large", "Window", songShown); break;
+            case cmdHeightHuge:     set ("Extra Large", "Window", songShown); break;
 
             case cmdShortcuts:      set ("Keyboard Shortcuts...", "Help"); break;
             case cmdGuide:          set ("User Guide", "Help"); break;
@@ -786,6 +1013,14 @@ public:
             case cmdMuteClip:       forClips ("Mute clip", [] (te::AudioClipBase& c) { c.setMuted (! c.isMuted()); }); return true;
             case cmdSelectAll:      selectAll(); return true;
             case cmdSelectNone:     selectionManager.deselectAll(); return true;
+            case cmdNudgeLeft:      nudge (-1); return true;
+            case cmdNudgeRight:     nudge (1); return true;
+            case cmdRenameClip:     renameClip(); return true;
+            case cmdSnapOff:        setSnap (0); return true;
+            case cmdSnapBar:        setSnap (1); return true;
+            case cmdSnapBeat:       setSnap (2); return true;
+            case cmdSnapEighth:     setSnap (3); return true;
+            case cmdSnapSixteenth:  setSnap (4); return true;
 
             case cmdAddTrack:       addTrack(); return true;
             case cmdDuplicateTrack: duplicateTrack(); return true;
@@ -821,21 +1056,28 @@ public:
             case cmdCount2Beats:    edit->setCountInMode (te::Edit::CountIn::twoBeat); return true;
             case cmdCount1Bar:      edit->setCountInMode (te::Edit::CountIn::oneBar); return true;
             case cmdCount2Bars:     edit->setCountInMode (te::Edit::CountIn::twoBar); return true;
+            case cmdMetronome:      showDialog ("Metronome", new MetronomeComponent (*edit), this); return true;
+            case cmdPunch:          togglePunch(); return true;
 
             case cmdAudioSetup:     EngineHelpers::showAudioDeviceSettings (engine); return true;
             case cmdPlugins:        showPluginList(); return true;
+            case cmdFindPlugins:    startPluginSearch(); return true;
             case cmdReassignInputs: assignInputs (true); return true;
 
             case cmdEffects:        { auto& v = editComponent->getEditViewState(); v.showFooters = ! v.showFooters.get(); editComponent->setBounds (editComponent->getBounds().withWidth (editComponent->getWidth() - 1)); resized(); return true; }
             case cmdZoomIn:         zoom (0.5); return true;
             case cmdZoomOut:        zoom (2.0); return true;
             case cmdZoomFit:        zoomToSong(); return true;
+            case cmdHeightSmall:    setAllTrackHeights (48); return true;
+            case cmdHeightMedium:   setAllTrackHeights (EditComponent::trackHeight); return true;
+            case cmdHeightLarge:    setAllTrackHeights (150); return true;
+            case cmdHeightHuge:     setAllTrackHeights (260); return true;
 
             case cmdShortcuts:      showShortcuts(); return true;
             case cmdGuide:          url ("https://github.com/jimmyrlondo/encore-basement#readme"); return true;
             case cmdReport:         url ("https://github.com/jimmyrlondo/encore-basement/issues/new"); return true;
             case cmdUpdates:        url ("https://github.com/jimmyrlondo/encore-basement/releases"); return true;
-            case cmdLogFolder:      juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory).getChildFile ("Encore Basement").startAsProcess(); return true;
+            case cmdLogFolder:      juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory).getChildFile (basementProfile()).startAsProcess(); return true;
             case cmdAbout:          showAbout(); return true;
             default: return false;
         }
@@ -844,14 +1086,16 @@ public:
 private:
     //==============================================================================
     static constexpr int menuH = 26, toolbarH = 56, recentBaseId = 0x5000, comingSoonId = 0x5fff;
-    BasementBehaviour* behaviour = new BasementBehaviour(); // owned by the engine
-    te::Engine engine { "Encore Basement", std::make_unique<BasementUIBehaviour>(), std::unique_ptr<te::EngineBehaviour> (behaviour) };
+    double constructionStarted = juce::Time::getMillisecondCounterHiRes();
+    BasementBehaviour* behaviour = new BasementBehaviour (true); // owned by the engine
+    te::Engine engine { basementProfile(), std::make_unique<BasementUIBehaviour>(), std::unique_ptr<te::EngineBehaviour> (behaviour) };
     te::SelectionManager selectionManager { engine };
     std::unique_ptr<te::Edit> edit;
     std::unique_ptr<EditComponent> editComponent;
     juce::File songFile;
     juce::TooltipWindow tooltips { this, 600 };
     juce::ApplicationCommandManager commandManager;
+    PluginFinder pluginFinder { engine };
     juce::MenuBarComponent menuBar { this };
     std::unique_ptr<HubComponent> hub;
     bool hubShown = false;
@@ -860,6 +1104,13 @@ private:
     juce::TextButton homeButton { "|<" }, playButton { "Play" }, recordButton { "Record" }, loopButton { "Loop" }, clickButton { "Click" },
                      addTrackButton { "Add track" }, importButton { "Import audio" }, exportButton { "Export mix" };
     juce::Label timeLabel { {}, "0:00.0" }, barLabel { {}, "Bar 1.1" }, tempoLabel { {}, "120" }, tempoCaption { {}, "BPM" }, statusLabel;
+    LevelMeter masterMeter { LevelMeter::Orientation::horizontal };
+    juce::ComboBox snapBox;
+    juce::Label deviceLabel;
+    CountInOverlay countIn;
+    juce::uint32 lastAutosave = 0;
+    bool crashedLastSession = false;
+    static constexpr int statusH = 24;
 
     juce::PropertiesFile& props() { return engine.getPropertyStorage().getPropertiesFile(); }
     static bool isAudioFile (const juce::File& f) { return f.hasFileExtension ("wav;aif;aiff;flac;mp3;ogg;m4a;caf;w64;bwf"); }
@@ -874,7 +1125,7 @@ private:
         if (show) hub->refresh (edit ? songTitle() : juce::String());
         const bool tools = ! show && edit != nullptr;
         for (auto* c : std::initializer_list<juce::Component*> { &homeButton, &playButton, &recordButton, &loopButton, &clickButton,
-                                                                 &exportButton, &timeLabel, &barLabel, &tempoLabel, &tempoCaption })
+                                                                 &exportButton, &timeLabel, &barLabel, &tempoLabel, &tempoCaption, &masterMeter, &snapBox })
             c->setVisible (tools);
         if (editComponent) editComponent->setVisible (! show);
         commandManager.commandStatusChanged();
@@ -909,10 +1160,66 @@ private:
         for (int i = 0; i < dm.getNumWaveInDevices(); i++)
             if (auto wip = dm.getWaveInDevice (i))
             {
-                wip->setMonitorMode (te::InputDevice::MonitorMode::automatic);
                 wip->setEnabled (true);
                 if (edit) wip->setBitDepth (SongInfo::readFrom (*edit, songFile).bitDepth);
             }
+    }
+
+    /** Windows' shared audio path adds latency and its own input level in the
+        way. When the interface you're using has its own ASIO driver (most do:
+        Volt, Scarlett, Audient, MOTU...), switch to it, once. Generic
+        wrappers (ASIO4ALL and friends) are never picked automatically, and if
+        the driver won't open (another app using it) nothing changes. */
+    void preferInterfaceAsio()
+    {
+        if (props().getBoolValue ("asioChecked", false)) return;
+        props().setValue ("asioChecked", true);
+        auto& dm = engine.getDeviceManager().deviceManager;
+        if (dm.getCurrentAudioDeviceType() == "ASIO") return;
+
+        juce::AudioIODeviceType* asio = nullptr;
+        juce::StringArray typeNames;
+        for (auto* t : dm.getAvailableDeviceTypes()) { typeNames.add (t->getTypeName()); if (t->getTypeName() == "ASIO") asio = t; }
+        if (asio == nullptr) { basementLog ("ASIO check: no ASIO support (types: " + typeNames.joinIntoString (", ") + ")"); return; }
+        asio->scanForDevices();
+
+        auto setup = dm.getAudioDeviceSetup();
+        const juce::StringArray generic { "input", "output", "line", "speakers", "speaker", "headphones", "microphone", "mic", "audio", "device",
+                                          "usb", "high", "definition", "realtek", "digital", "stereo", "default", "communications", "array" };
+        juce::StringArray words;
+        for (auto& n : { setup.inputDeviceName, setup.outputDeviceName })
+            for (auto& w : juce::StringArray::fromTokens (n.toLowerCase().retainCharacters ("abcdefghijklmnopqrstuvwxyz0123456789 "), " ", {}))
+                if (w.length() >= 3 && ! generic.contains (w) && ! w.containsOnly ("0123456789")) words.addIfNotAlreadyThere (w);
+
+        basementLog ("ASIO check: using " + dm.getCurrentAudioDeviceType() + " (" + setup.inputDeviceName + " / " + setup.outputDeviceName + "), looking for "
+                     + words.joinIntoString ("/") + " among ASIO drivers: " + asio->getDeviceNames().joinIntoString (", "));
+        for (auto& name : asio->getDeviceNames())
+        {
+            auto lower = name.toLowerCase();
+            if (lower.contains ("asio4all") || lower.contains ("generic") || lower.contains ("magix") || lower.contains ("built-in") || lower.contains ("flexasio"))
+                continue;
+            bool match = false;
+            for (auto& w : words) match = match || lower.contains (w);
+            if (! match) continue;
+
+            auto before = setup;
+            auto beforeType = dm.getCurrentAudioDeviceType();
+            dm.setCurrentAudioDeviceType ("ASIO", true);
+            auto s = dm.getAudioDeviceSetup();
+            s.inputDeviceName = s.outputDeviceName = name;
+            s.useDefaultInputChannels = s.useDefaultOutputChannels = true;
+            auto err = dm.setAudioDeviceSetup (s, true);
+            if (err.isEmpty() && dm.getCurrentAudioDevice() != nullptr)
+            {
+                basementLog ("switched to the interface's ASIO driver: " + name);
+                return;
+            }
+            basementLog ("ASIO driver " + name + " didn't open (" + err + "), staying on " + beforeType);
+            props().setValue ("asioChecked", false); // try again next time (another app may have had it)
+            dm.setCurrentAudioDeviceType (beforeType, true);
+            dm.setAudioDeviceSetup (before, true);
+            return;
+        }
     }
 
     /** Each track gets the input it was planned with (saved on the track), or
@@ -1036,8 +1343,11 @@ private:
 
         editComponent = std::make_unique<EditComponent> (*edit, selectionManager);
         addAndMakeVisible (*editComponent);
+        snapBox.setSelectedId (editComponent->getEditViewState().snapMode.get() + 1, juce::dontSendNotification);
         props().setValue ("lastSong", f.getFullPathName());
         recent::remember (props(), *edit, songFile);
+        lastAutosave = juce::Time::getMillisecondCounter();
+        if (crashedLastSession) juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MainComponent> (this)] { if (safe) safe->offerAutosave(); });
         edit->restartPlayback();
         showHub (false);
         status ("Opened " + info.title);
@@ -1048,6 +1358,7 @@ private:
     {
         if (! edit) return;
         te::EditFileOperations (*edit).save (true, true, false);
+        autosaveFile().deleteFile(); // saved for real: the automatic copy is no longer newer
         recent::remember (props(), *edit, songFile);
         updateTitle();
     }
@@ -1394,6 +1705,11 @@ private:
         });
     }
 
+    void startPluginSearch()
+    {
+        pluginFinder.start (juce::StringArray::fromLines (props().getValue ("pluginFolders")));
+    }
+
     void showPluginList()
     {
         juce::DialogWindow::LaunchOptions o;
@@ -1489,8 +1805,24 @@ private:
         bool anyArmed = false;
         for (auto t : te::getAudioTracks (*edit)) anyArmed = anyArmed || EngineHelpers::isTrackArmed (*t);
         if (! anyArmed) { status ("Arm a track first: the R button on the track, after choosing its input."); return; }
+        const int beats = tr.isPlaying() ? 0 : edit->getNumCountInBeats();
         tr.record (false);
+        if (beats > 0)
+        {
+            const double bpm = edit->tempoSequence.getTempo (0)->getBpm();
+            countIn.toFront (false);
+            countIn.start (beats, 60.0 / juce::jmax (20.0, bpm));
+        }
     }
+    void togglePunch()
+    {
+        auto& tr = edit->getTransport();
+        if (! edit->recordingPunchInOut.get() && tr.getLoopRange().getLength() <= 0s) loopToSelection();
+        edit->recordingPunchInOut = ! edit->recordingPunchInOut.get();
+        status (edit->recordingPunchInOut.get() ? "Punch in/out on: recording only happens inside the loop range (shown on the ruler)"
+                                                : juce::String ("Punch in/out off"));
+    }
+
     void moveBars (int n)
     {
         auto& ts = edit->tempoSequence;
@@ -1538,6 +1870,71 @@ private:
         v.viewX1 = te::TimePosition::fromSeconds (start);
         v.viewX2 = te::TimePosition::fromSeconds (start + w);
     }
+    bool snapIs (int mode) { return editComponent != nullptr && editComponent->getEditViewState().snapMode.get() == mode; }
+
+    void setSnap (int mode)
+    {
+        if (editComponent == nullptr) return;
+        editComponent->getEditViewState().snapMode = juce::jlimit (0, 4, mode);
+        snapBox.setSelectedId (editComponent->getEditViewState().snapMode.get() + 1, juce::dontSendNotification);
+    }
+
+    /** Selected clips one grid step left or right (a beat when snap is off) */
+    void nudge (int dir)
+    {
+        auto clips = selectedClips();
+        if (clips.isEmpty()) return;
+        auto& ts = edit->tempoSequence;
+        const double step = editComponent->getEditViewState().gridBeats() * dir;
+        edit->getUndoManager().beginNewTransaction ("Nudge");
+        for (auto* c : clips)
+        {
+            auto beats = ts.toBeats (c->getPosition().getStart()).inBeats() + step;
+            c->setStart (ts.toTime (te::BeatPosition::fromBeats (juce::jmax (0.0, beats))), false, true);
+        }
+    }
+
+    void renameClip()
+    {
+        auto clips = selectedClips();
+        if (clips.isEmpty()) return;
+        te::Clip::Ptr c = clips[0];
+        askForText ("Rename Clip", "New name:", c->getName(), [c] (juce::String name) { c->setName (name); });
+    }
+
+    /** The clip right-click menu */
+    void fillClipMenu (juce::PopupMenu& m, te::Clip& clip)
+    {
+        for (auto id : { cmdCut, cmdCopy, cmdDuplicate, cmdDelete }) addCommand (m, id);
+        m.addSeparator();
+        for (auto id : { cmdSplit, cmdRenameClip, cmdMuteClip }) addCommand (m, id);
+        m.addSeparator();
+        juce::PopupMenu audio;
+        for (auto id : { cmdNormalize, cmdGainUp, cmdGainDown, cmdGainReset, cmdFadeIn, cmdFadeOut, cmdRemoveFades, cmdReverse }) addCommand (audio, id);
+        m.addSubMenu ("Audio", audio);
+        if (auto w = dynamic_cast<te::WaveAudioClip*> (&clip); w != nullptr && w->hasAnyTakes())
+        {
+            juce::PopupMenu takes;
+            const int n = w->getNumTakes (false), current = w->getCurrentTake();
+            te::Clip::Ptr keep = w;
+            for (int i = 0; i < n; ++i)
+                takes.addItem ("Take " + juce::String (i + 1), true, i == current, [keep, i] { keep->setCurrentTake (i); });
+            m.addSubMenu ("Takes (" + juce::String (n) + ")", takes);
+        }
+        if (auto w = dynamic_cast<te::WaveAudioClip*> (&clip))
+        {
+            auto f = w->getAudioFile().getFile();
+            m.addSeparator();
+            m.addItem ("Show File in Folder", f.existsAsFile(), false, [f] { f.revealToUser(); });
+        }
+    }
+
+    void setAllTrackHeights (int h)
+    {
+        for (auto t : te::getAllTracks (*edit)) t->state.setProperty ("basementHeight", h, nullptr);
+        editComponent->relayout();
+    }
+
     void zoomToSong()
     {
         auto& v = editComponent->getEditViewState();
@@ -1582,6 +1979,66 @@ private:
     }
 
     //==============================================================================
+    /** Right of the status bar: the interface, its format, latency and how busy the audio is */
+    void updateDeviceLabel()
+    {
+        static int tick = 0;
+        if (++tick % 10 != 0) return; // twice a second is plenty
+        auto& dm = engine.getDeviceManager().deviceManager;
+        juce::String s;
+        if (auto* d = dm.getCurrentAudioDevice())
+        {
+            const double ms = d->getCurrentBufferSizeSamples() * 1000.0 / juce::jmax (1.0, d->getCurrentSampleRate());
+            s << d->getName() << " (" << dm.getCurrentAudioDeviceType() << ")   " << juce::String (d->getCurrentSampleRate() / 1000.0, 1) << " kHz   "
+              << d->getCurrentBufferSizeSamples() << " samples (" << juce::String (ms, 1) << " ms)   CPU "
+              << juce::roundToInt (engine.getDeviceManager().getCpuUsage() * 100.0) << "%";
+        }
+        else s = "No audio interface: Studio > Audio Setup";
+        if (deviceLabel.getText() != s) deviceLabel.setText (s, juce::dontSendNotification);
+    }
+
+    //==============================================================================
+    // Autosave: every two minutes, a copy of the song (only if it changed) next to
+    // it in .autosave, never over the song itself. If Basement didn't close
+    // properly last time, opening the song offers the newer copy back.
+    juce::File autosaveFile() const
+    {
+        return songFile.getParentDirectory().getChildFile (".autosave").getChildFile (songFile.getFileName());
+    }
+
+    void autosaveIfDue()
+    {
+        const auto now = juce::Time::getMillisecondCounter();
+        if (now - lastAutosave < 120000 || edit->getTransport().isRecording()) return;
+        lastAutosave = now;
+        if (! edit->hasChangedSinceSaved()) return;
+        auto f = autosaveFile();
+        f.getParentDirectory().createDirectory();
+        if (te::EditFileOperations (*edit).writeToFile (f, false))
+            basementLog ("autosaved " + f.getFullPathName());
+    }
+
+    /** Called when a song opens: if a newer autosave is there from a session that
+        didn't end cleanly, offer it */
+    void offerAutosave()
+    {
+        auto f = autosaveFile();
+        if (! f.existsAsFile() || f.getLastModificationTime() <= songFile.getLastModificationTime()) return;
+        auto when = f.getLastModificationTime().formatted ("%b %d, %H:%M");
+        juce::AlertWindow::showOkCancelBox (juce::MessageBoxIconType::QuestionIcon, "Recover unsaved changes?",
+            "Basement didn't close properly last time. There's an automatic copy of \"" + songTitle() + "\" from " + when
+            + " that's newer than the last save.\n\nOpen the recovered copy? (The last saved version is kept as \"before recovery\".)",
+            "Recover", "Keep the last save", this, juce::ModalCallbackFunction::create ([this, f] (int r)
+        {
+            if (r != 1 || ! f.existsAsFile()) return;
+            auto song = songFile;
+            song.copyFileTo (song.getSiblingFile (song.getFileNameWithoutExtension() + " before recovery.basement"));
+            f.copyFileTo (song);
+            loadSong (song, false);
+            status ("Recovered the automatic copy");
+        }));
+    }
+
     void changeListenerCallback (juce::ChangeBroadcaster* b) override
     {
         if (b == &engine.getDeviceManager()) // an interface was added, removed or switched
@@ -1596,10 +2053,13 @@ private:
 
     void timerCallback() override
     {
+        updateDeviceLabel();
         if (! edit) return;
+        autosaveIfDue();
         if (assignUntil != 0 && juce::Time::getMillisecondCounter() < assignUntil + 1000) assignInputs();
         if (hubShown) return;
         auto& tr = edit->getTransport();
+        if (auto* ctx = tr.getCurrentPlaybackContext()) masterMeter.setSource (&ctx->masterLevels);
         const auto pos = tr.getPosition().inSeconds();
         timeLabel.setText (juce::String ((int) pos / 60) + ":" + juce::String (std::fmod (pos, 60.0), 1).paddedLeft ('0', 4), juce::dontSendNotification);
         auto& ts = edit->tempoSequence;

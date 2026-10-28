@@ -191,7 +191,7 @@ namespace templates
 
     inline juce::File folder()
     {
-        return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory).getChildFile ("Encore Basement").getChildFile ("Templates");
+        return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory).getChildFile (basementProfile()).getChildFile ("Templates");
     }
 
     inline juce::Array<Template> all()

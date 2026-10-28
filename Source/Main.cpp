@@ -16,10 +16,13 @@ using namespace tracktion::literals;
 
 #include "Theme.h"
 #include "edit/Utilities.h"
+#include "edit/Meters.h"
 #include "edit/Components.h"
 #include "edit/PluginWindow.h"
+#include "PluginFinder.h"
 #include "MainComponent.h"
 #include "SelfTest.h"
+#include "PluginTest.h"
 
 class BasementApplication : public juce::JUCEApplication
 {
@@ -30,9 +33,21 @@ public:
 
     void initialise (const juce::String& args) override
     {
+        // Basement launched as its own plugin-scanning helper: no window, just scan
+        if (te::PluginManager::startChildProcessPluginScan (args))
+            return;
+
         if (args.contains ("--devices"))
         {
             setApplicationReturnValue (selftest::devices (juce::File (args.fromFirstOccurrenceOf ("--devices", false, false).trim().unquoted())));
+            quit();
+            return;
+        }
+        if (args.contains ("--plugintest"))
+        {
+            auto rest = juce::StringArray::fromTokens (args.fromFirstOccurrenceOf ("--plugintest", false, false), true);
+            rest.removeEmptyStrings();
+            setApplicationReturnValue (selftest::plugins (juce::File (rest[0].unquoted()), juce::File (rest[1].unquoted())));
             quit();
             return;
         }
@@ -43,8 +58,12 @@ public:
             quit();
             return;
         }
+        if (args.contains ("--profile"))
+            basementProfile() = args.fromFirstOccurrenceOf ("--profile", false, false).trim().unquoted();
         juce::LookAndFeel::setDefaultLookAndFeel (&lookAndFeel);
+        const auto t0 = juce::Time::getMillisecondCounterHiRes();
         mainWindow = std::make_unique<MainWindow> (*this);
+        basementLog ("startup: window up in " + juce::String (juce::Time::getMillisecondCounterHiRes() - t0, 0) + " ms");
     }
 
     void shutdown() override

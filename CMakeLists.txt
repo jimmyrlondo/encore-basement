@@ -38,6 +38,7 @@ target_sources(Basement PRIVATE Source/Main.cpp)
 target_include_directories(Basement PRIVATE Source)
 
 target_compile_definitions(Basement PRIVATE
+    JUCE_ASIO=1
     JUCE_PLUGINHOST_VST3=1
     JUCE_PLUGINHOST_AU=1
     JUCE_PLUGINHOST_LADSPA=1

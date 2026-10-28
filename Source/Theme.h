@@ -33,6 +33,20 @@ namespace theme
     }
 }
 
+//==============================================================================
+/** Basement.log next to the settings: what happened with devices and songs,
+    for bug reports. Kept short (trimmed when it passes 200 KB). */
+/** The settings profile ("Encore Basement"; "--profile <name>" picks another,
+    so testing never touches your real settings) */
+inline juce::String& basementProfile() { static juce::String p { "Encore Basement" }; return p; }
+
+inline void basementLog (const juce::String& line)
+{
+    auto f = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory).getChildFile (basementProfile()).getChildFile ("Basement.log");
+    if (f.getSize() > 200000) f.deleteFile();
+    f.appendText (juce::Time::getCurrentTime().toString (true, true, true, true) + "  " + line + juce::newLine);
+}
+
 /** The Encore icon (Assets/encore-icon.svg), drawn into r keeping its shape */
 inline void drawEncoreIcon (juce::Graphics& g, juce::Rectangle<float> r)
 {

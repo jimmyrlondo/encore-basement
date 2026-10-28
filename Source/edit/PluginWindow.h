@@ -66,6 +66,124 @@ struct AudioProcessorEditorContentComp : public te::Plugin::EditorComponent
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioProcessorEditorContentComp)
 };
 
+//==============================================================================
+/** Controls for plugins without their own window (Basement's built-in effects):
+    a knob per parameter, an On switch, and a reset. Knobs follow automation. */
+struct GenericPluginEditor : public te::Plugin::EditorComponent,
+                             private Timer
+{
+    GenericPluginEditor (te::Plugin& p) : plugin (p)
+    {
+        onButton.setClickingTogglesState (true);
+        onButton.setToggleState (plugin.isEnabled(), dontSendNotification);
+        onButton.setColour (TextButton::buttonOnColourId, theme::accent);
+        onButton.onClick = [this] { plugin.setEnabled (onButton.getToggleState()); };
+        resetButton.onClick = [this]
+        {
+            for (auto* k : knobs) k->param->setParameter (k->param->getDefaultValue().value_or (k->param->valueRange.start), sendNotification);
+        };
+        addAndMakeVisible (onButton);
+        addAndMakeVisible (resetButton);
+
+        for (auto param : plugin.getAutomatableParameters())
+        {
+            auto* k = knobs.add (new Knob (*param));
+            addAndMakeVisible (k);
+        }
+        const int cols = jlimit (1, 5, knobs.size()), rows = jmax (1, (knobs.size() + cols - 1) / cols);
+        setSize (jmax (300, cols * knobW + 32), 64 + rows * knobH + 16);
+        startTimerHz (15);
+    }
+
+    bool allowWindowResizing() override { return false; }
+    ComponentBoundsConstrainer* getBoundsConstrainer() override { return nullptr; }
+
+    void paint (Graphics& g) override
+    {
+        g.fillAll (theme::surface);
+        g.setColour (theme::paper);
+        g.setFont (FontOptions (16.0f, Font::bold));
+        g.drawText (plugin.getName(), getLocalBounds().reduced (16, 0).removeFromTop (52), Justification::centredLeft);
+        if (knobs.isEmpty())
+        {
+            g.setColour (theme::muted);
+            g.setFont (FontOptions (13.0f));
+            g.drawText ("Nothing to adjust on this one.", getLocalBounds().withTrimmedTop (52), Justification::centred);
+        }
+    }
+
+    void resized() override
+    {
+        auto top = getLocalBounds().reduced (16, 12).removeFromTop (28);
+        onButton.setBounds (top.removeFromRight (56));
+        top.removeFromRight (8);
+        resetButton.setBounds (top.removeFromRight (70));
+        const int cols = jlimit (1, 5, knobs.size());
+        for (int i = 0; i < knobs.size(); ++i)
+            knobs[i]->setBounds (16 + (i % cols) * knobW, 64 + (i / cols) * knobH, knobW, knobH);
+    }
+
+private:
+    static constexpr int knobW = 104, knobH = 118;
+
+    struct Knob : public Component
+    {
+        Knob (te::AutomatableParameter& p) : param (&p)
+        {
+            slider.setSliderStyle (Slider::RotaryHorizontalVerticalDrag);
+            slider.setTextBoxStyle (Slider::NoTextBox, false, 0, 0);
+            const auto& r = p.valueRange;
+            slider.setNormalisableRange ({ (double) r.start, (double) r.end, (double) r.interval, (double) r.skew });
+            slider.setValue (p.getCurrentValue(), dontSendNotification);
+            slider.setColour (Slider::rotarySliderFillColourId, theme::accent);
+            slider.onDragStart = [this] { param->parameterChangeGestureBegin(); };
+            slider.onDragEnd = [this] { param->parameterChangeGestureEnd(); };
+            slider.onValueChange = [this] { param->setParameter ((float) slider.getValue(), sendNotification); value.setText (param->getCurrentValueAsStringWithLabel(), dontSendNotification); };
+            if (auto d = p.getDefaultValue()) slider.setDoubleClickReturnValue (true, *d);
+            name.setText (p.getParameterName(), dontSendNotification);
+            name.setJustificationType (Justification::centred);
+            name.setFont (FontOptions (12.0f, Font::bold));
+            value.setJustificationType (Justification::centred);
+            value.setFont (FontOptions (11.0f));
+            value.setColour (Label::textColourId, theme::text2);
+            value.setText (p.getCurrentValueAsStringWithLabel(), dontSendNotification);
+            for (auto* c : std::initializer_list<Component*> { &slider, &name, &value }) addAndMakeVisible (c);
+        }
+
+        void resized() override
+        {
+            auto r = getLocalBounds().reduced (6, 0);
+            name.setBounds (r.removeFromTop (18));
+            value.setBounds (r.removeFromBottom (18));
+            slider.setBounds (r.reduced (6));
+        }
+
+        void refresh()
+        {
+            if (slider.isMouseButtonDown()) return;
+            if (std::abs (slider.getValue() - param->getCurrentValue()) > 1.0e-6)
+            {
+                slider.setValue (param->getCurrentValue(), dontSendNotification);
+                value.setText (param->getCurrentValueAsStringWithLabel(), dontSendNotification);
+            }
+        }
+
+        te::AutomatableParameter::Ptr param;
+        Slider slider;
+        Label name, value;
+    };
+
+    te::Plugin& plugin;
+    OwnedArray<Knob> knobs;
+    TextButton onButton { "On" }, resetButton { "Reset" };
+
+    void timerCallback() override
+    {
+        for (auto* k : knobs) k->refresh();
+        onButton.setToggleState (plugin.isEnabled(), dontSendNotification);
+    }
+};
+
 //=============================================================================
 class PluginWindow : public juce::DocumentWindow
 {
@@ -104,9 +222,12 @@ private:
 #endif
 
 PluginWindow::PluginWindow (te::Plugin& plug)
-    : DocumentWindow (plug.getName(), Colours::black, DocumentWindow::closeButton, shouldAddPluginWindowToDesktop),
+    : DocumentWindow (plug.getName() + (plug.getOwnerTrack() != nullptr ? " - " + plug.getOwnerTrack()->getName() : String()),
+                      theme::surface, DocumentWindow::closeButton, shouldAddPluginWindowToDesktop),
       plugin (plug), windowState (*plug.windowState)
 {
+    setUsingNativeTitleBar (true);
+    setIcon (encoreIconImage (64));
     getConstrainer()->setMinimumOnscreenAmounts (0x10000, 50, 30, 50);
     setResizeLimits (100, 50, 4000, 4000);
 
@@ -194,7 +315,10 @@ std::unique_ptr<Component> PluginWindow::create (te::Plugin& plugin)
 void PluginWindow::recreateEditor()
 {
     setEditor (nullptr);
-    setEditor (plugin.createEditor());
+    auto ed = plugin.createEditor();
+    if (ed == nullptr && dynamic_cast<te::ExternalPlugin*> (&plugin) == nullptr)
+        ed = std::make_unique<GenericPluginEditor> (plugin); // built-in effects have no window of their own
+    setEditor (std::move (ed));
 }
 
 void PluginWindow::recreateEditorAsync()

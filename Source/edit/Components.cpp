@@ -284,6 +284,69 @@ inline void showMenuAndCreatePluginAsync (te::Track::Ptr destTrack, int index,
 
 
 //==============================================================================
+/** The Effects menu: Encore's plugins first, then yours by maker, then a short
+    list of built-in effects. New plugins are found in the background, so the
+    menu says when a search is still running. */
+inline void showEffectsMenu (te::Track::Ptr track, te::SelectionManager* sm, Component* target)
+{
+    auto& edit = track->edit;
+    auto add = [track, sm] (te::Plugin::Ptr p)
+    {
+        if (p == nullptr) return;
+        // effects go after any earlier effects, before the track's volume/pan and meter
+        auto list = track->pluginList.getPlugins();
+        int index = list.size();
+        for (int i = 0; i < list.size(); ++i)
+            if (dynamic_cast<te::VolumeAndPanPlugin*> (list[i].get()) != nullptr || dynamic_cast<te::LevelMeterPlugin*> (list[i].get()) != nullptr) { index = i; break; }
+        track->pluginList.insertPlugin (p, index, sm);
+        p->showWindowExplicitly();
+    };
+
+    PopupMenu m, encore, instruments;
+    std::map<String, PopupMenu> byMaker;
+    auto types = edit.engine.getPluginManager().knownPluginList.getTypes();
+    std::sort (types.begin(), types.end(), [] (auto& a, auto& b) { return a.name.compareNatural (b.name) < 0; });
+    for (auto& d : types)
+    {
+        auto maker = d.manufacturerName.trim().isEmpty() ? String ("Other") : d.manufacturerName.trim();
+        auto item = [&edit, add, d] { add (edit.getPluginCache().createNewPlugin (te::ExternalPlugin::xmlTypeName, d)); };
+        if (maker.containsIgnoreCase ("Encore") || maker.containsIgnoreCase ("Sick & Sad"))
+            encore.addItem (d.name, item);
+        else if (d.isInstrument)
+            instruments.addItem (d.name, false, false, nullptr);
+        else
+            byMaker[maker].addItem (d.name, item);
+    }
+
+    if (encore.getNumItems() > 0) { m.addSectionHeader ("Encore"); for (PopupMenu::MenuItemIterator it (encore); it.next();) m.addItem (PopupMenu::Item (it.getItem())); }
+    m.addSectionHeader ("Your plugins");
+    if (byMaker.empty()) m.addItem ("None found yet", false, false, nullptr);
+    for (auto& [maker, menu] : byMaker) m.addSubMenu (maker, menu);
+    if (instruments.getNumItems() > 0) m.addSubMenu ("Instruments (need MIDI, coming soon)", instruments, true);
+
+    m.addSectionHeader ("Built in");
+    auto builtIn = [&m, &edit, add] (const char* name, const char* type)
+    {
+        m.addItem (name, [&edit, add, t = String (type)] { add (edit.getPluginCache().createNewPlugin (t, {})); });
+    };
+    builtIn ("EQ (4-band)", te::EqualiserPlugin::xmlTypeName);
+    builtIn ("Compressor / Limiter", te::CompressorPlugin::xmlTypeName);
+    builtIn ("Reverb", te::ReverbPlugin::xmlTypeName);
+    builtIn ("Delay", te::DelayPlugin::xmlTypeName);
+    builtIn ("Chorus", te::ChorusPlugin::xmlTypeName);
+    builtIn ("Phaser", te::PhaserPlugin::xmlTypeName);
+    builtIn ("Pitch Shifter", te::PitchShiftPlugin::xmlTypeName);
+    builtIn ("Low / High-Pass Filter", te::LowPassPlugin::xmlTypeName);
+
+    m.addSeparator();
+    auto scanning = BasementHooks::pluginScanStatus ? BasementHooks::pluginScanStatus() : String();
+    if (scanning.isNotEmpty()) m.addItem (scanning, false, false, nullptr);
+    else m.addItem ("Find new plugins", [] { if (BasementHooks::findPlugins) BasementHooks::findPlugins(); });
+    m.addItem ("Plugin Manager...", [] { if (BasementHooks::showPluginManager) BasementHooks::showPluginManager(); });
+    m.showMenuAsync (PopupMenu::Options().withTargetComponent (target));
+}
+
+//==============================================================================
 ClipComponent::ClipComponent (EditViewState& evs, te::Clip::Ptr c)
     : editViewState (evs), clip (c)
 {
@@ -307,31 +370,151 @@ void ClipComponent::paint (Graphics& g)
         g.setColour (theme::paper);
         g.drawRoundedRectangle (r, 5.0f, 2.0f);
     }
+
+    // fade handles in the top corners while the mouse is over the clip
+    if (hovering && dynamic_cast<te::AudioClipBase*> (clip.get()) != nullptr && getWidth() > 30)
+    {
+        g.setColour (theme::paper);
+        g.fillRect (Rectangle<float> (2.0f, 4.0f, 7.0f, 7.0f));
+        g.fillRect (Rectangle<float> ((float) getWidth() - 9.0f, 4.0f, 7.0f, 7.0f));
+    }
 }
 
-void ClipComponent::mouseDown (const MouseEvent&)
+// Where the mouse is decides what a drag does: the top corners set fades,
+// the left and right edges trim, anywhere else moves the clip.
+ClipComponent::Zone ClipComponent::zoneAt (Point<int> p) const
 {
-    editViewState.selectionManager.selectOnly (clip.get());
-    dragStart = clip->getPosition().getStart();
+    const bool audio = dynamic_cast<te::AudioClipBase*> (clip.get()) != nullptr;
+    const int edge = jmin (8, getWidth() / 4);
+    if (audio && getWidth() > 30 && p.y <= 13)
+    {
+        if (p.x <= 12) return Zone::fadeIn;
+        if (p.x >= getWidth() - 12) return Zone::fadeOut;
+    }
+    if (p.x <= edge) return Zone::trimStart;
+    if (p.x >= getWidth() - edge) return Zone::trimEnd;
+    return Zone::body;
+}
+
+void ClipComponent::mouseMove (const MouseEvent& e)
+{
+    if (! hovering) { hovering = true; repaint(); }
+    switch (zoneAt (e.getPosition()))
+    {
+        case Zone::trimStart: case Zone::trimEnd: setMouseCursor (MouseCursor::LeftRightResizeCursor); break;
+        case Zone::fadeIn: case Zone::fadeOut:    setMouseCursor (MouseCursor::PointingHandCursor); break;
+        default:                                  setMouseCursor (MouseCursor::NormalCursor); break;
+    }
+}
+
+void ClipComponent::mouseExit (const MouseEvent&) { hovering = false; repaint(); }
+
+void ClipComponent::mouseDown (const MouseEvent& e)
+{
+    auto& sm = editViewState.selectionManager;
+    if (e.mods.isPopupMenu())
+    {
+        if (! sm.isSelected (clip.get())) sm.selectOnly (clip.get());
+        PopupMenu m;
+        if (BasementHooks::fillClipMenu) BasementHooks::fillClipMenu (m, *clip);
+        m.showMenuAsync (PopupMenu::Options());
+        return;
+    }
+    if (e.mods.isShiftDown() || e.mods.isCommandDown())
+    {
+        if (sm.isSelected (clip.get())) sm.deselect (clip.get());
+        else sm.select (clip.get(), true);
+    }
+    else if (! sm.isSelected (clip.get()))
+        sm.selectOnly (clip.get());
+
+    dragZone = zoneAt (e.getPosition());
+    posAtDragStart = clip->getPosition();
+    dragStart = posAtDragStart.getStart();
+    if (auto a = dynamic_cast<te::AudioClipBase*> (clip.get()))
+        fadeAtDragStart = dragZone == Zone::fadeIn ? a->getFadeIn() : a->getFadeOut();
+    groupAtDragStart.clear();
+    for (auto* s : sm.getSelectedObjects())
+        if (auto c = dynamic_cast<te::Clip*> (s))
+            groupAtDragStart.push_back ({ c, c->getPosition().getStart() });
     dragging = false;
 }
 
-// Drag a clip left or right along its track
 void ClipComponent::mouseDrag (const MouseEvent& e)
 {
     auto* lane = getParentComponent();
     if (lane == nullptr || ! e.mouseWasDraggedSinceMouseDown()) return;
-    if (! dragging) { clip->edit.getUndoManager().beginNewTransaction ("Move clip"); dragging = true; }
-    auto dx = editViewState.xToTime (e.getDistanceFromDragStartX(), lane->getWidth()) - editViewState.xToTime (0, lane->getWidth());
-    clip->setStart (te::TimePosition::fromSeconds (jmax (0.0, (dragStart + dx).inSeconds())), false, true);
+    auto& um = clip->edit.getUndoManager();
+    const char* names[] = { "Move clips", "Trim clip", "Trim clip", "Fade in", "Fade out" };
+    if (! dragging) { um.beginNewTransaction (names[(int) dragZone]); dragging = true; }
+
+    const bool free = e.mods.isShiftDown(); // Shift: ignore the grid
+    const auto mouseTime = editViewState.xToTime (e.getEventRelativeTo (lane).x, lane->getWidth());
+    const auto dx = editViewState.xToTime (e.getDistanceFromDragStartX(), lane->getWidth()) - editViewState.xToTime (0, lane->getWidth());
+    const auto minLen = te::TimeDuration::fromSeconds (0.01);
+
+    switch (dragZone)
+    {
+        case Zone::body:
+        {
+            // the grabbed clip snaps; everything selected moves with it
+            auto newStart = editViewState.snap (te::TimePosition::fromSeconds (jmax (0.0, (dragStart + dx).inSeconds())), free);
+            auto delta = newStart - dragStart;
+            for (auto& [c, start] : groupAtDragStart)
+                c->setStart (te::TimePosition::fromSeconds (jmax (0.0, (start + delta).inSeconds())), false, true);
+            // dragged over another audio track: it moves there when you let go
+            dropTrack = nullptr;
+            if (auto ec = findParentComponentOfClass<EditComponent>())
+                if (auto target = ec->audioTrackAt (e.getEventRelativeTo (ec).getPosition()))
+                    if (target != clip->getTrack() && groupAtDragStart.size() == 1)
+                        dropTrack = target;
+            break;
+        }
+        case Zone::trimStart:
+        {
+            // can't pull the start before the beginning of the recording
+            auto earliest = posAtDragStart.getStart() - posAtDragStart.getOffset();
+            auto t = jlimit (jmax (te::TimePosition(), earliest), posAtDragStart.getEnd() - minLen, editViewState.snap (mouseTime, free));
+            clip->setStart (t, true, false);
+            break;
+        }
+        case Zone::trimEnd:
+        {
+            auto latest = posAtDragStart.getStart() + (clip->getMaximumLength() - posAtDragStart.getOffset());
+            auto t = jlimit (posAtDragStart.getStart() + minLen, latest, editViewState.snap (mouseTime, free));
+            clip->setEnd (t, true);
+            break;
+        }
+        case Zone::fadeIn:
+        case Zone::fadeOut:
+            if (auto a = dynamic_cast<te::AudioClipBase*> (clip.get()))
+            {
+                const auto len = a->getPosition().getLength();
+                if (dragZone == Zone::fadeIn)
+                    a->setFadeIn (jlimit (te::TimeDuration(), len - a->getFadeOut(), mouseTime - a->getPosition().getStart()));
+                else
+                    a->setFadeOut (jlimit (te::TimeDuration(), len - a->getFadeIn(), a->getPosition().getEnd() - mouseTime));
+                repaint();
+            }
+            break;
+    }
 }
 
-void ClipComponent::mouseUp (const MouseEvent&) { dragging = false; }
+void ClipComponent::mouseUp (const MouseEvent&)
+{
+    dragging = false;
+    groupAtDragStart.clear();
+    if (auto target = std::exchange (dropTrack, nullptr))
+        clip->moveTo (*target); // this component is rebuilt on the new track, so nothing after this
+}
 
 //==============================================================================
 AudioClipComponent::AudioClipComponent (EditViewState& evs, te::Clip::Ptr c)
     : ClipComponent (evs, c)
 {
+    // where clips overlap they crossfade, instead of cutting hard
+    if (auto a = dynamic_cast<te::AudioClipBase*> (c.get()); a != nullptr && ! a->getAutoCrossfade())
+        a->setAutoCrossfade (true);
     updateThumbnail();
 }
 
@@ -565,12 +748,14 @@ void RecordingClipComponent::initialiseThumbnailAndPunchTime()
 
 void RecordingClipComponent::paint (Graphics& g)
 {
-    g.fillAll (Colours::red.withAlpha (0.5f));
-    g.setColour (Colours::black);
+    // a dark red take with the waveform drawn in paper as it's recorded
+    g.fillAll (theme::record.withAlpha (0.28f));
+    g.setColour (theme::record);
     g.drawRect (getLocalBounds());
+    g.fillRect (getLocalBounds().removeFromTop (3));
 
     if (editViewState.drawWaveforms)
-        drawThumbnail (g, Colours::black.withAlpha (0.5f));
+        drawThumbnail (g, theme::paper.withAlpha (0.9f));
 }
 
 void RecordingClipComponent::drawThumbnail (Graphics& g, Colour waveformColour) const
@@ -710,7 +895,9 @@ void RecordingClipComponent::updatePosition()
 TrackHeaderComponent::TrackHeaderComponent (EditViewState& evs, te::Track::Ptr t)
     : editViewState (evs), track (t)
 {
-    Helpers::addAndMakeVisible (*this, { &trackName, &armButton, &muteButton, &soloButton, &inputButton, &volume, &pan });
+    Helpers::addAndMakeVisible (*this, { &trackName, &monitorButton, &armButton, &muteButton, &soloButton, &inputButton, &volume, &pan, &meter });
+    monitorButton.setTooltip ("Monitor: hear this track's input in your headphones while you play or record");
+    monitorButton.setMouseClickGrabsKeyboardFocus (false);
 
     armButton.setColour (TextButton::buttonOnColourId, theme::record);
     muteButton.setColour (TextButton::buttonOnColourId, theme::muted);
@@ -835,6 +1022,17 @@ TrackHeaderComponent::TrackHeaderComponent (EditViewState& evs, te::Track::Ptr t
         {
             EngineHelpers::armTrack (*at, ! EngineHelpers::isTrackArmed (*at));
             armButton.setToggleState (EngineHelpers::isTrackArmed (*at), dontSendNotification);
+            updateMeterSource();
+        };
+        monitorButton.onClick = [this, at]
+        {
+            // explicit on/off for the input feeding this track
+            const bool on = ! EngineHelpers::isInputMonitoringEnabled (*at);
+            for (auto instance : at->edit.getAllInputDevices())
+                if (te::isOnTargetTrack (*instance, *at, 0))
+                    instance->getInputDevice().setMonitorMode (on ? te::InputDevice::MonitorMode::on : te::InputDevice::MonitorMode::off);
+            updateMonitor();
+            updateMeterSource();
         };
         muteButton.onClick = [at] { at->setMute (! at->isMuted (false)); };
         soloButton.onClick = [at] { at->setSolo (! at->isSolo (false)); };
@@ -855,7 +1053,7 @@ TrackHeaderComponent::TrackHeaderComponent (EditViewState& evs, te::Track::Ptr t
     valueTreePropertyChanged (track->state, te::IDs::mute);
     valueTreePropertyChanged (track->state, te::IDs::solo);
     valueTreePropertyChanged (inputsState, te::IDs::targetIndex);
-    startTimerHz (2);
+    startTimerHz (4);
 }
 
 TrackHeaderComponent::~TrackHeaderComponent()
@@ -893,7 +1091,59 @@ void TrackHeaderComponent::timerCallback()
         armButton.setEnabled (EngineHelpers::trackHasInput (*at));
         armButton.setToggleState (EngineHelpers::isTrackArmed (*at), dontSendNotification);
         updateInputName();
+        updateMonitor();
+        updateMeterSource();
     }
+}
+
+// While a track is armed or monitoring, its meter shows the input (so you can
+// set levels before you record); otherwise it shows what the track plays.
+void TrackHeaderComponent::updateMeterSource()
+{
+    auto at = dynamic_cast<te::AudioTrack*> (track.get());
+    if (at == nullptr) { meter.setVisible (false); return; }
+    te::LevelMeasurer* source = nullptr;
+    if (EngineHelpers::isTrackArmed (*at) || EngineHelpers::isInputMonitoringEnabled (*at))
+        for (auto instance : at->edit.getAllInputDevices())
+            if (te::isOnTargetTrack (*instance, *at, 0))
+                source = &instance->getInputDevice().levelMeasurer;
+    if (source == nullptr)
+        if (auto lm = at->getLevelMeterPlugin())
+            source = &lm->measurer;
+    meter.setSource (source);
+    meter.setTooltip (source != nullptr && EngineHelpers::isTrackArmed (*at) ? "Input level (set it so the loudest part stays out of the red). Click to reset the clip light."
+                                                                             : "Track level. Click to reset the clip light.");
+}
+
+void TrackHeaderComponent::updateMonitor()
+{
+    auto at = dynamic_cast<te::AudioTrack*> (track.get());
+    if (at == nullptr) { monitorButton.setVisible (false); return; }
+    monitorButton.setEnabled (EngineHelpers::trackHasInput (*at));
+    monitorButton.setToggleState (EngineHelpers::trackHasInput (*at) && EngineHelpers::isInputMonitoringEnabled (*at), dontSendNotification);
+}
+
+void TrackHeaderComponent::MonitorButton::paintButton (Graphics& g, bool over, bool down)
+{
+    auto r = getLocalBounds().toFloat().reduced (0.5f);
+    auto c = getToggleState() ? theme::accent : theme::raised;
+    if (! isEnabled()) c = c.withMultipliedAlpha (0.5f);
+    else if (down) c = c.brighter (0.15f);
+    else if (over) c = c.brighter (0.08f);
+    g.setColour (c);
+    g.fillEllipse (r);
+    // headphones
+    auto ink = getToggleState() ? theme::base : (isEnabled() ? theme::paper : theme::muted);
+    auto b = r.reduced (r.getWidth() * 0.26f);
+    const float cy = b.getCentreY() + b.getHeight() * 0.1f;
+    Path band;
+    band.addCentredArc (b.getCentreX(), cy, b.getWidth() * 0.45f, b.getHeight() * 0.45f, 0.0f,
+                        -MathConstants<float>::halfPi, MathConstants<float>::halfPi, true);
+    g.setColour (ink);
+    g.strokePath (band, PathStrokeType (1.6f));
+    const float cupW = b.getWidth() * 0.22f, cupH = b.getHeight() * 0.38f;
+    g.fillRoundedRectangle (b.getX() + b.getWidth() * 0.05f - cupW * 0.5f, cy - cupH * 0.15f, cupW, cupH, 1.5f);
+    g.fillRoundedRectangle (b.getRight() - b.getWidth() * 0.05f - cupW * 0.5f, cy - cupH * 0.15f, cupW, cupH, 1.5f);
 }
 
 // The input button shows what the track records from
@@ -916,6 +1166,8 @@ void TrackHeaderComponent::paint (Graphics& g)
     g.fillRect (getLocalBounds());
     g.setColour (track->getColour());
     g.fillRect (getLocalBounds().removeFromLeft (4));
+    g.setColour (theme::strong);
+    g.fillRect (getLocalBounds().removeFromBottom (2).withTrimmedLeft (4)); // the edge you drag to resize
     if (volume.isVisible())
     {
         g.setColour (theme::muted);
@@ -925,21 +1177,48 @@ void TrackHeaderComponent::paint (Graphics& g)
     }
 }
 
-void TrackHeaderComponent::mouseDown (const MouseEvent&)
+void TrackHeaderComponent::mouseDown (const MouseEvent& e)
 {
-    editViewState.selectionManager.selectOnly (track.get());
+    resizing = overResizeEdge (e);
+    heightAtDragStart = getHeight();
+    if (! resizing) editViewState.selectionManager.selectOnly (track.get());
+}
+
+// Drag the bottom edge: this track's height (Alt: every track)
+void TrackHeaderComponent::mouseDrag (const MouseEvent& e)
+{
+    if (! resizing) return;
+    const int h = jlimit (EditComponent::minTrackHeight, EditComponent::maxTrackHeight, heightAtDragStart + e.getDistanceFromDragStartY());
+    if (e.mods.isAltDown())
+        for (auto t : te::getAllTracks (track->edit)) t->state.setProperty ("basementHeight", h, nullptr);
+    else
+        track->state.setProperty ("basementHeight", h, nullptr);
+    if (auto ec = findParentComponentOfClass<EditComponent>()) ec->relayout();
+}
+
+void TrackHeaderComponent::mouseUp (const MouseEvent&) { resizing = false; }
+
+void TrackHeaderComponent::mouseMove (const MouseEvent& e)
+{
+    setMouseCursor (overResizeEdge (e) ? MouseCursor::UpDownResizeCursor : MouseCursor::NormalCursor);
 }
 
 void TrackHeaderComponent::resized()
 {
-    auto r = getLocalBounds().reduced (10, 6).withTrimmedLeft (2);
+    meter.setBounds (getLocalBounds().removeFromRight (16).reduced (4, 6));
+    auto r = getLocalBounds().withTrimmedRight (14).reduced (10, 6).withTrimmedLeft (2);
     auto top = r.removeFromTop (24);
-    for (auto* b : { &soloButton, &muteButton, &armButton })
+    for (auto* b : std::initializer_list<Component*> { &soloButton, &muteButton, &armButton, &monitorButton })
     {
         b->setBounds (top.removeFromRight (24));
         top.removeFromRight (4);
     }
     trackName.setBounds (top);
+    // short tracks show just the name and buttons, then the input, then the faders
+    const bool isAudio = dynamic_cast<te::AudioTrack*> (track.get()) != nullptr;
+    inputButton.setVisible (getHeight() >= 62);
+    volume.setVisible (isAudio && getHeight() >= 80);
+    pan.setVisible (volume.isVisible());
     r.removeFromTop (6);
     inputButton.setBounds (r.removeFromTop (22).removeFromLeft (170));
     auto bottom = r.removeFromBottom (16);
@@ -972,7 +1251,12 @@ void PluginComponent::clicked (const ModifierKeys& modifiers)
     }
     else
     {
+        auto* ext = dynamic_cast<te::ExternalPlugin*> (plugin.get());
+        basementLog ("open plugin " + plugin->getName() + ": modal=" + String (ModalComponentManager::getInstance()->getNumModalComponents())
+                     + " instance=" + String ((int) (ext == nullptr || ext->getAudioPluginInstance() != nullptr))
+                     + (ext ? " error=" + ext->getLoadError() : String()));
         plugin->showWindowExplicitly();
+        basementLog ("  window showing=" + String ((int) plugin->windowState->isWindowShowing()));
     }
 }
 
@@ -988,8 +1272,7 @@ TrackFooterComponent::TrackFooterComponent (EditViewState& evs, te::Track::Ptr t
 
     addButton.onClick = [this]
     {
-        if (auto plugin = showMenuAndCreatePlugin (track->edit))
-            track->pluginList.insertPlugin (plugin, 0, &editViewState.selectionManager);
+        showEffectsMenu (track, &editViewState.selectionManager, &addButton);
     };
 }
 
@@ -1104,9 +1387,23 @@ void TrackComponent::paint (Graphics& g)
 
 void TrackComponent::mouseDown (const MouseEvent& e)
 {
-    editViewState.selectionManager.selectOnly (track.get());
+    if (! e.mods.isShiftDown()) editViewState.selectionManager.selectOnly (track.get());
     // clicking an empty part of the lane moves the playhead there
     track->edit.getTransport().setPosition (te::TimePosition::fromSeconds (jmax (0.0, editViewState.xToTime (e.x, getWidth()).inSeconds())));
+}
+
+void TrackComponent::mouseDrag (const MouseEvent& e)
+{
+    if (auto ec = findParentComponentOfClass<EditComponent>())
+    {
+        auto ev = e.getEventRelativeTo (ec);
+        ec->lassoDrag (Rectangle<int> (ev.getMouseDownPosition(), ev.getPosition()), e.mods.isShiftDown());
+    }
+}
+
+void TrackComponent::mouseUp (const MouseEvent&)
+{
+    if (auto ec = findParentComponentOfClass<EditComponent>()) ec->lassoEnd();
 }
 
 void TrackComponent::changeListenerCallback (ChangeBroadcaster*)
@@ -1382,9 +1679,40 @@ void EditComponent::mouseWheelMove (const MouseEvent& e, const MouseWheelDetails
     }
     else
     {
-        const double content = tracks.size() * (trackHeight + trackGap), visible = getHeight() - rulerHeight;
+        double content = 0;
+        for (auto t : tracks) content += heightOf (*t->getTrack()) + trackGap;
+        const double visible = getHeight() - rulerHeight;
         editViewState.viewY = jlimit (jmin (0.0, visible - content - 40), 0.0, editViewState.viewY.get() + dy * 240.0);
     }
+}
+
+void EditComponent::lassoDrag (Rectangle<int> area, bool add)
+{
+    lasso = area;
+    auto& sm = editViewState.selectionManager;
+    if (! add) sm.deselectAll();
+    for (auto* t : tracks)
+        for (auto* cc : t->getClipComponents())
+            if (getLocalArea (cc, cc->getLocalBounds()).intersects (area))
+                sm.select (&cc->getClip(), true);
+    repaint();
+}
+
+void EditComponent::paintOverChildren (Graphics& g)
+{
+    if (lasso.isEmpty()) return;
+    g.setColour (theme::accent.withAlpha (0.12f));
+    g.fillRect (lasso);
+    g.setColour (theme::accent.withAlpha (0.8f));
+    g.drawRect (lasso, 1);
+}
+
+te::AudioTrack* EditComponent::audioTrackAt (Point<int> p) const
+{
+    for (auto* t : tracks)
+        if (t->getBounds().withX (0).withWidth (getWidth()).contains (p))
+            return dynamic_cast<te::AudioTrack*> (t->getTrack());
+    return nullptr;
 }
 
 void EditComponent::resized()
@@ -1401,11 +1729,12 @@ void EditComponent::resized()
         auto t = tracks[i];
         auto f = footers[i];
 
-        h->setBounds (0, y, headerWidth, trackHeight);
-        t->setBounds (headerWidth, y, getWidth() - headerWidth - footerWidth, trackHeight);
-        f->setBounds (getWidth() - footerWidth, y, footerWidth, trackHeight);
+        const int th = heightOf (*t->getTrack());
+        h->setBounds (0, y, headerWidth, th);
+        t->setBounds (headerWidth, y, getWidth() - headerWidth - footerWidth, th);
+        f->setBounds (getWidth() - footerWidth, y, footerWidth, th);
 
-        y += trackHeight + trackGap;
+        y += th + trackGap;
     }
 
     for (auto t : tracks)

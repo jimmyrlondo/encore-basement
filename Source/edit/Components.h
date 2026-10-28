@@ -34,6 +34,15 @@ namespace IDs
 
 namespace te = tracktion;
 
+/** What the arrange view needs from the app around it */
+struct BasementHooks
+{
+    static inline std::function<void()> findPlugins, showPluginManager;
+    static inline std::function<String()> pluginScanStatus;     // empty when no scan is running
+    static inline juce::ApplicationCommandManager* commands = nullptr;
+    static inline std::function<void (PopupMenu&, te::Clip&)> fillClipMenu;
+};
+
 //==============================================================================
 void drawMidiClip (juce::Graphics&, te::MidiClip&, juce::Rectangle<int>, te::TimeRange);
 
@@ -45,9 +54,9 @@ public:
         : edit (e), selectionManager (s)
     {
         state = edit.state.getOrCreateChildWithName (IDs::EDITVIEWSTATE, nullptr);
-        
-        auto um = &edit.getUndoManager();
-        
+
+        UndoManager* um = nullptr; // zooming, scrolling and view options aren't edits: keep them out of undo
+
         showMasterTrack.referTo (state, IDs::showMasterTrack, um, false);
         showGlobalTrack.referTo (state, IDs::showGlobalTrack, um, false);
         showMarkerTrack.referTo (state, IDs::showMarkerTrack, um, false);
@@ -62,33 +71,54 @@ public:
         viewX1.referTo (state, IDs::viewX1, um, 0s);
         viewX2.referTo (state, IDs::viewX2, um, 60s);
         viewY.referTo (state, IDs::viewY, um, 0);
+        snapMode.referTo (state, "snapMode", um, 2);
     }
-    
+
+    /** Snap: 0 off, 1 bar, 2 beat, 3 half beat, 4 quarter beat */
+    CachedValue<int> snapMode;
+    static StringArray snapNames()                 { return { "Off", "Bar", "Beat", "1/8", "1/16" }; }
+
+    /** The grid step in beats (a beat when snap is off, for nudging) */
+    double gridBeats() const
+    {
+        const int num = jmax (1, edit.tempoSequence.getTimeSig (0)->numerator.get());
+        switch (snapMode.get()) { case 1: return num; case 3: return 0.5; case 4: return 0.25; default: return 1.0; }
+    }
+
+    /** t snapped to the grid (unless snap is off or bypassed, e.g. with Shift held) */
+    te::TimePosition snap (te::TimePosition t, bool bypass = false) const
+    {
+        if (bypass || snapMode.get() == 0) return t;
+        auto& ts = edit.tempoSequence;
+        const double g = gridBeats(), beats = ts.toBeats (t).inBeats();
+        return ts.toTime (te::BeatPosition::fromBeats (jmax (0.0, std::round (beats / g) * g)));
+    }
+
     int timeToX (te::TimePosition time, int width) const
     {
         return roundToInt (((time - viewX1) * width) / (viewX2 - viewX1));
     }
-    
+
     te::TimePosition xToTime (int x, int width) const
     {
         return toPosition ((viewX2 - viewX1) * (double (x) / width)) + toDuration (viewX1.get());
     }
-    
+
     te::TimePosition beatToTime (te::BeatPosition b) const
     {
         auto& ts = edit.tempoSequence;
         return ts.toTime (b);
     }
-    
+
     te::Edit& edit;
     te::SelectionManager& selectionManager;
-    
+
     CachedValue<bool> showMasterTrack, showGlobalTrack, showMarkerTrack, showChordTrack, showArrangerTrack,
                       drawWaveforms, showHeaders, showFooters, showMidiDevices, showWaveDevices;
-    
+
     CachedValue<te::TimePosition> viewX1, viewX2;
     CachedValue<double> viewY;
-    
+
     ValueTree state;
 };
 
@@ -97,11 +127,13 @@ class ClipComponent : public Component
 {
 public:
     ClipComponent (EditViewState&, te::Clip::Ptr);
-    
+
     void paint (Graphics& g) override;
     void mouseDown (const MouseEvent& e) override;
     void mouseDrag (const MouseEvent& e) override;
     void mouseUp (const MouseEvent& e) override;
+    void mouseMove (const MouseEvent& e) override;
+    void mouseExit (const MouseEvent& e) override;
 
     te::Clip& getClip() { return *clip; }
 
@@ -110,6 +142,16 @@ protected:
     te::Clip::Ptr clip;
     te::TimePosition dragStart;
     bool dragging = false;
+
+    // what a drag does, decided where the mouse went down
+    enum class Zone { body, trimStart, trimEnd, fadeIn, fadeOut };
+    Zone zoneAt (Point<int>) const;
+    Zone dragZone = Zone::body;
+    te::ClipPosition posAtDragStart;
+    te::TimeDuration fadeAtDragStart;
+    std::vector<std::pair<te::Clip::Ptr, te::TimePosition>> groupAtDragStart;   // every selected clip and where it started
+    te::AudioTrack* dropTrack = nullptr;
+    bool hovering = false;
 };
 
 //==============================================================================
@@ -117,11 +159,11 @@ class AudioClipComponent : public ClipComponent
 {
 public:
     AudioClipComponent (EditViewState&, te::Clip::Ptr);
-    
+
     te::WaveAudioClip* getWaveAudioClip() { return dynamic_cast<te::WaveAudioClip*> (clip.get()); }
-    
+
     void paint (Graphics& g) override;
-    
+
 private:
     void updateThumbnail();
     void drawWaveform (Graphics& g, te::AudioClipBase& c, te::SmartThumbnail& thumb, Colour colour,
@@ -138,9 +180,9 @@ class MidiClipComponent : public ClipComponent
 {
 public:
     MidiClipComponent (EditViewState&, te::Clip::Ptr);
-    
+
     te::MidiClip* getMidiClip() { return dynamic_cast<te::MidiClip*> (clip.get()); }
-    
+
     void paint (Graphics& g) override;
 };
 
@@ -150,19 +192,19 @@ class RecordingClipComponent : public Component,
 {
 public:
     RecordingClipComponent (te::Track::Ptr t, EditViewState&);
-    
+
     void paint (Graphics& g) override;
-    
+
 private:
     void timerCallback() override;
     void updatePosition();
     void initialiseThumbnailAndPunchTime();
     void drawThumbnail (Graphics& g, Colour waveformColour) const;
     bool getBoundsAndTime (juce::Rectangle<int>& bounds, tracktion::TimeRange& times) const;
-    
+
     te::Track::Ptr track;
     EditViewState& editViewState;
-    
+
     te::RecordingThumbnailManager::Thumbnail::Ptr thumbnail;
     te::TimePosition punchInTime = -1.0s;
 };
@@ -175,21 +217,40 @@ class TrackHeaderComponent : public Component,
 public:
     TrackHeaderComponent (EditViewState&, te::Track::Ptr);
     ~TrackHeaderComponent() override;
-    
+
     void paint (Graphics& g) override;
     void mouseDown (const MouseEvent& e) override;
+    void mouseDrag (const MouseEvent& e) override;
+    void mouseUp (const MouseEvent& e) override;
+    void mouseMove (const MouseEvent& e) override;
     void resized() override;
-    
+
 private:
     void valueTreeChanged() override {}
     void valueTreePropertyChanged (juce::ValueTree&, const juce::Identifier&) override;
-    
+
     EditViewState& editViewState;
     te::Track::Ptr track;
-    
+
     ValueTree inputsState;
     Label trackName;
     TextButton armButton {"R"}, muteButton {"M"}, soloButton {"S"}, inputButton {"In"};
+
+    LevelMeter meter;
+    void updateMeterSource();
+
+    /** Input monitoring: hear what's coming into the track's input (headphones icon) */
+    struct MonitorButton : public Button
+    {
+        MonitorButton() : Button ("Monitor") {}
+        void paintButton (Graphics&, bool over, bool down) override;
+    } monitorButton;
+    void updateMonitor();
+
+    // drag the bottom edge to change the track's height
+    bool resizing = false;
+    int heightAtDragStart = 0;
+    bool overResizeEdge (const MouseEvent& e) const { return e.y >= getHeight() - 6; }
     Slider volume { Slider::LinearHorizontal, Slider::NoTextBox }, pan { Slider::LinearHorizontal, Slider::NoTextBox };
     void updateInputName();
     void timerCallback() override;
@@ -201,10 +262,10 @@ class PluginComponent : public TextButton
 public:
     PluginComponent (EditViewState&, te::Plugin::Ptr);
     ~PluginComponent() override;
-    
+
     using TextButton::clicked;
     void clicked (const ModifierKeys& modifiers) override;
-    
+
 private:
     EditViewState& editViewState;
     te::Plugin::Ptr plugin;
@@ -218,11 +279,11 @@ class TrackFooterComponent : public Component,
 public:
     TrackFooterComponent (EditViewState&, te::Track::Ptr);
     ~TrackFooterComponent() override;
-    
+
     void paint (Graphics&) override;
     void mouseDown (const MouseEvent&) override;
     void resized() override;
-    
+
 private:
     void valueTreeChanged() override {}
     void valueTreeChildAdded (juce::ValueTree&, juce::ValueTree&) override;
@@ -230,15 +291,15 @@ private:
     void valueTreeChildOrderChanged (juce::ValueTree&, int, int) override;
 
     void handleAsyncUpdate() override;
-    
+
     void buildPlugins();
-    
+
     EditViewState& editViewState;
     te::Track::Ptr track;
-    
+
     TextButton addButton {"+"};
     OwnedArray<PluginComponent> plugins;
-    
+
     bool updatePlugins = false;
 };
 
@@ -251,32 +312,36 @@ class TrackComponent : public Component,
 public:
     TrackComponent (EditViewState&, te::Track::Ptr);
     ~TrackComponent() override;
-    
+
     void paint (Graphics& g) override;
     void mouseDown (const MouseEvent& e) override;
+    void mouseDrag (const MouseEvent& e) override;
+    void mouseUp (const MouseEvent& e) override;
     void resized() override;
+    te::Track* getTrack() const     { return track.get(); }
+    const OwnedArray<ClipComponent>& getClipComponents() const { return clips; }
 
 private:
     void changeListenerCallback (ChangeBroadcaster*) override;
 
     void valueTreeChanged() override {}
-    
+
     void valueTreePropertyChanged (juce::ValueTree&, const juce::Identifier&) override;
     void valueTreeChildAdded (juce::ValueTree&, juce::ValueTree&) override;
     void valueTreeChildRemoved (juce::ValueTree&, juce::ValueTree&, int) override;
     void valueTreeChildOrderChanged (juce::ValueTree&, int, int) override;
-    
+
     void handleAsyncUpdate() override;
-    
+
     void buildClips();
     void buildRecordClips();
-    
+
     EditViewState& editViewState;
     te::Track::Ptr track;
-    
+
     OwnedArray<ClipComponent> clips;
     std::unique_ptr<RecordingClipComponent> recordingClip;
-    
+
     bool updateClips = false, updatePositions = false, updateRecordClips = false;
 };
 
@@ -286,7 +351,7 @@ class PlayheadComponent : public Component,
 {
 public:
     PlayheadComponent (te::Edit&, EditViewState&);
-    
+
     void paint (Graphics& g) override;
     bool hitTest (int x, int y) override;
     void mouseDrag (const MouseEvent&) override;
@@ -295,10 +360,10 @@ public:
 
 private:
     void timerCallback() override;
-    
+
     te::Edit& edit;
     EditViewState& editViewState;
-    
+
     int xPosition = 0;
     bool firstTimer = true;
 };
@@ -331,8 +396,22 @@ class EditComponent : public Component,
 public:
     EditComponent (te::Edit&, te::SelectionManager&);
     ~EditComponent() override;
-    
+
     EditViewState& getEditViewState()   { return editViewState; }
+
+    /** Track heights: each track keeps its own (dragged on its header, or set
+        for all from Window > Track Height) */
+    static int heightOf (const te::Track& t)    { return jlimit (minTrackHeight, maxTrackHeight, (int) t.state.getProperty ("basementHeight", trackHeight)); }
+    static constexpr int minTrackHeight = 40, maxTrackHeight = 400;
+    void relayout()                             { resized(); repaint(); }
+
+    /** Box select: drag across empty lanes to select every clip it touches (Shift adds) */
+    void lassoDrag (Rectangle<int> areaInThis, bool add);
+    void lassoEnd()                             { lasso = {}; repaint(); }
+    void paintOverChildren (Graphics&) override;
+
+    /** The audio track under a point in this component, if any */
+    te::AudioTrack* audioTrackAt (Point<int>) const;
     void mouseWheelMove (const MouseEvent&, const MouseWheelDetails&) override;
     void paint (Graphics&) override;
 
@@ -340,30 +419,31 @@ public:
 
 private:
     void valueTreeChanged() override {}
-    
+
     void valueTreePropertyChanged (juce::ValueTree&, const juce::Identifier&) override;
     void valueTreeChildAdded (juce::ValueTree&, juce::ValueTree&) override;
     void valueTreeChildRemoved (juce::ValueTree&, juce::ValueTree&, int) override;
     void valueTreeChildOrderChanged (juce::ValueTree&, int, int) override;
-    
+
     void handleAsyncUpdate() override;
     void resized() override;
-    
+
     void changeListenerCallback (ChangeBroadcaster*) override { repaint(); }
 
-    
+
     void buildTracks();
-    
+
     te::Edit& edit;
-    
+
     EditViewState editViewState;
-    
+
     PlayheadComponent playhead {edit, editViewState};
+    Rectangle<int> lasso;
     TimeRulerComponent ruler {edit, editViewState};
     OwnedArray<TrackComponent> tracks;
     OwnedArray<TrackHeaderComponent> headers;
     OwnedArray<TrackFooterComponent> footers;
-    
+
     bool updateTracks = false, updateZoom = false;
 };
 
