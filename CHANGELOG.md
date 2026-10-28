@@ -18,9 +18,13 @@
   say whether a template fits your interface.
 - Send to Encore (File > Export): a release package with the master, stems,
   cover art and release.json, then Encore opens to upload it.
+- MP3 export: MP3 320 kbps or 192 kbps in the Export box, for the mix or
+  stems, with the title, artist, album and genre written into the file.
+  Made with LAME (LGPL).
+- MP3 files import now (the import box offered them, but they didn't load).
 - Give Tracks Their Inputs no longer gives inputs to FX or group tracks.
 
-## 0.3.0 (not released yet)
+## 0.3.0 (2026-10-28)
 
 Everything from the first round of testing, plus a lot more.
 

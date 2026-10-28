@@ -73,7 +73,7 @@ namespace selftest
         auto a = makeTone ("tone a.wav", 220, 4), b = makeTone ("tone b.wav", 330, 4);
         expect ("test tones written", a.getSize() > 1000 && b.getSize() > 1000);
 
-        auto* behaviour = new BasementBehaviour();
+        auto* behaviour = new BasementBehaviour (true);   // no audio device: renders don't need one, and it leaves the interface to whatever else is using it
         auto* ui = new HeadlessUIBehaviour();
         te::Engine engine { "Encore Basement Selftest", std::unique_ptr<te::UIBehaviour> (ui), std::unique_ptr<te::EngineBehaviour> (behaviour) };
         registerEncorePlugins (engine);
@@ -176,6 +176,23 @@ namespace selftest
                     lufs = -0.691 + 10.0 * std::log10 (juce::jmax (1.0e-12, sum));
                 }
                 expect ("streaming-loud export lands at -14 LUFS", lr2 != nullptr && std::abs (lufs + 14.0) < 1.0, String (lufs, 1) + " LUFS");
+
+                // an MP3 (LAME): plays back stereo with the left side louder, tagged, temp WAV cleaned up
+                auto mp3File = songDir.getChildFile ("mix.mp3");
+                ExportOptions mo; mo.mp3Kbps = 320; mo.tail = false; mo.tags.title = juce::CharPointer_UTF8 ("Selftest \xc3\xa9t\xc3\xa9");
+                done = false; rendered = juce::File();
+                auto mp3Job = exportSong (engine, songFile, mp3File, mo, [&] (juce::File f, juce::String e) { rendered = f; err = e; done = true; });
+                for (int i = 0; i < 1200 && ! done; ++i) juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+                AudioFormatManager mp3s; mp3s.registerFormat (new MP3AudioFormat(), true);
+                std::unique_ptr<AudioFormatReader> mr (rendered.existsAsFile() ? mp3s.createReaderFor (rendered) : nullptr);
+                Range<float> ml[2];
+                if (mr) mr->readMaxLevels ((juce::int64) mr->sampleRate, (int) mr->sampleRate, ml, 2);
+                const bool tagged = rendered.existsAsFile() && rendered.loadFileAsString().startsWith ("ID3");
+                const bool cleaned = ! songDir.getChildFile ("mix (making MP3).wav").exists();
+                expect ("MP3 export plays back (stereo, left louder, tagged, temp WAV gone)",
+                        mr != nullptr && mr->numChannels == 2 && ml[0].getEnd() > 0.05f && ml[0].getEnd() > ml[1].getEnd() * 1.5f && tagged && cleaned,
+                        err + (mr ? " " + String (mr->sampleRate) + " Hz, L " + String (ml[0].getEnd(), 3) + " R " + String (ml[1].getEnd(), 3) : String (" unreadable"))
+                            + (tagged ? "" : ", no ID3") + (cleaned ? "" : ", temp WAV left"));
             }
 
             te::EditFileOperations (*edit).save (true, true, false);

@@ -54,6 +54,17 @@ target_include_directories(Basement PRIVATE encore/shared)
 # older VST2 plugins: FST, an open (GPLv3+) stand-in for the VST2 headers
 target_include_directories(Basement PRIVATE external/fst)
 
+# MP3 export: LAME's encoder library (LGPL), built from source
+file (GLOB lame_sources CONFIGURE_DEPENDS external/lame/libmp3lame/*.c)
+add_library(lame STATIC ${lame_sources})
+target_include_directories(lame PRIVATE external/lame external/lame/libmp3lame PUBLIC external/lame/include)
+target_compile_definitions(lame PRIVATE HAVE_CONFIG_H)
+if (MSVC)
+    target_compile_options(lame PRIVATE /W0)
+else()
+    target_compile_options(lame PRIVATE -w)
+endif()
+
 target_compile_definitions(Basement PRIVATE
     $<$<PLATFORM_ID:Windows>:JUCE_ASIO=1>
     BASEMENT_BUILTIN=1
@@ -61,6 +72,7 @@ target_compile_definitions(Basement PRIVATE
     JUCE_PLUGINHOST_VST=1
     JUCE_PLUGINHOST_AU=1
     JUCE_PLUGINHOST_LADSPA=1
+    JUCE_USE_MP3AUDIOFORMAT=1
     JUCE_MODAL_LOOPS_PERMITTED=1
     JUCE_STRICT_REFCOUNTEDPOINTER=1
     JUCE_USE_CURL=0
@@ -70,6 +82,7 @@ target_compile_definitions(Basement PRIVATE
 
 target_link_libraries(Basement PRIVATE
     BasementAssets
+    lame
     tracktion::tracktion_core
     tracktion::tracktion_engine
     tracktion::tracktion_graph

@@ -65,7 +65,7 @@ From [Releases](https://github.com/jimmyrlondo/encore-basement/releases):
   interfaces (drums on every input first, then the rest overdubbed), with the
   tracks already grouped; each one says whether it fits your interface.
 - **Export** the mix or every track as its own file (stems), the whole song
-  or just the loop, as WAV (16, 24 or 32-bit float) or FLAC, at any sample
+  or just the loop, as WAV (16, 24 or 32-bit float), FLAC or MP3, at any sample
   rate, with or without the master effects, optionally normalised to -14 LUFS
   for streaming. Or zip the whole song folder.
 - **Send to Encore** (File > Export): a release package for Encore Music: the
@@ -89,7 +89,7 @@ Help > Keyboard Shortcuts has the full list.
 
 ## Coming next
 
-- MP3 export, and mastering on export with Encore's album engine
+- Mastering on export with Encore's album engine
 - Sign in with Encore and upload a song to your catalog as a draft
 - A drum editor, and more MIDI tools
 
@@ -129,7 +129,8 @@ The Encore plugins' code is in `encore/` (copied from the plugin repo with
 Basement is free software under the GNU Affero General Public License v3 (see
 `LICENSE`). It uses JUCE under the AGPLv3 and Tracktion Engine under the GPLv3. VST2 plugins are hosted through
 [FST](https://git.iem.at/zmoelnig/FST) (GPLv3 or later, in `external/fst`),
-an independent reimplementation of the VST2 interface.
+an independent reimplementation of the VST2 interface. MP3 export uses
+[LAME](https://lame.sourceforge.io) 3.100 (LGPL, in `external/lame`).
 The arrange view in `Source/edit/` started from Tracktion Engine's example
 code (GPLv3) and is marked where it was changed. The Encore plugins in
 `encore/` are part of Basement under the same license.

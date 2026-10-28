@@ -24,6 +24,7 @@ using namespace tracktion::literals;
 #include "edit/Tuner.h"
 #include "edit/PluginWindow.h"
 #include "PluginFinder.h"
+#include "Mp3.h"
 #include "MainComponent.h"
 #include "SelfTest.h"
 #include "PluginTest.h"

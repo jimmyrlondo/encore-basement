@@ -96,7 +96,8 @@ struct SongExport
 {
     std::unique_ptr<te::Edit> edit;
     std::shared_ptr<te::EditRenderer::Handle> handle;
-    float progress() const { return handle ? handle->getProgress() : 0.0f; }
+    std::atomic<bool> encoding { false };   // rendered, now making the MP3
+    float progress() const { return encoding ? 1.0f : handle ? handle->getProgress() : 0.0f; }
 };
 
 /** How a mix (or one track) is written out */
@@ -105,6 +106,8 @@ struct ExportOptions
     double sampleRate = 48000.0;
     int bitDepth = 24;                 // 16, 24, or 32 (WAV only: float)
     bool flac = false;
+    int mp3Kbps = 0;                   // an MP3 at this bitrate, or 0 for WAV/FLAC
+    mp3::Tags tags;                    // title, artist... written into an MP3
     std::optional<te::TimeRange> range;// the whole song when empty
     int trackIndex = -1;               // one audio track (a stem), or -1 for the mix
     bool masterEffects = true;
@@ -112,12 +115,39 @@ struct ExportOptions
     bool loudness = false;             // normalise to -14 LUFS (streaming level)
 };
 
-inline std::shared_ptr<SongExport> exportSong (te::Engine& engine, const juce::File& songFile, const juce::File& dest, ExportOptions o,
+inline std::shared_ptr<SongExport> exportSong (te::Engine& engine, const juce::File& songFile, juce::File dest, ExportOptions o,
                                                std::function<void (juce::File, juce::String)> done)
 {
     auto job = std::make_shared<SongExport>();
     job->edit = songs::open (engine, songFile, te::Edit::EditRole::forRendering);
     if (job->edit == nullptr || job->edit->getLength() <= 0s) { done ({}, "There's nothing in the song to export yet."); return {}; }
+
+    if (o.mp3Kbps > 0)
+    {
+        // render a float WAV next to it, then make the MP3 from that on a background thread
+        const auto mp3File = dest;
+        dest = dest.getSiblingFile (dest.getFileNameWithoutExtension() + " (making MP3).wav");
+        o.flac = false;
+        o.bitDepth = 32;
+        o.sampleRate = mp3::rateFor (o.sampleRate);
+        std::weak_ptr<SongExport> weak = job;
+        done = [weak, mp3File, kbps = o.mp3Kbps, tags = o.tags, done] (juce::File wav, juce::String err)
+        {
+            auto j = weak.lock();
+            if (! wav.existsAsFile() || j == nullptr) { wav.deleteFile(); done ({}, err); return; }
+            j->encoding = true;
+            std::thread ([weak, wav, mp3File, kbps, tags, done]
+            {
+                auto problem = mp3::encode (wav, mp3File, kbps, tags);
+                wav.deleteFile();
+                juce::MessageManager::callAsync ([weak, mp3File, problem, done]
+                {
+                    if (weak.expired()) return;   // the app closed meanwhile
+                    done (problem.isEmpty() ? mp3File : juce::File(), problem);
+                });
+            }).detach();
+        };
+    }
 
     te::Renderer::Parameters p (*job->edit);
     p.destFile = dest;
@@ -366,7 +396,7 @@ public:
         what.addItemList ({ "The whole mix", "Each track as its own file (stems)" }, 1);
         range.addItemList ({ "Whole song", "Loop range" }, 1);
         range.setItemEnabled (2, hasLoop);
-        format.addItemList ({ "WAV 24-bit", "WAV 16-bit (CD)", "WAV 32-bit float", "FLAC 24-bit" }, 1);
+        format.addItemList ({ "WAV 24-bit", "WAV 16-bit (CD)", "WAV 32-bit float", "FLAC 24-bit", "MP3 320 kbps", "MP3 192 kbps (smaller)" }, 1);
         rate.addItem ("Same as the song (" + juce::String (songRate / 1000.0, 1) + " kHz)", 1);
         rate.addItemList ({ "44.1 kHz", "48 kHz", "96 kHz" }, 2);
         for (auto* c : { &what, &range, &format, &rate }) { c->setSelectedId (1, juce::dontSendNotification); hubui::styleCombo (*c); addAndMakeVisible (c); }
@@ -448,6 +478,7 @@ private:
         const int f = format.getSelectedId();
         o.bitDepth = f == 2 ? 16 : f == 3 ? 32 : 24;
         o.flac = f == 4;
+        o.mp3Kbps = f == 5 ? 320 : f == 6 ? 192 : 0;
         const double rates[] = { songSampleRate, 44100.0, 48000.0, 96000.0 };
         o.sampleRate = rates[juce::jlimit (0, 3, rate.getSelectedId() - 1)];
         o.masterEffects = master.getToggleState();
@@ -2285,7 +2316,9 @@ private:
             if (o.range) o.range = edit->getTransport().getLoopRange();
             folder.createDirectory();
             exportQueue.clear();
-            const auto ext = o.flac ? juce::String (".flac") : juce::String (".wav");
+            const auto ext = o.mp3Kbps > 0 ? juce::String (".mp3") : o.flac ? juce::String (".flac") : juce::String (".wav");
+            const auto info = SongInfo::readFrom (*edit, songFile);
+            o.tags = { info.title.isNotEmpty() ? info.title : songTitle(), info.artist, info.album, info.genre };
             if (stems)
             {
                 auto tracks = te::getAudioTracks (*edit);
@@ -2293,6 +2326,7 @@ private:
                 {
                     auto job = o;
                     job.trackIndex = i;
+                    job.tags.title << " (" << tracks[i]->getName() << ")";
                     exportQueue.add ({ job, folder.getChildFile (base + " - " + juce::File::createLegalFileName (tracks[i]->getName()) + ext), tracks[i]->getName() });
                 }
             }
@@ -2865,7 +2899,8 @@ private:
                                   : "Bar " + juce::String ((int) (beats / num) + 1) + "." + juce::String ((int) std::fmod (beats, (double) num) + 1),
                           juce::dontSendNotification);
         playButton.setButtonText (tr.isPlaying() ? "Stop" : "Play");
-        if (currentExport) status ("Exporting " + exportingWhat + "... " + juce::String (juce::roundToInt (currentExport->progress() * 100)) + "%");
+        if (currentExport) status ("Exporting " + exportingWhat + "... " + (currentExport->encoding ? juce::String ("making the MP3")
+                                                                                                    : juce::String (juce::roundToInt (currentExport->progress() * 100)) + "%"));
         recordButton.setToggleState (tr.isRecording(), juce::dontSendNotification);
         clickButton.setToggleState (edit->clickTrackEnabled.get(), juce::dontSendNotification);
         loopButton.setToggleState (tr.looping.get(), juce::dontSendNotification);
