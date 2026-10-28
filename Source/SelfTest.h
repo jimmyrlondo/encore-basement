@@ -277,6 +277,24 @@ namespace selftest
                     String (loaded) + " of " + String (encoreOnTrack) + " loaded: " + ids.joinIntoString (", "));
         }
 
+        // the tuner's pitch reading: guitar low E (82.41 Hz), bass low E (41.20 Hz), A4 with harmonics
+        {
+            auto centsOff = [] (double hz, std::function<float (double)> wave)
+            {
+                const double fs = 24000.0;
+                std::vector<float> x (2048);
+                for (size_t i = 0; i < x.size(); ++i) x[i] = wave ((double) i / fs);
+                const float f = TunerPitch::estimate (x.data(), (int) x.size(), fs);
+                return f > 0 ? 1200.0 * std::log2 (f / hz) : 9999.0;
+            };
+            const double tau = MathConstants<double>::twoPi;
+            const double e2 = centsOff (82.41, [tau] (double t) { return (float) (0.3 * std::sin (tau * 82.41 * t)); });
+            const double e1 = centsOff (41.20, [tau] (double t) { return (float) (0.3 * std::sin (tau * 41.20 * t)); });
+            const double a4 = centsOff (440.0, [tau] (double t) { return (float) (0.2 * std::sin (tau * 440 * t) + 0.12 * std::sin (tau * 880 * t) + 0.08 * std::sin (tau * 1320 * t)); });
+            expect ("tuner reads guitar and bass low E and a bright A4 within 2 cents", std::abs (e2) < 2 && std::abs (e1) < 2 && std::abs (a4) < 2,
+                    String (e2, 2) + " / " + String (e1, 2) + " / " + String (a4, 2) + " cents");
+        }
+
         out.appendText (String (failures == 0 ? "ALL PASSED" : "FAILED") + ": " + String (failures) + " failure(s)\n");
         return failures == 0 ? 0 : 1;
     }

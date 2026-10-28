@@ -111,7 +111,11 @@ public:
         viewY.referTo (state, IDs::viewY, um, 0);
         snapMode.referTo (state, "snapMode", um, 2);
         automationMode.referTo (state, "automationMode", um, 0);
+        waveformZoom.referTo (state, "waveformZoom", um, 1.0f);
     }
+
+    /** How tall waveforms are drawn (1 = true size; more to see quiet recordings) */
+    CachedValue<float> waveformZoom;
 
     /** Automation shown on the tracks: 0 none, 1 volume, 2 pan */
     CachedValue<int> automationMode;

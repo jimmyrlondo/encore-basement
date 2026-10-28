@@ -58,9 +58,12 @@ From [Releases](https://github.com/jimmyrlondo/encore-basement/releases):
   for streaming. Or zip the whole song folder.
 - **Safe**: songs save as one folder each, Basement keeps an automatic copy
   every two minutes, and offers it back if it ever closes unexpectedly.
+- **Tuner** (T): a chromatic tuner on any input, 30 Hz to 1.5 kHz (bass
+  low B to the top of a guitar), with an adjustable A4.
 - Menus like a real DAW (File, Edit, Project, Audio, MIDI, Score, Media,
-  Transport, Studio, Window, Help), resizable tracks, and a status bar with
-  your interface, latency and CPU.
+  Transport, Studio, Window, Help), resizable tracks, taller waveforms for
+  quiet recordings (Ctrl+Shift+Up), and a status bar with your interface,
+  latency and CPU.
 
 Keys: Space play/stop, R record, L loop, C click, Home back to the start,
 Ctrl+S save, Ctrl+N new song, Ctrl+O open, Ctrl+T add track, Ctrl+I import,

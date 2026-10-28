@@ -20,6 +20,7 @@ using namespace tracktion::literals;
 #include "edit/Meters.h"
 #include "edit/Components.h"
 #include "edit/Mixer.h"
+#include "edit/Tuner.h"
 #include "edit/PluginWindow.h"
 #include "PluginFinder.h"
 #include "MainComponent.h"
@@ -76,7 +77,14 @@ public:
         juce::LookAndFeel::setDefaultLookAndFeel (nullptr);
     }
 
-    void systemRequestedQuit() override { quit(); }
+    void systemRequestedQuit() override
+    {
+        // a question box is open (recovery, save as...): close it first, then quit, or quitting hangs
+        if (juce::ModalComponentManager::getInstance()->cancelAllModalComponents())
+            juce::Timer::callAfterDelay (100, [] { if (auto* app = juce::JUCEApplicationBase::getInstance()) app->systemRequestedQuit(); });
+        else
+            quit();
+    }
 
 private:
     class MainWindow : public juce::DocumentWindow

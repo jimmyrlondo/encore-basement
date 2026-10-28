@@ -585,7 +585,7 @@ public:
         cmdAudioSetup, cmdPlugins, cmdFindPlugins, cmdReassignInputs,
         // Window
         cmdEffects, cmdZoomIn, cmdZoomOut, cmdZoomFit, cmdHeightSmall, cmdHeightMedium, cmdHeightLarge, cmdHeightHuge,
-        cmdMixer, cmdAddFxReverb, cmdAddFxDelay, cmdAddFxEmpty, cmdAutomationOff, cmdAutomationVolume, cmdAutomationPan, cmdAutomationCycle,
+        cmdMixer, cmdTuner, cmdWaveBigger, cmdWaveSmaller, cmdAddFxReverb, cmdAddFxDelay, cmdAddFxEmpty, cmdAutomationOff, cmdAutomationVolume, cmdAutomationPan, cmdAutomationCycle,
         // Help
         cmdShortcuts, cmdGuide, cmdReport, cmdUpdates, cmdLogFolder, cmdAbout
     };
@@ -968,7 +968,7 @@ public:
                 m.addSeparator(); add (cmdPreferences);
                 break;
             case 9: // Window
-                add (cmdHub); add (cmdMixer); m.addSeparator();
+                add (cmdHub); add (cmdMixer); add (cmdTuner); m.addSeparator();
                 add (cmdEffects);
                 {
                     juce::PopupMenu automation;
@@ -978,7 +978,7 @@ public:
                     m.addSubMenu ("Automation (A)", automation, edit != nullptr && ! hubShown);
                 }
                 m.addSeparator();
-                add (cmdZoomIn); add (cmdZoomOut); add (cmdZoomFit); m.addSeparator();
+                add (cmdZoomIn); add (cmdZoomOut); add (cmdZoomFit); add (cmdWaveBigger); add (cmdWaveSmaller); m.addSeparator();
                 {
                     juce::PopupMenu heights;
                     for (auto id : { cmdHeightSmall, cmdHeightMedium, cmdHeightLarge, cmdHeightHuge }) addCommand (heights, id);
@@ -1034,6 +1034,8 @@ public:
         else if (c == KP::F2Key) key = "F2";
         else if (c == KP::insertKey) key = "Insert";
         else if (c == KP::F3Key) key = "F3";
+        else if (c == KP::upKey) key = "Up";
+        else if (c == KP::downKey) key = "Down";
         else key = juce::String::charToString ((juce::juce_wchar) c).toUpperCase();
         parts.add (key);
         return parts.joinIntoString ("+");
@@ -1159,6 +1161,9 @@ public:
             case cmdHeightLarge:    set ("Large", "Window", songShown); break;
             case cmdHeightHuge:     set ("Extra Large", "Window", songShown); break;
             case cmdMixer:          set ("Mixer", "Window", songShown); key (KP::F3Key, none); info.setTicked (mixerShown); break;
+            case cmdTuner:          set ("Tuner", "Window"); key ('t', none); break;
+            case cmdWaveBigger:     set ("Taller Waveforms", "Window", songShown); key (KP::upKey, cmd | shift); break;
+            case cmdWaveSmaller:    set ("Shorter Waveforms", "Window", songShown && ! waveZoomIs (1.0f)); key (KP::downKey, cmd | shift); break;
             case cmdAutomationOff:  set ("Off", "Window", songShown); info.setTicked (automationIs (0)); break;
             case cmdAutomationVolume: set ("Volume", "Window", songShown); info.setTicked (automationIs (1)); break;
             case cmdAutomationPan:  set ("Pan", "Window", songShown); info.setTicked (automationIs (2)); break;
@@ -1271,6 +1276,9 @@ public:
             case cmdHeightLarge:    setAllTrackHeights (150); return true;
             case cmdHeightHuge:     setAllTrackHeights (260); return true;
             case cmdMixer:          showMixer (! mixerShown); return true;
+            case cmdTuner:          showTuner(); return true;
+            case cmdWaveBigger:     setWaveZoom (2.0f); return true;
+            case cmdWaveSmaller:    setWaveZoom (0.5f); return true;
             case cmdAutomationOff:  setAutomation (0); return true;
             case cmdAutomationVolume: setAutomation (1); return true;
             case cmdAutomationPan:  setAutomation (2); return true;
@@ -1575,6 +1583,7 @@ private:
         assignInputs();
 
         editComponent = std::make_unique<EditComponent> (*edit, selectionManager);
+        editComponent->getEditViewState().automationMode = 0; // songs open showing the clips, not automation
         addAndMakeVisible (*editComponent);
         mixer = std::make_unique<MixerComponent> (*edit, selectionManager);
         mixer->onAddFxTrack = [this]
@@ -2153,6 +2162,17 @@ private:
         v.viewX1 = te::TimePosition::fromSeconds (start);
         v.viewX2 = te::TimePosition::fromSeconds (start + w);
     }
+    bool waveZoomIs (float z) { return editComponent == nullptr || std::abs (editComponent->getEditViewState().waveformZoom.get() - z) < 0.01f; }
+
+    /** Waveforms drawn taller or shorter (only the picture: the audio doesn't change) */
+    void setWaveZoom (float factor)
+    {
+        auto& z = editComponent->getEditViewState().waveformZoom;
+        z = juce::jlimit (1.0f, 32.0f, z.get() * factor);
+        status (z.get() <= 1.0f ? juce::String ("Waveforms at true size")
+                                : "Waveforms drawn " + juce::String (juce::roundToInt (z.get())) + "x taller (only the picture: the audio is unchanged)");
+    }
+
     bool automationIs (int mode) { return editComponent != nullptr && editComponent->getEditViewState().automationMode.get() == mode; }
 
     void setAutomation (int mode)
@@ -2223,6 +2243,20 @@ private:
             m.addItem ("Show File in Folder", f.existsAsFile(), false, [f] { f.revealToUser(); });
         }
     }
+
+    /** A tuner window on the selected track's input (or the first one) */
+    void showTuner()
+    {
+        juce::String inputName;
+        if (auto t = selectedTrack())
+            for (auto instance : edit->getAllInputDevices())
+                if (te::isOnTargetTrack (*instance, *t, 0)) inputName = instance->getInputDevice().getName();
+        if (tunerWindow != nullptr && tunerWindow->isVisible()) { tunerWindow->setVisible (false); return; } // T again closes it
+        tunerWindow = std::make_unique<TunerWindow> (std::make_unique<TunerComponent> (engine, inputName));
+        tunerWindow->centreAroundComponent (this, tunerWindow->getWidth(), tunerWindow->getHeight());
+        tunerWindow->setVisible (true);
+    }
+    std::unique_ptr<TunerWindow> tunerWindow;
 
     void showMixer (bool show)
     {

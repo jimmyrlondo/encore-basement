@@ -576,7 +576,7 @@ void AudioClipComponent::drawWaveform (Graphics& g, te::AudioClipBase& c, te::Sm
     };
 
     jassert (left <= right);
-    const auto gain = c.getGain();
+    const auto gain = c.getGain() * jlimit (1.0f, 32.0f, editViewState.waveformZoom.get());
     const auto pan = thumb.getNumChannels() == 1 ? 0.0f : c.getPan();
 
     const float pv = pan * gain;
@@ -773,7 +773,7 @@ void RecordingClipComponent::drawThumbnail (Graphics& g, Colour waveformColour) 
     if (w > 0 && w < 10000)
     {
         g.setColour (waveformColour);
-        thumbnail->thumb->drawChannels (g, bounds, times.getStart().inSeconds(), times.getEnd().inSeconds(), 1.0f);
+        thumbnail->thumb->drawChannels (g, bounds, times.getStart().inSeconds(), times.getEnd().inSeconds(), jlimit (1.0f, 32.0f, editViewState.waveformZoom.get()));
     }
 }
 
@@ -1736,6 +1736,11 @@ void EditComponent::valueTreePropertyChanged (juce::ValueTree& v, const juce::Id
         else if (i == IDs::drawWaveforms)
         {
             repaint();
+        }
+        else if (i == Identifier ("waveformZoom"))
+        {
+            for (auto* t : tracks) t->repaint();
+            for (auto* t : tracks) for (auto* c : t->getClipComponents()) c->repaint();
         }
         else if (i == Identifier ("automationMode"))
         {
