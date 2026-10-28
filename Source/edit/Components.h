@@ -42,6 +42,7 @@ struct BasementHooks
     static inline juce::ApplicationCommandManager* commands = nullptr;
     static inline std::function<void (PopupMenu&, te::Clip&)> fillClipMenu;
     static inline std::function<bool (const KeyPress&)> forwardKey;   // shortcuts typed in a plugin window still work
+    static inline std::function<void (te::MidiClip&)> openPianoRoll;
 };
 
 //==============================================================================
@@ -101,6 +102,86 @@ namespace instruments
         if (auto midi = midiInput (e)) [[maybe_unused]] auto r = midi->setTarget (t.itemID, true, &e.getUndoManager(), 0);
         t.state.setProperty ("basementInput", "midi", nullptr);
         instrument->showWindowExplicitly();
+    }
+}
+
+//==============================================================================
+/** Group tracks: a track that plays nothing of its own; other tracks send their
+    output into it (Tracktion's "output to track"), so a whole drum kit or all the
+    guitars share one fader, one set of effects and one mute. */
+namespace groups
+{
+    inline bool isGroup (te::AudioTrack& t) { return t.state.getProperty ("basementRole").toString() == "group"; }
+
+    /** An FX track (plays a shared reverb/delay bus): those aren't grouped */
+    inline bool isFxTrack (te::AudioTrack& t)
+    {
+        for (auto p : t.pluginList.getPlugins()) if (dynamic_cast<te::AuxReturnPlugin*> (p) != nullptr) return true;
+        return false;
+    }
+
+    /** "-> Drums" after a track's input, when it plays into a group */
+    inline juce::String arrow() { return juce::String (juce::CharPointer_UTF8 ("\xe2\x86\x92")); }
+
+    inline juce::Array<te::AudioTrack*> all (te::Edit& e)
+    {
+        juce::Array<te::AudioTrack*> out;
+        for (auto t : te::getAudioTracks (e)) if (isGroup (*t)) out.add (t);
+        return out;
+    }
+
+    /** The group a track plays into, or null for the master */
+    inline te::AudioTrack* of (te::AudioTrack& t)
+    {
+        auto d = t.getOutput().getDestinationTrack();
+        return d != nullptr && isGroup (*d) ? d : nullptr;
+    }
+
+    inline juce::Array<te::AudioTrack*> members (te::AudioTrack& group)
+    {
+        juce::Array<te::AudioTrack*> out;
+        for (auto t : te::getAudioTracks (group.edit)) if (t != &group && of (*t) == &group) out.add (t);
+        return out;
+    }
+
+    /** Whether t may play into group (not itself, and not a group that already plays into t) */
+    inline bool canRoute (te::AudioTrack& t, te::AudioTrack& group)
+    {
+        return &t != &group && ! group.getOutput().feedsInto (&t);
+    }
+
+    /** Plays t into group, or into the master when group is null */
+    inline void route (te::AudioTrack& t, te::AudioTrack* group)
+    {
+        if (group != nullptr && canRoute (t, *group)) t.getOutput().setOutputToTrack (group);
+        else t.getOutput().setOutputToDefaultDevice (false);
+    }
+
+    /** A new group track (after the last of its members), with those tracks playing into it */
+    inline te::AudioTrack* add (te::Edit& e, const juce::String& name, const juce::Array<te::AudioTrack*>& tracksToGroup)
+    {
+        auto all = te::getAudioTracks (e);
+        te::Track* after = all.isEmpty() ? nullptr : all.getLast();
+        if (! tracksToGroup.isEmpty())
+        {
+            int last = -1;
+            for (auto* t : tracksToGroup) last = juce::jmax (last, all.indexOf (t));
+            if (last >= 0) after = all[last];
+        }
+        auto g = e.insertNewAudioTrack (te::TrackInsertPoint (nullptr, after), nullptr);
+        if (g == nullptr) return nullptr;
+        g->setName (name);
+        g->setColour (theme::accent);
+        g->state.setProperty ("basementInput", "none", nullptr);
+        g->state.setProperty ("basementRole", "group", nullptr);
+        for (auto* t : tracksToGroup) if (t != nullptr && t != g.get()) route (*t, g.get());
+        return g.get();
+    }
+
+    /** Every member back to the master */
+    inline void ungroup (te::AudioTrack& group)
+    {
+        for (auto* t : members (group)) route (*t, nullptr);
     }
 }
 
@@ -290,6 +371,7 @@ public:
     te::MidiClip* getMidiClip() { return dynamic_cast<te::MidiClip*> (clip.get()); }
 
     void paint (Graphics& g) override;
+    void mouseDoubleClick (const MouseEvent&) override;   // opens the piano roll
 };
 
 //==============================================================================

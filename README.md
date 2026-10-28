@@ -41,8 +41,10 @@ From [Releases](https://github.com/jimmyrlondo/encore-basement/releases):
   normalize, reverse, mute, takes, and right-click any clip for all of it.
   Markers along the ruler (Intro, Verse, Chorus...) to jump around the song.
 - **Mix**: a mixer (F3) with a channel strip per track (effects, sends,
-  pan, mute, solo, record, fader and meter), FX tracks that several tracks
-  can send to (one shared reverb or delay), and a master strip with effects
+  pan, mute, solo, record, fader and meter), group tracks (a whole drum kit
+  or all the guitars on one fader: Ctrl-click track headers, then Ctrl+G),
+  FX tracks that several tracks can send to (one shared reverb or delay), and
+  a master strip with effects
   on the whole mix. Volume and pan automation drawn right on the tracks
   (press A). Effects on any track:
   - **Encore's plugins, built in**: Encore Vox (a whole vocal chain with tune
@@ -56,10 +58,20 @@ From [Releases](https://github.com/jimmyrlondo/encore-basement/releases):
 - **Instruments and MIDI**: Project > Add Instrument Track with any of your
   instrument plugins (drums, keys, samplers) or the built-in synth, played
   and recorded from your MIDI keyboard or pads; import MIDI files too.
+  A piano roll (double-click a MIDI clip): click to add notes, drag to move or
+  resize, a velocity strip, grid snap, quantize, transpose and velocity
+  (also in the MIDI menu for whole clips).
+- **Templates for real setups**: band templates sized for 2, 4 and 8-input
+  interfaces (drums on every input first, then the rest overdubbed), with the
+  tracks already grouped; each one says whether it fits your interface.
 - **Export** the mix or every track as its own file (stems), the whole song
   or just the loop, as WAV (16, 24 or 32-bit float) or FLAC, at any sample
   rate, with or without the master effects, optionally normalised to -14 LUFS
   for streaming. Or zip the whole song folder.
+- **Send to Encore** (File > Export): a release package for Encore Music: the
+  master, stems if you want them, cover art and the song's details. Signing
+  in and uploading straight from Basement come once Encore's API is ready
+  (docs/ENCORE-API.md).
 - **Safe**: songs save as one folder each, Basement keeps an automatic copy
   every two minutes, and offers it back if it ever closes unexpectedly.
 - **Tuner** (T): a chromatic tuner on any input, 30 Hz to 1.5 kHz (bass
@@ -78,8 +90,8 @@ Help > Keyboard Shortcuts has the full list.
 ## Coming next
 
 - MP3 export, and mastering on export with Encore's album engine
-- Sign in with Encore and send a song to your catalog as a draft
-- A piano roll for editing MIDI notes
+- Sign in with Encore and upload a song to your catalog as a draft
+- A drum editor, and more MIDI tools
 
 ## Build
 

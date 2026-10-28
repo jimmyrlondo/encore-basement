@@ -1,5 +1,25 @@
 # Changes
 
+## 0.4.0 (not released yet)
+
+- A piano roll: double-click a MIDI clip (or MIDI > Open Piano Roll,
+  Ctrl+Shift+E). Click to add a note, drag to move it, drag its end to
+  resize, double-click to delete, a velocity strip along the bottom, grid
+  snap from 1/4 to 1/32 and triplets, and clicked notes play on the track's
+  instrument. Arrow keys transpose and move; Q quantizes.
+- MIDI menu: Quantize, Transpose and Velocity, for the piano roll's notes or
+  every note in the selected MIDI clips.
+- Group tracks: Project > Add Group Track, or Ctrl-click track headers and
+  Ctrl+G. A group has one fader, effects and mute for every track in it; pick
+  a track's group in its input menu or the mixer's output button. Stems
+  export each track on its own and each group with its tracks.
+- Templates for real setups: bands on 2, 4 and 8-input interfaces (drums on
+  every input, then overdubs), and a full band live, already grouped. Tiles
+  say whether a template fits your interface.
+- Send to Encore (File > Export): a release package with the master, stems,
+  cover art and release.json, then Encore opens to upload it.
+- Give Tracks Their Inputs no longer gives inputs to FX or group tracks.
+
 ## 0.3.0 (not released yet)
 
 Everything from the first round of testing, plus a lot more.

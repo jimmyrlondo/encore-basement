@@ -707,6 +707,11 @@ MidiClipComponent::MidiClipComponent (EditViewState& evs, te::Clip::Ptr c)
 {
 }
 
+void MidiClipComponent::mouseDoubleClick (const MouseEvent&)
+{
+    if (auto mc = getMidiClip()) if (BasementHooks::openPianoRoll) BasementHooks::openPianoRoll (*mc);
+}
+
 void MidiClipComponent::paint (Graphics& g)
 {
     ClipComponent::paint (g);
@@ -960,6 +965,27 @@ TrackHeaderComponent::TrackHeaderComponent (EditViewState& evs, te::Track::Ptr t
         {
             PopupMenu m;
 
+            // a group track: tick the tracks that play into it
+            if (groups::isGroup (*at))
+            {
+                te::AudioTrack::Ptr group (at);
+                m.addSectionHeader ("Tracks in this group");
+                for (auto t : te::getAudioTracks (at->edit))
+                {
+                    if (t == at || groups::isFxTrack (*t)) continue;
+                    te::AudioTrack::Ptr member (t);
+                    const bool in = groups::of (*t) == at;
+                    m.addItem (t->getName(), in || groups::canRoute (*t, *at), in, [member, group, in]
+                    {
+                        groups::route (*member, in ? nullptr : group.get());
+                    });
+                }
+                m.addSeparator();
+                m.addItem ("Ungroup (all back to the master)", ! groups::members (*at).isEmpty(), false, [group] { groups::ungroup (*group); });
+                m.showMenuAsync (PopupMenu::Options().withTargetComponent (&inputButton));
+                return;
+            }
+
             if (EngineHelpers::trackHasInput (*at))
             {
                 bool ticked = EngineHelpers::isInputMonitoringEnabled (*at);
@@ -995,9 +1021,27 @@ TrackHeaderComponent::TrackHeaderComponent (EditViewState& evs, te::Track::Ptr t
                 }
             }
 
+            // where the track plays: the master, or a group
+            if (! groups::isFxTrack (*at))
+            {
+                m.addSeparator();
+                m.addSectionHeader ("Plays into");
+                const auto current = groups::of (*at);
+                m.addItem (3000, "Master", true, current == nullptr);
+                int id = 3001;
+                for (auto* g : groups::all (at->edit))
+                    m.addItem (id++, g->getName(), groups::canRoute (*at, *g), current == g);
+            }
+
             int res = m.showAt (&inputButton);
 
-            if (res == 1000)
+            if (res >= 3000)
+            {
+                const auto all = groups::all (at->edit);
+                groups::route (*at, res == 3000 ? nullptr : all[res - 3001]);
+                updateInputName();
+            }
+            else if (res == 1000)
             {
                 EngineHelpers::enableInputMonitoring (*at, ! EngineHelpers::isInputMonitoringEnabled (*at));
             }
@@ -1131,6 +1175,8 @@ void TrackHeaderComponent::updateMonitor()
 {
     auto at = dynamic_cast<te::AudioTrack*> (track.get());
     if (at == nullptr) { monitorButton.setVisible (false); return; }
+    monitorButton.setVisible (! groups::isGroup (*at));
+    armButton.setVisible (! groups::isGroup (*at));
     monitorButton.setEnabled (EngineHelpers::trackHasInput (*at));
     monitorButton.setToggleState (EngineHelpers::trackHasInput (*at) && EngineHelpers::isInputMonitoringEnabled (*at), dontSendNotification);
 }
@@ -1163,12 +1209,21 @@ void TrackHeaderComponent::updateInputName()
 {
     auto at = dynamic_cast<te::AudioTrack*> (track.get());
     if (at == nullptr) return;
+    if (groups::isGroup (*at))
+    {
+        const int n = groups::members (*at).size();
+        inputButton.setButtonText (n == 0 ? String ("Group: no tracks yet") : "Group of " + String (n) + (n == 1 ? " track" : " tracks"));
+        inputButton.setTooltip ("Choose which tracks play into this group");
+        return;
+    }
     String name;
     for (auto instance : at->edit.getAllInputDevices())
         if (te::isOnTargetTrack (*instance, *at, 0))
             name = instance->getInputDevice().getName();
-    inputButton.setButtonText (name.isEmpty() ? "No input" : name);
-    inputButton.setTooltip (name.isEmpty() ? "Choose which input this track records" : "Records from " + name + " (click to change)");
+    auto group = groups::of (*at);
+    inputButton.setButtonText ((name.isEmpty() ? String ("No input") : name) + (group != nullptr ? "  " + groups::arrow() + " " + group->getName() : String()));
+    inputButton.setTooltip ((name.isEmpty() ? String ("Choose which input this track records") : "Records from " + name + " (click to change)")
+                            + (group != nullptr ? ". Plays into the group " + group->getName() : String()));
 }
 
 void TrackHeaderComponent::paint (Graphics& g)
@@ -1193,7 +1248,16 @@ void TrackHeaderComponent::mouseDown (const MouseEvent& e)
 {
     resizing = overResizeEdge (e);
     heightAtDragStart = getHeight();
-    if (! resizing) editViewState.selectionManager.selectOnly (track.get());
+    if (resizing) return;
+    // Ctrl/Cmd-click adds tracks to the selection (to group them, say)
+    auto& sm = editViewState.selectionManager;
+    if (e.mods.isCommandDown())
+    {
+        if (sm.isSelected (track.get())) sm.deselect (track.get());
+        else sm.addToSelection (track.get());
+    }
+    else
+        sm.selectOnly (track.get());
 }
 
 // Drag the bottom edge: this track's height (Alt: every track)

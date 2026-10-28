@@ -430,6 +430,15 @@ public:
 
     juce::String chosenInput() const { return input.getSelectedId() > 1 ? input.getText() : juce::String(); }
 
+    juce::String group;   // the group track this one plays into (from the template), or empty
+
+    void setGroup (const juce::String& g)
+    {
+        group = g;
+        name.setTooltip (g.isEmpty() ? juce::String() : "Plays into the group \"" + g + "\"");
+        repaint();
+    }
+
     void paint (juce::Graphics& g) override
     {
         auto r = getLocalBounds();
@@ -438,6 +447,18 @@ public:
         g.drawText (juce::String (i + 1), r.removeFromLeft (26), juce::Justification::centredRight);
         g.setColour (theme::trackColour (i));
         g.fillEllipse (r.removeFromLeft (30).toFloat().withSizeKeepingCentre (10.0f, 10.0f));
+    }
+
+    /** The group's name, tucked inside the right end of the name box */
+    void paintOverChildren (juce::Graphics& g) override
+    {
+        if (group.isEmpty()) return;
+        auto tag = name.getBounds().removeFromRight (juce::jmin (110, name.getWidth() / 3)).reduced (4, 6);
+        g.setColour (theme::strong);
+        g.fillRoundedRectangle (tag.toFloat(), 4.0f);
+        g.setColour (theme::text2);
+        g.setFont (hubui::font (11.0f, true));
+        g.drawText (group, tag, juce::Justification::centred, true);
     }
 
     void resized() override
@@ -462,6 +483,9 @@ class TemplateTile : public juce::Button
 public:
     TemplateTile (const templates::Template& tt) : Button (tt.name), t (tt) { setClickingTogglesState (false); }
 
+    int inputsAvailable = 0;   // on the chosen interface, for "fits your interface"
+
+
     void paintButton (juce::Graphics& g, bool over, bool) override
     {
         auto r = getLocalBounds().toFloat().reduced (1.0f);
@@ -476,6 +500,15 @@ public:
         g.setColour (theme::paper);
         g.setFont (hubui::font (14.0f, true));
         g.drawText (t.name, tr.removeFromTop (20), juce::Justification::centredLeft, true);
+        if (t.needsInputs > 0 && inputsAvailable > 0)
+        {
+            const bool fits = inputsAvailable >= t.needsInputs;
+            g.setColour (fits ? theme::accent : theme::solo);
+            g.setFont (hubui::font (11.0f, true));
+            g.drawText (fits ? "Fits your " + juce::String (inputsAvailable) + " inputs"
+                             : "Needs " + juce::String (t.needsInputs) + " inputs, yours has " + juce::String (inputsAvailable),
+                        tr.removeFromBottom (14), juce::Justification::bottomLeft, true);
+        }
         g.setColour (theme::muted);
         g.setFont (hubui::font (12.0f));
         g.drawFittedText (t.description, tr, juce::Justification::topLeft, 2);
@@ -707,13 +740,35 @@ private:
         juce::StringArray names = t.trackNames;
         if (t.allInputs) names = inputs.isEmpty() ? juce::StringArray { "Input 1", "Input 2" } : inputs;
         rows.clear();
-        for (int i = 0; i < names.size(); ++i) addRow (names[i], t.inputs && i < inputs.size() ? inputs[i] : juce::String());
+        juce::StringArray used;
+        for (int i = 0; i < names.size(); ++i)
+        {
+            auto in = t.allInputs ? inputs[i] : t.inputFor (i, inputs, used);
+            used.add (in);
+            addRow (names[i], in);
+            rows.getLast()->setGroup (t.groups[i]);
+        }
         const bool fixed = t.file.existsAsFile();
         minus.setEnabled (! fixed); plus.setEnabled (! fixed); countBox.setEnabled (! fixed);
         countBox.setText (juce::String (rows.size()), false);
         updateInputsNote();
         layoutContent();
         updateSummary();
+    }
+
+    /** Each row's input again (a new interface): the template's picks, else in order */
+    void reapplyInputs()
+    {
+        auto inputs = inputNames();
+        const templates::Template* t = juce::isPositiveAndBelow (templateIndex, tiles.size()) ? &tiles[templateIndex]->t : nullptr;
+        juce::StringArray used;
+        for (int r = 0; r < rows.size(); ++r)
+        {
+            auto in = t != nullptr && r < t->trackNames.size() && ! t->allInputs ? t->inputFor (r, inputs, used)
+                                                                                  : (r < inputs.size() ? inputs[r] : juce::String());
+            used.add (in);
+            rows[r]->setInputs (inputs, in);
+        }
     }
 
     void addRow (const juce::String& name, const juce::String& in)
@@ -799,6 +854,7 @@ private:
         // inputs may have changed: keep each row's choice if it still exists
         auto inputs = inputNames();
         for (auto* row : rows) row->setInputs (inputs, row->chosenInput().isNotEmpty() ? row->chosenInput() : juce::String());
+        for (auto* tile : tiles) { tile->inputsAvailable = inputs.size(); tile->repaint(); }
         updateInputsNote();
         updateSummary();
     }
@@ -817,9 +873,8 @@ private:
         auto err = dm.setAudioDeviceSetup (setup, true);
         basementLog ("hub: record from " + c.name + " (" + c.type + ")" + (err.isEmpty() ? "" : " error: " + err));
         if (err.isNotEmpty()) juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Couldn't open " + c.name, err);
-        // a fresh interface: give the tracks its inputs in order
-        auto inputs = inputNames();
-        for (int r = 0; r < rows.size(); ++r) rows[r]->setInputs (inputs, r < inputs.size() ? inputs[r] : juce::String());
+        // a fresh interface: give the tracks its inputs (the template's way, if it has one)
+        reapplyInputs();
         refreshDevice();
     }
 
@@ -868,7 +923,7 @@ private:
         auto name = juce::File::createLegalFileName (p.info.title);
         p.folder = projectsFolder().getChildFile (name);
         for (int n = 2; p.folder.exists(); ++n) p.folder = projectsFolder().getChildFile (name + " " + juce::String (n)); // "Song 2", like a DAW would
-        for (auto* r : rows) p.tracks.add ({ r->name.getText().trim(), r->chosenInput() });
+        for (auto* r : rows) p.tracks.add ({ r->name.getText().trim(), r->chosenInput(), r->group });
         if (juce::isPositiveAndBelow (templateIndex, tiles.size()))
         {
             p.templateFile = tiles[templateIndex]->t.file;
@@ -885,6 +940,9 @@ private:
         for (auto& t : p.tracks) if (t.input.isNotEmpty()) ++fed;
         juce::String s = juce::String (p.tracks.size()) + (p.tracks.size() == 1 ? " track" : " tracks");
         if (fed > 0) s << " (" << fed << " ready to record)";
+        juce::StringArray groupNames;
+        for (auto& t : p.tracks) if (t.group.isNotEmpty()) groupNames.addIfNotAlreadyThere (t.group);
+        if (! groupNames.isEmpty()) s << ", grouped as " << groupNames.joinIntoString (", ");
         s << ",  " << p.info.formatText() << ",  " << p.info.bpmText() << " BPM " << p.info.sigText();
         if (p.info.key.isNotEmpty()) s << ",  " << p.info.key;
         summary.setText (s, juce::dontSendNotification);

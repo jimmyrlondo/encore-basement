@@ -8,6 +8,9 @@
 // FX tracks: a track that plays an "aux" bus (Tracktion's aux return) instead
 // of recording, so several tracks can share one reverb or delay. Each track's
 // strip has a send knob per FX track; the send sits after the track's fader.
+//
+// Group tracks (see groups in Components.h): each strip's output button picks
+// the master or a group to play into.
 #pragma once
 
 namespace fx
@@ -162,6 +165,11 @@ public:
         addAndMakeVisible (fader);
         if (auto lm = t.getLevelMeterPlugin()) fader.meter.setSource (&lm->measurer);
 
+        output.setTooltip ("Where this track plays: the master, or a group");
+        output.setMouseClickGrabsKeyboardFocus (false);
+        output.onClick = [this] { showOutputMenu(); };
+        addAndMakeVisible (output);
+
         rebuild();
         startTimerHz (10);
     }
@@ -177,7 +185,7 @@ public:
         g.setColour (theme::muted);
         g.setFont (FontOptions (10.0f, Font::bold));
         auto r = getLocalBounds().withTrimmedRight (2).reduced (6, 0);
-        g.drawText (isFx ? "FX TRACK" : "EFFECTS", r.withY (insertsTop - 14).withHeight (12), Justification::centredLeft);
+        g.drawText (isFx ? "FX TRACK" : isGroup ? "GROUP" : "EFFECTS", r.withY (insertsTop - 14).withHeight (12), Justification::centredLeft);
         if (! sends.isEmpty()) g.drawText ("SENDS", r.withY (sendsTop - 14).withHeight (12), Justification::centredLeft);
     }
 
@@ -202,6 +210,8 @@ public:
         solo.setBounds (buttons.removeFromLeft (bw)); buttons.removeFromLeft (4);
         arm.setBounds (buttons);
         r.removeFromTop (8);
+        output.setBounds (r.removeFromBottom (22));
+        r.removeFromBottom (6);
         fader.setBounds (r.removeFromTop (juce::jmax (80, r.getHeight() - 10)));
     }
 
@@ -213,7 +223,7 @@ private:
     te::AudioTrack::Ptr track;
     te::SelectionManager& selection;
     Label name;
-    TextButton addFx { "+ Effect" }, mute { "M" }, solo { "S" }, arm { "R" };
+    TextButton addFx { "+ Effect" }, mute { "M" }, solo { "S" }, arm { "R" }, output;
     Slider pan;
     FaderWithMeter fader;
     OwnedArray<TextButton> inserts;
@@ -226,7 +236,7 @@ private:
     };
     OwnedArray<Send> sends;
     int insertsTop = 0, sendsTop = 0;
-    bool isFx = false;
+    bool isFx = false, isGroup = false;
     String signature;
 
     te::VolumeAndPanPlugin* volume() const { return track ? track->getVolumePlugin() : nullptr; }
@@ -238,6 +248,7 @@ private:
         for (auto p : track->pluginList.getPlugins()) s << p->itemID.toString() << p->getName() << (int) p->isEnabled() << ";";
         s << "|";
         for (auto t : fx::tracks (track->edit)) s << t->itemID.toString() << t->getName() << ";";
+        s << "|" << (int) groups::isGroup (*track);
         return s;
     }
 
@@ -245,6 +256,7 @@ private:
     {
         signature = currentSignature();
         isFx = fx::busOf (*track) >= 0;
+        isGroup = groups::isGroup (*track);
         inserts.clear();
         for (auto p : track->pluginList.getPlugins())
         {
@@ -291,7 +303,8 @@ private:
                 s->addAndMakeVisible (s->knob);
                 addAndMakeVisible (s);
             }
-        arm.setVisible (! isFx);
+        arm.setVisible (! isFx && ! isGroup);
+        output.setVisible (! isFx);
         resized();
         repaint();
     }
@@ -314,10 +327,37 @@ private:
         m.showMenuAsync (PopupMenu::Options().withTargetComponent (b));
     }
 
+    void showOutputMenu()
+    {
+        if (track == nullptr) return;
+        te::AudioTrack::Ptr t (track);
+        PopupMenu m;
+        m.addSectionHeader ("Plays into");
+        const auto current = groups::of (*t);
+        m.addItem ("Master", true, current == nullptr, [t] { groups::route (*t, nullptr); });
+        for (auto* g : groups::all (t->edit))
+        {
+            te::AudioTrack::Ptr group (g);
+            m.addItem (g->getName(), groups::canRoute (*t, *g), current == g, [t, group] { groups::route (*t, group.get()); });
+        }
+        m.addSeparator();
+        m.addItem ("New group with this track", [t]
+        {
+            int n = groups::all (t->edit).size() + 1;
+            groups::add (t->edit, "Group " + String (n), { t.get() });
+        });
+        m.showMenuAsync (PopupMenu::Options().withTargetComponent (&output));
+    }
+
     void timerCallback() override
     {
         if (track == nullptr) return;
         if (currentSignature() != signature) rebuild();
+        {
+            auto g = groups::of (*track);
+            auto text = groups::arrow() + " " + (g != nullptr ? g->getName() : String ("Master"));
+            if (output.getButtonText() != text) output.setButtonText (text);
+        }
         if (name.getText() != track->getName() && ! name.isBeingEdited()) name.setText (track->getName(), dontSendNotification);
         if (auto vp = volume())
         {
@@ -473,7 +513,7 @@ class MixerComponent : public Component,
                        private Timer
 {
 public:
-    std::function<void()> onAddFxTrack;
+    std::function<void()> onAddFxTrack, onAddGroup;
 
     MixerComponent (te::Edit& e, te::SelectionManager& s) : edit (e), selection (s), master (e)
     {
@@ -484,6 +524,9 @@ public:
         addFxTrack.onClick = [this] { if (onAddFxTrack) onAddFxTrack(); };
         addFxTrack.setTooltip ("A track the others can send to: share one reverb or delay between them");
         strips.addAndMakeVisible (addFxTrack);
+        addGroup.onClick = [this] { if (onAddGroup) onAddGroup(); };
+        addGroup.setTooltip ("A group track: send several tracks (a drum kit, all the guitars) to one fader");
+        strips.addAndMakeVisible (addGroup);
         rebuild();
         startTimerHz (4);
     }
@@ -505,7 +548,7 @@ private:
     Component strips;
     OwnedArray<ChannelStrip> channelStrips;
     MasterStrip master;
-    TextButton addFxTrack { "+ FX track" };
+    TextButton addFxTrack { "+ FX track" }, addGroup { "+ Group" };
     String signature;
 
     String currentSignature() const
@@ -530,6 +573,7 @@ private:
         int x = 0;
         for (auto* s : channelStrips) { s->setBounds (x, 0, ChannelStrip::width, h); x += ChannelStrip::width; }
         addFxTrack.setBounds (x + 12, 12, 96, 28);
+        addGroup.setBounds (x + 12, 48, 96, 28);
         strips.setSize (x + 120, h);
     }
 

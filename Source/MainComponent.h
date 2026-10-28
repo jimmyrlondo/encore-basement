@@ -128,7 +128,21 @@ inline std::shared_ptr<SongExport> exportSong (te::Engine& engine, const juce::F
     if (o.tail) p.endAllowance = te::TimeDuration::fromSeconds (2.0);
     auto tracks = te::getAudioTracks (*job->edit);
     if (o.trackIndex >= 0 && o.trackIndex < tracks.size())
-        p.tracksToDo = te::toBitSet (juce::Array<te::Track*> { tracks[o.trackIndex] });
+    {
+        // (this is the export's own copy of the song, so routing can change here)
+        auto* t = tracks[o.trackIndex];
+        juce::Array<te::Track*> render { t };
+        if (groups::isGroup (*t))
+        {
+            // a group's stem: the group with everything playing into it (groups of groups too)
+            for (int i = 0; i < render.size(); ++i)
+                if (auto* at = dynamic_cast<te::AudioTrack*> (render[i]))
+                    for (auto* m : groups::members (*at)) render.addIfNotAlreadyThere (m);
+        }
+        else
+            groups::route (*t, nullptr);   // a track's stem: just that track, straight out
+        p.tracksToDo = te::toBitSet (render);
+    }
     else
         p.tracksToDo = te::toBitSet (te::getAllTracks (*job->edit));
     p.usePlugins = true;
@@ -542,6 +556,105 @@ private:
     }
 };
 
+/** File > Send to Encore: a release package for Encore Music (the mastered mix, stems if you
+    want them, the cover art and the song's details in release.json), made in the song's
+    folder, then Encore opens in the browser to upload it. Signing in and uploading straight
+    from Basement come once Encore's upload API exists (see docs/ENCORE-API.md). */
+class EncoreSendComponent : public juce::Component
+{
+public:
+    struct Choice { bool loud = true, masterEffects = true, stems = false; juce::File cover; };
+    std::function<void (Choice)> onSend;
+
+    EncoreSendComponent (const SongInfo& info, const juce::File& songFolder) : folder (songFolder)
+    {
+        hubui::styleLabel (heading, 15.0f, theme::paper);
+        heading.setText ((info.title.isNotEmpty() ? info.title : juce::String ("Untitled")) + (info.artist.isNotEmpty() ? "  by  " + info.artist : juce::String()),
+                         juce::dontSendNotification);
+        addAndMakeVisible (heading);
+        hubui::styleLabel (details, 12.5f, theme::text2);
+        juce::StringArray d;
+        if (info.album.isNotEmpty()) d.add (info.album);
+        if (info.genre.isNotEmpty()) d.add (info.genre);
+        d.add (info.bpmText() + " BPM");
+        if (info.key.isNotEmpty()) d.add (info.key);
+        details.setText (d.joinIntoString ("  ·  ") + (info.artist.isEmpty() ? "\nNo artist yet: add it in Project > Song Setup first" : juce::String()), juce::dontSendNotification);
+        addAndMakeVisible (details);
+
+        for (auto* t : { &loud, &master, &stems })
+        {
+            t->setColour (juce::ToggleButton::textColourId, theme::paper);
+            addAndMakeVisible (t);
+        }
+        loud.setToggleState (true, juce::dontSendNotification);
+        master.setToggleState (true, juce::dontSendNotification);
+
+        hubui::styleLabel (coverL);
+        addAndMakeVisible (coverL);
+        hubui::styleLabel (coverPath, 12.0f, theme::paper);
+        coverPath.setText ("None yet (Encore can add one later)", juce::dontSendNotification);
+        addAndMakeVisible (coverPath);
+        pickCover.onClick = [this]
+        {
+            auto chooser = std::make_shared<juce::FileChooser> ("Cover art (square, 3000 x 3000 is ideal)", folder, "*.jpg;*.jpeg;*.png");
+            chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles, [this, chooser] (const juce::FileChooser&)
+            {
+                auto f = chooser->getResult();
+                if (! f.existsAsFile()) return;
+                cover = f;
+                coverPath.setText (f.getFileName(), juce::dontSendNotification);
+            });
+        };
+        addAndMakeVisible (pickCover);
+
+        hubui::styleLabel (note, 12.0f, theme::muted);
+        note.setText ("The package goes in the song's folder, under Encore. Then Encore opens in your browser: upload the files from there. "
+                      "Signing in from Basement and uploading in one click come next.", juce::dontSendNotification);
+        addAndMakeVisible (note);
+
+        send.setColour (juce::TextButton::buttonColourId, theme::brand);
+        send.onClick = [this]
+        {
+            if (onSend) onSend ({ loud.getToggleState(), master.getToggleState(), stems.getToggleState(), cover });
+            if (auto* dw = findParentComponentOfClass<juce::DialogWindow>()) dw->exitModalState (1);
+        };
+        cancel.onClick = [this] { if (auto* dw = findParentComponentOfClass<juce::DialogWindow>()) dw->exitModalState (0); };
+        addAndMakeVisible (send);
+        addAndMakeVisible (cancel);
+        setSize (560, 400);
+    }
+
+    void resized() override
+    {
+        auto r = getLocalBounds().reduced (24, 20);
+        heading.setBounds (r.removeFromTop (24));
+        details.setBounds (r.removeFromTop (38));
+        r.removeFromTop (8);
+        loud.setBounds (r.removeFromTop (26));
+        master.setBounds (r.removeFromTop (26));
+        stems.setBounds (r.removeFromTop (26));
+        r.removeFromTop (10);
+        auto c = r.removeFromTop (30);
+        coverL.setBounds (c.removeFromLeft (90));
+        pickCover.setBounds (c.removeFromRight (110));
+        c.removeFromRight (8);
+        coverPath.setBounds (c);
+        r.removeFromTop (10);
+        auto b = r.removeFromBottom (36);
+        send.setBounds (b.removeFromRight (170));
+        b.removeFromRight (8);
+        cancel.setBounds (b.removeFromRight (90));
+        note.setBounds (r);
+    }
+
+private:
+    juce::File folder, cover;
+    juce::Label heading, details, coverL { {}, "Cover art" }, coverPath, note;
+    juce::ToggleButton loud { "Streaming level (-14 LUFS)" }, master { "With the effects on the master (Encore Master)" },
+                       stems { "Include each track as a stem (for remixes and live mixes)" };
+    juce::TextButton pickCover { "Choose..." }, send { "Make the package" }, cancel { "Cancel" };
+};
+
 inline void showDialog (const juce::String& title, juce::Component* content, juce::Component* over)
 {
     juce::DialogWindow::LaunchOptions o;
@@ -556,6 +669,22 @@ inline void showDialog (const juce::String& title, juce::Component* content, juc
 }
 
 //==============================================================================
+/** The bar above the piano roll: drag it to give the piano roll more or less room */
+class DividerBar : public juce::Component
+{
+public:
+    std::function<void (int deltaY, bool finished)> onDrag;
+    DividerBar() { setMouseCursor (juce::MouseCursor::UpDownResizeCursor); }
+    void paint (juce::Graphics& g) override
+    {
+        g.fillAll (theme::base);
+        g.setColour (theme::strong);
+        g.fillRoundedRectangle (getLocalBounds().toFloat().withSizeKeepingCentre (40.0f, 3.0f), 1.5f);
+    }
+    void mouseDrag (const juce::MouseEvent& e) override { if (onDrag) onDrag (e.getDistanceFromDragStartY(), false); }
+    void mouseUp (const juce::MouseEvent& e) override { if (onDrag) onDrag (e.getDistanceFromDragStartY(), true); }
+};
+
 class MainComponent : public juce::Component,
                       public juce::FileDragAndDropTarget,
                       public juce::KeyListener,
@@ -589,7 +718,7 @@ public:
         cmdAudioSetup, cmdPlugins, cmdFindPlugins, cmdReassignInputs,
         // Window
         cmdEffects, cmdZoomIn, cmdZoomOut, cmdZoomFit, cmdHeightSmall, cmdHeightMedium, cmdHeightLarge, cmdHeightHuge,
-        cmdMixer, cmdTuner, cmdWaveBigger, cmdWaveSmaller, cmdAddFxReverb, cmdAddFxDelay, cmdAddFxEmpty, cmdAutomationOff, cmdAutomationVolume, cmdAutomationPan, cmdAutomationCycle,
+        cmdMixer, cmdTuner, cmdWaveBigger, cmdWaveSmaller, cmdAddFxReverb, cmdAddFxDelay, cmdAddFxEmpty, cmdAddGroup, cmdGroupSelected, cmdSendToEncore, cmdPianoRoll, cmdQuantize, cmdTransposeUp, cmdTransposeDown, cmdOctaveUp, cmdOctaveDown, cmdVelocityLouder, cmdVelocitySofter, cmdAutomationOff, cmdAutomationVolume, cmdAutomationPan, cmdAutomationCycle,
         // Help
         cmdShortcuts, cmdGuide, cmdReport, cmdUpdates, cmdLogFolder, cmdAbout
     };
@@ -676,6 +805,15 @@ public:
         BasementHooks::commands = &commandManager;
         BasementHooks::fillClipMenu = [this] (juce::PopupMenu& m, te::Clip& c) { fillClipMenu (m, c); };
         BasementHooks::forwardKey = [this] (const juce::KeyPress& k) { return keyPressed (k, nullptr); };
+        BasementHooks::openPianoRoll = [this] (te::MidiClip& c) { openPianoRoll (c); };
+        addChildComponent (pianoDivider);
+        pianoDivider.onDrag = [this] (int dy, bool finished)
+        {
+            if (! dragStartHeight) dragStartHeight = pianoRollH;
+            pianoRollH = juce::jmax (160, *dragStartHeight - dy);
+            if (finished) { props().setValue ("pianoRollHeight", pianoRollH); dragStartHeight.reset(); }
+            resized();
+        };
         BasementHooks::findPlugins = [this] { startPluginSearch(); };
         BasementHooks::applyRecordOffset = [this] { setupInputs(); };
         BasementHooks::showPluginManager = [this] { showPluginList(); };
@@ -756,6 +894,8 @@ public:
         BasementHooks::commands = nullptr;
         BasementHooks::fillClipMenu = nullptr;
         BasementHooks::forwardKey = nullptr;
+        BasementHooks::openPianoRoll = nullptr;
+        pianoRoll = nullptr;
         setApplicationCommandManagerToWatch (nullptr);
         engine.getDeviceManager().removeChangeListener (this);
         closeSong (true);
@@ -837,7 +977,17 @@ public:
             addTrackButton.setBounds (t.removeFromRight (80)); t.removeFromRight (10);
         }
 
-        if (editComponent) editComponent->setBounds (r);
+        // the piano roll takes the bottom of the window, under a bar you drag to resize it
+        const bool showPiano = pianoRoll != nullptr && ! mixerShown;
+        if (pianoRoll) pianoRoll->setVisible (showPiano);
+        pianoDivider.setVisible (showPiano);
+        auto main = r;
+        if (showPiano)
+        {
+            pianoRoll->setBounds (main.removeFromBottom (juce::jlimit (160, juce::jmax (160, main.getHeight() - 140), pianoRollH)));
+            pianoDivider.setBounds (main.removeFromBottom (8));
+        }
+        if (editComponent) editComponent->setBounds (main);
         if (mixer) mixer->setBounds (r);
         countIn.setBounds (r);
     }
@@ -912,7 +1062,7 @@ public:
                 juce::PopupMenu imp; addCommand (imp, cmdImportAudio); addCommand (imp, cmdImportMidi);
                 m.addSubMenu ("Import", imp);
                 juce::PopupMenu exp; addCommand (exp, cmdExportMix); addCommand (exp, cmdExportZip);
-                exp.addItem (comingSoonId, "Send to Encore... (coming soon)", false);
+                exp.addSeparator(); addCommand (exp, cmdSendToEncore);
                 m.addSubMenu ("Export", exp);
                 m.addSeparator(); add (cmdPreferences); m.addSeparator(); add (cmdQuit);
                 break;
@@ -937,8 +1087,9 @@ public:
                 add (cmdSongSetup); m.addSeparator();
                 add (cmdAddMarker); m.addSeparator();
                 add (cmdAddFxReverb); add (cmdAddFxDelay); add (cmdAddFxEmpty); m.addSeparator();
+                add (cmdAddGroup); add (cmdGroupSelected); m.addSeparator();
                 m.addSubMenu ("Add Instrument Track", instrumentMenu(), edit != nullptr && ! hubShown);
-                later ({ "Add Group Track", "Arranger Track", "Piano Roll Editor" });
+                later ({ "Arranger Track", "Piano Roll Editor" });
                 break;
             case 3: // Audio
                 add (cmdNormalize); add (cmdGainUp); add (cmdGainDown); add (cmdGainReset); m.addSeparator();
@@ -947,10 +1098,22 @@ public:
                 later ({ "Time Stretch", "Pitch Shift", "Detect Tempo", "Bounce Selection" });
                 break;
             case 4: // MIDI
+            {
+                add (cmdPianoRoll); m.addSeparator();
+                add (cmdQuantize);
+                const bool notes = ! midiTargets().empty();
+                juce::PopupMenu tr; addCommand (tr, cmdTransposeUp); addCommand (tr, cmdTransposeDown); addCommand (tr, cmdOctaveUp); addCommand (tr, cmdOctaveDown);
+                m.addSubMenu ("Transpose", tr, notes);
+                juce::PopupMenu vel; addCommand (vel, cmdVelocityLouder); addCommand (vel, cmdVelocitySofter);
+                for (int v : { 127, 100, 80, 64 })
+                    vel.addItem ("Set to " + juce::String (v), notes, false, [this, v] { editNotes ("Note velocity", [v] (te::MidiClip& c, juce::Array<te::MidiNote*> n) { midiedit::velocity (c, n, v); }); });
+                m.addSubMenu ("Velocity", vel, notes);
+                m.addSeparator();
                 m.addSubMenu ("Add Instrument Track", instrumentMenu(), edit != nullptr && ! hubShown);
                 add (cmdImportMidi);
-                later ({ "Piano Roll Editor", "Drum Editor", "Quantize", "Transpose", "Velocity" });
+                later ({ "Drum Editor" });
                 break;
+            }
             case 5: // Score
                 later ({ "Open Score Editor", "Chord Track", "Lyrics", "Print / Export Score" });
                 break;
@@ -1180,6 +1343,17 @@ public:
             case cmdAddFxReverb:    set ("Add FX Track: Reverb", "Project", songShown); break;
             case cmdAddFxDelay:     set ("Add FX Track: Delay", "Project", songShown); break;
             case cmdAddFxEmpty:     set ("Add FX Track: Empty", "Project", songShown); break;
+            case cmdAddGroup:       set ("Add Group Track", "Project", songShown); break;
+            case cmdSendToEncore:   set ("Send to Encore...", "File", song && ! currentExport); break;
+            case cmdPianoRoll:      set (pianoRoll ? "Close Piano Roll" : "Open Piano Roll", "MIDI", songShown && (pianoRoll != nullptr || selectedMidiClip() != nullptr)); key ('e', cmd | shift); break;
+            case cmdQuantize:       set ("Quantize Notes", "MIDI", songShown && ! midiTargets().empty()); key ('q', none); break;
+            case cmdTransposeUp:    set ("Up a Semitone", "MIDI", songShown && ! midiTargets().empty()); break;
+            case cmdTransposeDown:  set ("Down a Semitone", "MIDI", songShown && ! midiTargets().empty()); break;
+            case cmdOctaveUp:       set ("Up an Octave", "MIDI", songShown && ! midiTargets().empty()); break;
+            case cmdOctaveDown:     set ("Down an Octave", "MIDI", songShown && ! midiTargets().empty()); break;
+            case cmdVelocityLouder: set ("Louder (+10)", "MIDI", songShown && ! midiTargets().empty()); break;
+            case cmdVelocitySofter: set ("Softer (-10)", "MIDI", songShown && ! midiTargets().empty()); break;
+            case cmdGroupSelected:  set ("Group Selected Tracks", "Project", songShown && ! selectedTracks().isEmpty()); key ('g', cmd); break;
 
             case cmdShortcuts:      set ("Keyboard Shortcuts...", "Help"); break;
             case cmdGuide:          set ("User Guide", "Help"); break;
@@ -1296,6 +1470,22 @@ public:
             case cmdAddFxReverb:    addFxTrack (0); return true;
             case cmdAddFxDelay:     addFxTrack (1); return true;
             case cmdAddFxEmpty:     addFxTrack (2); return true;
+            case cmdAddGroup:       addGroup ({}); return true;
+            case cmdSendToEncore:   sendToEncore(); return true;
+            case cmdPianoRoll:      if (pianoRoll) closePianoRoll(); else if (auto mc = selectedMidiClip()) openPianoRoll (*mc); return true;
+            case cmdQuantize:
+            {
+                const double grid = pianoRoll ? pianoRoll->gridBeats() : 0.25;
+                editNotes ("Quantize notes", [grid] (te::MidiClip& c, juce::Array<te::MidiNote*> n) { midiedit::quantize (c, n, grid); });
+                return true;
+            }
+            case cmdTransposeUp:    editNotes ("Transpose", [] (te::MidiClip& c, juce::Array<te::MidiNote*> n) { midiedit::transpose (c, n, 1); }); return true;
+            case cmdTransposeDown:  editNotes ("Transpose", [] (te::MidiClip& c, juce::Array<te::MidiNote*> n) { midiedit::transpose (c, n, -1); }); return true;
+            case cmdOctaveUp:       editNotes ("Transpose", [] (te::MidiClip& c, juce::Array<te::MidiNote*> n) { midiedit::transpose (c, n, 12); }); return true;
+            case cmdOctaveDown:     editNotes ("Transpose", [] (te::MidiClip& c, juce::Array<te::MidiNote*> n) { midiedit::transpose (c, n, -12); }); return true;
+            case cmdVelocityLouder: editNotes ("Note velocity", [] (te::MidiClip& c, juce::Array<te::MidiNote*> n) { midiedit::velocity (c, n, -1, 10); }); return true;
+            case cmdVelocitySofter: editNotes ("Note velocity", [] (te::MidiClip& c, juce::Array<te::MidiNote*> n) { midiedit::velocity (c, n, -1, -10); }); return true;
+            case cmdGroupSelected:  addGroup (selectedTracks()); return true;
 
             case cmdShortcuts:      showShortcuts(); return true;
             case cmdGuide:          url ("https://github.com/jimmyrlondo/encore-basement#readme"); return true;
@@ -1330,6 +1520,10 @@ private:
     juce::Label timeLabel { {}, "0:00.0" }, barLabel { {}, "Bar 1.1" }, tempoLabel { {}, "120" }, tempoCaption { {}, "BPM" }, statusLabel;
     LevelMeter masterMeter { LevelMeter::Orientation::horizontal };
     std::unique_ptr<MixerComponent> mixer;
+    std::unique_ptr<PianoRoll> pianoRoll;
+    DividerBar pianoDivider;
+    int pianoRollH = 320;
+    std::optional<int> dragStartHeight;
     bool mixerShown = false;
     juce::TextButton mixerButton { "Mixer" };
     juce::ComboBox snapBox;
@@ -1484,6 +1678,7 @@ private:
         for (auto t : te::getAudioTracks (*edit))
         {
             if (EngineHelpers::trackHasInput (*t)) continue;
+            if (groups::isGroup (*t) || groups::isFxTrack (*t)) continue;   // these play other tracks, not an input
             auto want = t->state.getProperty ("basementInput").toString();
             if (want == "none" && ! force) continue;
             if (want == "midi")
@@ -1500,11 +1695,13 @@ private:
     bool assignInput (te::AudioTrack& t, const juce::String& wanted)
     {
         te::InputDeviceInstance* pick = nullptr;
+        // a named input can feed several tracks (overdubs: bass, then guitar, both on input 1);
+        // a track with no particular input gets one nobody's using
         for (auto instance : edit->getAllInputDevices())
-            if (instance->getInputDevice().getDeviceType() == te::InputDevice::waveDevice && instance->getTargets().isEmpty())
+            if (instance->getInputDevice().getDeviceType() == te::InputDevice::waveDevice)
             {
                 if (wanted.isNotEmpty() && instance->getInputDevice().getName() == wanted) { pick = instance; break; }
-                if (pick == nullptr && wanted.isEmpty()) pick = instance;
+                if (pick == nullptr && wanted.isEmpty() && instance->getTargets().isEmpty()) pick = instance;
             }
         bool wantedHere = false, anyHere = false;
         for (auto instance : edit->getAllInputDevices())
@@ -1517,7 +1714,7 @@ private:
             for (auto instance : edit->getAllInputDevices()) // that input isn't here (another interface): use the next free one
                 if (instance->getInputDevice().getDeviceType() == te::InputDevice::waveDevice && instance->getTargets().isEmpty()) { pick = instance; break; }
         if (pick == nullptr) return false;
-        auto res = pick->setTarget (t.itemID, true, &edit->getUndoManager(), 0);
+        auto res = pick->setTarget (t.itemID, false, &edit->getUndoManager(), 0);
         basementLog (t.getName() + " <- " + pick->getInputDevice().getName() + (res ? " ok" : " FAILED: " + juce::String (res.error())));
         // remember the input, unless this is a stand-in for one that isn't here right now
         if (res && (wanted.isEmpty() || wanted == pick->getInputDevice().getName()))
@@ -1558,6 +1755,7 @@ private:
         edit->getTransport().stop (false, true);
         edit->getTransport().removeChangeListener (this);
         selectionManager.deselectAll();
+        closePianoRoll();
         mixer = nullptr;
         editComponent = nullptr;
         edit = nullptr;
@@ -1612,6 +1810,7 @@ private:
             m.addItem ("Empty (add your own effect)", [this] { addFxTrack (2); });
             m.showMenuAsync ({});
         };
+        mixer->onAddGroup = [this] { addGroup (selectedTracks()); };
         addChildComponent (*mixer);
         mixer->setVisible (mixerShown);
         editComponent->setVisible (! mixerShown);
@@ -1745,6 +1944,76 @@ private:
             if (auto c = dynamic_cast<te::Clip*> (s)) if (auto t = dynamic_cast<te::AudioTrack*> (c->getTrack())) return t;
         }
         return nullptr;
+    }
+
+    //==============================================================================
+    // MIDI editing
+    te::MidiClip* selectedMidiClip()
+    {
+        if (! edit) return nullptr;
+        for (auto* s : selectionManager.getSelectedObjects())
+            if (auto mc = dynamic_cast<te::MidiClip*> (s)) return mc;
+        return nullptr;
+    }
+
+    void openPianoRoll (te::MidiClip& c)
+    {
+        if (pianoRoll && pianoRoll->getClip() == &c) { pianoRoll->grabKeyboardFocus(); return; }
+        pianoRoll = std::make_unique<PianoRoll> (c);
+        pianoRoll->onClose = [this] { closePianoRoll(); };
+        pianoRollH = props().getIntValue ("pianoRollHeight", 320);
+        addAndMakeVisible (*pianoRoll);
+        if (mixerShown) showMixer (false);
+        resized();
+        pianoRoll->grabKeyboardFocus();
+        commandManager.commandStatusChanged();
+        statusSoft ("Piano roll: click to add a note, drag to move, drag a note's end to resize, double-click to delete");
+    }
+
+    void closePianoRoll()
+    {
+        if (! pianoRoll) return;
+        pianoRoll = nullptr;
+        resized();
+        commandManager.commandStatusChanged();
+    }
+
+    /** What the MIDI menu edits: the piano roll's selection (or its whole clip), else every note in the selected MIDI clips */
+    std::vector<std::pair<te::MidiClip*, juce::Array<te::MidiNote*>>> midiTargets()
+    {
+        std::vector<std::pair<te::MidiClip*, juce::Array<te::MidiNote*>>> out;
+        if (! edit) return out;
+        if (pianoRoll && pianoRoll->getClip() != nullptr)
+        {
+            out.push_back ({ pianoRoll->getClip(), pianoRoll->targetNotes() });
+            return out;
+        }
+        for (auto* s : selectionManager.getSelectedObjects())
+            if (auto mc = dynamic_cast<te::MidiClip*> (s))
+                if (mc->getSequence().getNumNotes() > 0) out.push_back ({ mc, midiedit::allNotes (*mc) });
+        return out;
+    }
+
+    void editNotes (const juce::String& what, std::function<void (te::MidiClip&, juce::Array<te::MidiNote*>)> f)
+    {
+        auto targets = midiTargets();
+        if (targets.empty()) { status ("Select a MIDI clip first (or open one in the piano roll)"); return; }
+        edit->getUndoManager().beginNewTransaction (what);
+        int n = 0;
+        for (auto& [clip, notes] : targets) { f (*clip, notes); n += notes.size(); }
+        if (pianoRoll) pianoRoll->repaint();
+        statusSoft (what + ": " + juce::String (n) + (n == 1 ? " note" : " notes"));
+    }
+
+    /** Every selected track (Ctrl-click track headers to select several), for grouping */
+    juce::Array<te::AudioTrack*> selectedTracks()
+    {
+        juce::Array<te::AudioTrack*> out;
+        if (! edit) return out;
+        for (auto* s : selectionManager.getSelectedObjects())
+            if (auto t = dynamic_cast<te::AudioTrack*> (s))
+                if (! groups::isGroup (*t) && ! groups::isFxTrack (*t)) out.addIfNotAlreadyThere (t);
+        return out;
     }
 
     juce::Array<te::AudioClipBase*> selectedClips()
@@ -2049,6 +2318,7 @@ private:
         if (exportQueue.isEmpty())
         {
             exportButton.setEnabled (true);
+            if (auto then = std::exchange (afterExports, nullptr)) { then (exportFailures.isEmpty()); return; }
             if (exportFailures.isEmpty()) { status ("Exported " + juce::String (exportTotal) + (exportTotal == 1 ? " file" : " files") + " to " + exportFolder.getFullPathName()); exportFolder.revealToUser(); }
             else status ("Some exports didn't work: " + exportFailures.joinIntoString ("; "));
             return;
@@ -2065,6 +2335,83 @@ private:
         if (currentExport == nullptr && exportQueue.isEmpty()) exportButton.setEnabled (true);
     }
     std::shared_ptr<SongExport> currentExport;
+    std::function<void (bool ok)> afterExports;   // instead of revealing the folder, when set
+
+    /** File > Send to Encore */
+    void sendToEncore()
+    {
+        if (! edit) return;
+        save();
+        auto info = SongInfo::readFrom (*edit, songFile);
+        auto* c = new EncoreSendComponent (info, songFile.getParentDirectory());
+        c->onSend = [this, info] (EncoreSendComponent::Choice choice)
+        {
+            const auto title = info.title.isNotEmpty() ? info.title : songTitle();
+            auto dir = songFile.getParentDirectory().getChildFile ("Encore").getChildFile (juce::File::createLegalFileName (title));
+            dir.deleteRecursively();
+            dir.createDirectory();
+
+            ExportOptions mix;
+            mix.sampleRate = info.sampleRate;
+            mix.bitDepth = 24;
+            mix.loudness = choice.loud;
+            mix.masterEffects = choice.masterEffects;
+            exportQueue.clear();
+            const auto base = juce::File::createLegalFileName (title);
+            exportQueue.add ({ mix, dir.getChildFile (base + ".wav"), "the master" });
+            juce::StringArray stemFiles;
+            if (choice.stems)
+            {
+                auto tracks = te::getAudioTracks (*edit);
+                for (int i = 0; i < tracks.size(); ++i)
+                {
+                    if (tracks[i]->getClips().isEmpty() && ! groups::isGroup (*tracks[i])) continue;
+                    ExportOptions st = mix;
+                    st.trackIndex = i; st.loudness = false; st.masterEffects = false;
+                    auto name = "stems/" + juce::File::createLegalFileName (tracks[i]->getName()) + ".wav";
+                    stemFiles.add (name);
+                    exportQueue.add ({ st, dir.getChildFile (name), tracks[i]->getName() });
+                }
+                dir.getChildFile ("stems").createDirectory();
+            }
+            if (choice.cover.existsAsFile()) choice.cover.copyFileTo (dir.getChildFile ("cover" + choice.cover.getFileExtension().toLowerCase()));
+
+            // the song's details, for Encore's release form
+            auto* rel = new juce::DynamicObject();
+            rel->setProperty ("format", "encore-release-1");
+            rel->setProperty ("title", title);
+            rel->setProperty ("artist", info.artist);
+            rel->setProperty ("album", info.album);
+            rel->setProperty ("genre", info.genre);
+            rel->setProperty ("key", info.key);
+            rel->setProperty ("bpm", info.bpm);
+            rel->setProperty ("timeSignature", info.sigText());
+            rel->setProperty ("notes", info.notes);
+            rel->setProperty ("lengthSeconds", edit->getLength().inSeconds());
+            rel->setProperty ("audio", base + ".wav");
+            rel->setProperty ("loudness", choice.loud ? "-14 LUFS" : "as mixed");
+            juce::Array<juce::var> st;
+            for (auto& f : stemFiles) st.add (f);
+            rel->setProperty ("stems", st);
+            if (choice.cover.existsAsFile()) rel->setProperty ("cover", "cover" + choice.cover.getFileExtension().toLowerCase());
+            rel->setProperty ("madeWith", "Encore: Basement " + juce::String (ProjectInfo::versionString));
+            rel->setProperty ("madeAt", juce::Time::getCurrentTime().toISO8601 (true));
+            dir.getChildFile ("release.json").replaceWithText (juce::JSON::toString (juce::var (rel)));
+
+            exportTotal = exportQueue.size();
+            exportFolder = dir;
+            exportFailures.clear();
+            afterExports = [this, dir] (bool ok)
+            {
+                if (! ok) { status ("Some of the package didn't export: " + exportFailures.joinIntoString ("; ")); return; }
+                dir.revealToUser();
+                juce::URL ("https://encoremusic.studio").launchInDefaultBrowser();
+                warn ("Ready for Encore: the package is in " + dir.getFullPathName() + ". Upload it on Encore (opened in your browser).");
+            };
+            runNextExport();
+        };
+        showDialog ("Send to Encore", c, this);
+    }
 
     /** The whole song folder in one zip (audio stored, not recompressed): for backups and sending to a studio */
     void exportZip()
@@ -2349,6 +2696,19 @@ private:
                            : fx::addTrack (*edit, name, {});
         if (t != nullptr)
             status ("Added the FX track \"" + name + "\": turn up its send on any track in the mixer (F3)");
+    }
+
+    /** A group track with these tracks playing into it (none: an empty group to fill from its header) */
+    void addGroup (const juce::Array<te::AudioTrack*>& members)
+    {
+        if (! edit) return;
+        int n = groups::all (*edit).size() + 1;
+        juce::String name = "Group " + juce::String (n);
+        auto g = groups::add (*edit, name, members);
+        if (g == nullptr) return;
+        selectionManager.selectOnly (g);
+        status (members.isEmpty() ? "Added \"" + name + "\": click its \"Group\" button to pick the tracks that play into it"
+                                  : "Grouped " + juce::String (members.size()) + (members.size() == 1 ? " track" : " tracks") + " into \"" + name + "\": one fader, effects and mute for all of them (double-click the name to rename it)");
     }
 
     void setAllTrackHeights (int h)

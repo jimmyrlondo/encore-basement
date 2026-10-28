@@ -229,7 +229,52 @@ namespace selftest
 
             // the template list includes the built-in starting points
             auto all = templates::all();
-            expect ("built-in templates", all.size() >= 6 && all[2].trackNames.size() == 10 && all[3].allInputs && all[5].importStems);
+            auto find = [&] (const String& n) { for (auto& t : all) if (t.name == n) return t; return templates::Template {}; };
+            expect ("built-in templates", find ("Full band, live").trackNames.size() == 10 && find ("Live multitrack").allInputs
+                                           && find ("Mix stems").importStems && find ("Band, 4 inputs").needsInputs == 4);
+
+            // a band template on a 4-input interface: drums on 1-4, overdubs back on input 1, and on a
+            // 2-input interface the drum mics wrap round onto the inputs it has
+            auto band4 = find ("Band, 4 inputs");
+            StringArray four { "In 1", "In 2", "In 3", "In 4" }, two { "In 1", "In 2" }, used;
+            expect ("template inputs: drums across all four, then overdubs on input 1",
+                    band4.inputFor (3, four, used) == "In 4" && band4.inputFor (4, four, used) == "In 1" && band4.inputFor (8, four, used) == "In 2");
+            expect ("template inputs wrap on a smaller interface", band4.inputFor (2, two, used) == "In 1" && band4.inputFor (3, two, used) == "In 2");
+
+            SongPlan bandPlan;
+            bandPlan.folder = dir.getChildFile ("Band Song");
+            bandPlan.folder.deleteRecursively();
+            bandPlan.info.title = "Band Song";
+            StringArray usedInputs;
+            for (int i = 0; i < band4.trackNames.size(); ++i)
+            {
+                auto in = band4.inputFor (i, four, usedInputs);
+                usedInputs.add (in);
+                bandPlan.tracks.add ({ band4.trackNames[i], in, band4.groups[i] });
+            }
+            { auto made = songs::createFromPlan (engine, bandPlan); }
+            if (auto e = songs::open (engine, bandPlan.songFile()))
+            {
+                auto ts = te::getAudioTracks (*e);
+                te::AudioTrack* drums = nullptr;
+                te::AudioTrack* vocals = nullptr;
+                te::AudioTrack* kick = nullptr;
+                te::AudioTrack* bass = nullptr;
+                te::AudioTrack* backing = nullptr;
+                for (auto t : ts)
+                {
+                    if (groups::isGroup (*t) && t->getName() == "Drums") drums = t;
+                    if (groups::isGroup (*t) && t->getName() == "Vocals") vocals = t;
+                    if (t->getName() == "Kick") kick = t;
+                    if (t->getName() == "Bass") bass = t;
+                    if (t->getName() == "Backing vocals") backing = t;
+                }
+                expect ("band template makes its groups with the right tracks in them",
+                        drums != nullptr && vocals != nullptr && groups::members (*drums).size() == 4 && groups::of (*kick) == drums
+                            && groups::of (*backing) == vocals && bass != nullptr && groups::of (*bass) == nullptr && groups::all (*e).size() == 3,
+                        String (groups::all (*e).size()) + " groups, " + String (ts.size()) + " tracks");
+            }
+            else expect ("band template song opens", false);
         }
 
         // the built-in Encore plugins: each loads on a track, passes audio, and keeps its settings
@@ -315,6 +360,32 @@ namespace selftest
                 expect ("MIDI file import", imported != nullptr && imported->getSequence().getNumNotes() == 8,
                         imported ? String (imported->getSequence().getNumNotes()) + " notes" : String ("no clip"));
                 if (imported) imported->removeFromParent();
+
+                // the piano roll's note edits (shared with the MIDI menu): quantize, transpose, velocity, undo
+                {
+                    auto* qc = t->insertMIDIClip ({ te::TimePosition::fromSeconds (4.0), te::TimePosition::fromSeconds (6.0) }, nullptr).get();
+                    auto& seq = qc->getSequence();
+                    seq.addNote (60, te::BeatPosition::fromBeats (0.07), te::BeatDuration::fromBeats (0.5), 90, 0, nullptr);
+                    seq.addNote (64, te::BeatPosition::fromBeats (1.21), te::BeatDuration::fromBeats (0.5), 90, 0, nullptr);
+                    auto notes = midiedit::allNotes (*qc);
+                    e->getUndoManager().beginNewTransaction ("test quantize");
+                    midiedit::quantize (*qc, notes, 0.25);
+                    const double content = qc->getContentStartBeat().inBeats();
+                    auto onGrid = [&] (te::MidiNote* n) { const double b = (content + n->getStartBeat().inBeats()) / 0.25; return std::abs (b - std::round (b)) < 1.0e-6; };
+                    expect ("quantize puts notes on the grid", onGrid (notes[0]) && onGrid (notes[1]),
+                            String (content + notes[0]->getStartBeat().inBeats(), 3) + ", " + String (content + notes[1]->getStartBeat().inBeats(), 3));
+                    e->getUndoManager().beginNewTransaction ("test transpose");
+                    midiedit::transpose (*qc, notes, 12);
+                    midiedit::velocity (*qc, notes, -1, 50);
+                    expect ("transpose and velocity", notes[0]->getNoteNumber() == 72 && notes[1]->getNoteNumber() == 76 && notes[0]->getVelocity() == 127,
+                            String (notes[0]->getNoteNumber()) + " vel " + String (notes[0]->getVelocity()));
+                    e->getUndoManager().undo();
+                    auto after = midiedit::allNotes (*qc);
+                    int lowest = 128;
+                    for (auto* n : after) lowest = juce::jmin (lowest, n->getNoteNumber());
+                    expect ("note edits undo", after.size() == 2 && lowest == 60, String (lowest));
+                    qc->removeFromParent();
+                }
                 te::EditFileOperations (*e).save (true, true, false);
             }
             auto out2 = synthSong.getSiblingFile ("synth.wav");
@@ -328,6 +399,67 @@ namespace selftest
             Range<float> lv[2];
             if (rr) rr->readMaxLevels (0, (int) rr->lengthInSamples, lv, 2);
             expect ("the synth plays the MIDI clip into the mix", rr != nullptr && lv[0].getEnd() > 0.01f, rr ? String (lv[0].getEnd(), 3) : e2);
+        }
+
+        // group tracks: two tones play into a group; the group's fader controls them both,
+        // a group stem has them, and a member's stem still has its own sound
+        {
+            auto groupSong = dir.getChildFile ("Group Song").getChildFile ("Group Song.basement");
+            groupSong.getParentDirectory().deleteRecursively();
+            groupSong.getParentDirectory().createDirectory();
+            {
+                auto e = songs::create (engine, groupSong);
+                e->ensureNumberOfAudioTracks (2);
+                auto ts = te::getAudioTracks (*e);
+                int i = 0;
+                for (auto& f : { a, b })
+                {
+                    te::AudioFile af (engine, f);
+                    ts[i]->insertWaveClip (f.getFileNameWithoutExtension(), f, { { 0_tp, te::TimeDuration::fromSeconds (af.getLength()) }, {} }, false);
+                    ++i;
+                }
+                auto g = groups::add (*e, "Drums", { ts[0], ts[1] });
+                expect ("group track made with both tracks playing into it",
+                        g != nullptr && groups::isGroup (*g) && groups::members (*g).size() == 2 && groups::of (*ts[0]) == g && groups::of (*ts[1]) == g);
+                expect ("a group can't play into one of its own tracks (no loops)", g != nullptr && ! groups::canRoute (*g, *ts[0]));
+                if (g != nullptr) g->getVolumePlugin()->setVolumeDb (-100.0f);   // group fader all the way down
+                te::EditFileOperations (*e).save (true, true, false);
+            }
+            auto peakOf = [&] (int trackIndex, const String& name) -> float
+            {
+                auto out = groupSong.getSiblingFile (name);
+                ExportOptions go; go.tail = false; go.trackIndex = trackIndex;
+                std::atomic<bool> d { false };
+                juce::File r; juce::String err;
+                auto job = exportSong (engine, groupSong, out, go, [&] (juce::File f, juce::String e) { r = f; err = e; d = true; });
+                for (int k = 0; k < 600 && ! d; ++k) juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+                AudioFormatManager fm; fm.registerBasicFormats();
+                std::unique_ptr<AudioFormatReader> rd (r.existsAsFile() ? fm.createReaderFor (r) : nullptr);
+                if (rd == nullptr) return -1.0f;
+                Range<float> lv[2];
+                rd->readMaxLevels (0, (int) rd->lengthInSamples, lv, 2);
+                return juce::jmax (lv[0].getEnd(), lv[1].getEnd(), -lv[0].getStart());
+            };
+            const float mix = peakOf (-1, "group mix.wav");
+            expect ("the group's fader controls its tracks (down = silent mix)", mix >= 0.0f && mix < 0.001f, String (mix, 4));
+            // the group is the third track; its stem is it and its members (its fader is down, so turn it up in a copy first)
+            {
+                auto e = songs::open (engine, groupSong);
+                if (e) { te::getAudioTracks (*e)[2]->getVolumePlugin()->setVolumeDb (0.0f); te::EditFileOperations (*e).save (true, true, false); }
+            }
+            const float groupStem = peakOf (2, "group stem.wav");
+            expect ("a group's stem has its tracks in it", groupStem > 0.05f, String (groupStem, 3));
+            {
+                auto e = songs::open (engine, groupSong);
+                if (e) { te::getAudioTracks (*e)[2]->getVolumePlugin()->setVolumeDb (-100.0f); te::EditFileOperations (*e).save (true, true, false); }
+            }
+            const float memberStem = peakOf (0, "member stem.wav");
+            expect ("a grouped track's stem is that track on its own", memberStem > 0.05f, String (memberStem, 3));
+            {
+                auto e = songs::open (engine, groupSong);
+                auto ts = e ? te::getAudioTracks (*e) : juce::Array<te::AudioTrack*>();
+                expect ("groups are saved with the song", ts.size() == 3 && groups::isGroup (*ts[2]) && groups::of (*ts[0]) == ts[2] && groups::of (*ts[1]) == ts[2]);
+            }
         }
 
         // the tuner's pitch reading: guitar low E (82.41 Hz), bass low E (41.20 Hz), A4 with harmonics

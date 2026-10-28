@@ -20,6 +20,7 @@ using namespace tracktion::literals;
 #include "edit/Meters.h"
 #include "edit/Components.h"
 #include "edit/Mixer.h"
+#include "edit/PianoRoll.h"
 #include "edit/Tuner.h"
 #include "edit/PluginWindow.h"
 #include "PluginFinder.h"
