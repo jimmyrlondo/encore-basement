@@ -204,6 +204,7 @@ public:
 private:
     void moved() override;
     void userTriedToCloseWindow() override          { plugin.windowState->closeWindowExplicitly(); }
+    bool keyPressed (const KeyPress& k) override    { return BasementHooks::forwardKey != nullptr && BasementHooks::forwardKey (k); }
     void closeButtonPressed() override              { userTriedToCloseWindow(); }
     float getDesktopScaleFactor() const override    { return 1.0f; }
 

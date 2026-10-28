@@ -17,6 +17,14 @@ class EncorePluginFormat : public juce::AudioPluginFormat
 public:
     struct Entry { const char* id; const char* name; juce::AudioPluginInstance* (*make)(); const char* category; };
 
+    /** Which plugin an identifier means: "encore:vox", or "encore:Encore Vox" as early songs saved it */
+    static const Entry* find (const juce::String& id)
+    {
+        for (auto& e : entries())
+            if (id.equalsIgnoreCase (e.id) || id.equalsIgnoreCase (juce::String ("encore:") + e.name)) return &e;
+        return nullptr;
+    }
+
     static const std::array<Entry, 4>& entries()
     {
         static const std::array<Entry, 4> list { {
@@ -47,13 +55,13 @@ public:
 
     void findAllTypesForFile (juce::OwnedArray<juce::PluginDescription>& results, const juce::String& id) override
     {
-        for (auto& e : entries()) if (id == e.id) results.add (new juce::PluginDescription (describe (e)));
+        if (auto* e = find (id)) results.add (new juce::PluginDescription (describe (*e)));
     }
 
     bool fileMightContainThisPluginType (const juce::String& id) override         { return id.startsWith ("encore:"); }
     juce::String getNameOfPluginFromIdentifier (const juce::String& id) override
     {
-        for (auto& e : entries()) if (id == e.id) return e.name;
+        if (auto* e = find (id)) return e->name;
         return id;
     }
     bool pluginNeedsRescanning (const juce::PluginDescription&) override          { return false; }
@@ -72,10 +80,9 @@ public:
 protected:
     void createPluginInstance (const juce::PluginDescription& d, double sampleRate, int blockSize, PluginCreationCallback callback) override
     {
-        for (auto& e : entries())
-            if (d.fileOrIdentifier == e.id)
+        if (auto* e = find (d.fileOrIdentifier))
             {
-                std::unique_ptr<juce::AudioPluginInstance> p (e.make());
+                std::unique_ptr<juce::AudioPluginInstance> p (e->make());
                 p->setRateAndBufferSizeDetails (sampleRate, blockSize);
                 callback (std::move (p), {});
                 return;

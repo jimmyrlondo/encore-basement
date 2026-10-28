@@ -37,10 +37,11 @@ namespace te = tracktion;
 /** What the arrange view needs from the app around it */
 struct BasementHooks
 {
-    static inline std::function<void()> findPlugins, showPluginManager;
+    static inline std::function<void()> findPlugins, showPluginManager, applyRecordOffset;
     static inline std::function<String()> pluginScanStatus;     // empty when no scan is running
     static inline juce::ApplicationCommandManager* commands = nullptr;
     static inline std::function<void (PopupMenu&, te::Clip&)> fillClipMenu;
+    static inline std::function<bool (const KeyPress&)> forwardKey;   // shortcuts typed in a plugin window still work
 };
 
 //==============================================================================

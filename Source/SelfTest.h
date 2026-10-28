@@ -219,10 +219,19 @@ namespace selftest
             }
             te::EditFileOperations (*e).save (true, true, false);
             auto reopened = songs::open (engine, songFile2);
-            int encoreOnTrack = 0;
+            int encoreOnTrack = 0, loaded = 0;
+            StringArray ids;
             for (auto p : te::getAudioTracks (*reopened)[0]->pluginList.getPlugins())
-                if (auto ext = dynamic_cast<te::ExternalPlugin*> (p)) if (ext->desc.pluginFormatName == "Encore") ++encoreOnTrack;
-            expect ("Encore plugins saved with the song", encoreOnTrack == 4, String (encoreOnTrack));
+                if (auto ext = dynamic_cast<te::ExternalPlugin*> (p); ext != nullptr && ext->desc.pluginFormatName == "Encore")
+                {
+                    ++encoreOnTrack;
+                    ids.add (ext->desc.fileOrIdentifier);
+                    for (int i = 0; i < 100 && ext->getAudioPluginInstance() == nullptr && ext->getLoadError().isEmpty(); ++i)
+                        MessageManager::getInstance()->runDispatchLoopUntil (20);
+                    if (ext->getAudioPluginInstance() != nullptr) ++loaded;
+                }
+            expect ("Encore plugins saved with the song and load again", encoreOnTrack == 4 && loaded == 4,
+                    String (loaded) + " of " + String (encoreOnTrack) + " loaded: " + ids.joinIntoString (", "));
         }
 
         out.appendText (String (failures == 0 ? "ALL PASSED" : "FAILED") + ": " + String (failures) + " failure(s)\n");

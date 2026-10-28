@@ -259,6 +259,16 @@ public:
             });
         };
         clearPluginFolders.onClick = [this] { props.setValue ("pluginFolders", juce::String()); update(); };
+        hubui::styleLabel (offsetL);
+        addAndMakeVisible (offsetL);
+        offset.setRange (-100.0, 100.0, 0.5);
+        offset.setValue (props.getDoubleValue ("recordOffsetMs", 0.0), juce::dontSendNotification);
+        offset.setTextValueSuffix (" ms");
+        offset.setTextBoxStyle (juce::Slider::TextBoxRight, false, 70, 24);
+        offset.setTooltip ("If recordings land a little late or early against what you played along to, move them by this much. "
+                           "Basement already allows for what your interface reports, so most people leave this at 0.");
+        offset.onValueChange = [this] { props.setValue ("recordOffsetMs", offset.getValue()); if (BasementHooks::applyRecordOffset) BasementHooks::applyRecordOffset(); };
+        addAndMakeVisible (offset);
         for (auto* b : { &changeFolder, &clearRecent, &addPluginFolder, &clearPluginFolders }) addAndMakeVisible (b);
         hubui::styleLabel (pluginsL);
         hubui::styleLabel (pluginFolders, 12.0f, theme::paper);
@@ -266,7 +276,7 @@ public:
         addAndMakeVisible (pluginsL);
         addAndMakeVisible (pluginFolders);
         update();
-        setSize (660, 340);
+        setSize (660, 390);
     }
 
     void paint (juce::Graphics& g) override { g.fillAll (theme::surface); }
@@ -277,6 +287,7 @@ public:
         auto a = row(); startL.setBounds (a.removeFromLeft (150)); startWith.setBounds (a);
         auto b = row(); folderL.setBounds (b.removeFromLeft (150)); changeFolder.setBounds (b.removeFromRight (100)); folderPath.setBounds (b.withTrimmedRight (8));
         auto c = row(); recentL.setBounds (c.removeFromLeft (150)); clearRecent.setBounds (c.removeFromLeft (180));
+        auto o = row(); offsetL.setBounds (o.removeFromLeft (150)); offset.setBounds (o.removeFromLeft (320));
         auto d = r.removeFromTop (90);
         pluginsL.setBounds (d.removeFromLeft (150).removeFromTop (34));
         auto buttons = d.removeFromTop (34);
@@ -291,7 +302,8 @@ private:
     juce::ComboBox startWith;
     juce::TextButton changeFolder { "Change..." }, clearRecent { "Clear recent songs" }, addPluginFolder { "Add a plugin folder..." }, clearPluginFolders { "Clear added" };
     juce::Label startL { {}, "When Basement opens" }, folderL { {}, "Songs folder" }, folderPath, recentL { {}, "Recent list" },
-                pluginsL { {}, "Plugin folders" }, pluginFolders;
+                pluginsL { {}, "Plugin folders" }, pluginFolders, offsetL { {}, "Recording offset" };
+    juce::Slider offset { juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight };
     void update()
     {
         folderPath.setText (props.getValue ("projectsFolder", "(not chosen yet)"), juce::dontSendNotification);
@@ -528,7 +540,9 @@ public:
 
         BasementHooks::commands = &commandManager;
         BasementHooks::fillClipMenu = [this] (juce::PopupMenu& m, te::Clip& c) { fillClipMenu (m, c); };
+        BasementHooks::forwardKey = [this] (const juce::KeyPress& k) { return keyPressed (k, nullptr); };
         BasementHooks::findPlugins = [this] { startPluginSearch(); };
+        BasementHooks::applyRecordOffset = [this] { setupInputs(); };
         BasementHooks::showPluginManager = [this] { showPluginList(); };
         BasementHooks::pluginScanStatus = [this] { return pluginFinder.status(); };
         pluginFinder.onProgress = [this] (juce::String s) { status (s); };
@@ -580,10 +594,12 @@ public:
     {
         stopTimer();
         BasementHooks::findPlugins = nullptr;
+        BasementHooks::applyRecordOffset = nullptr;
         BasementHooks::showPluginManager = nullptr;
         BasementHooks::pluginScanStatus = nullptr;
         BasementHooks::commands = nullptr;
         BasementHooks::fillClipMenu = nullptr;
+        BasementHooks::forwardKey = nullptr;
         setApplicationCommandManagerToWatch (nullptr);
         engine.getDeviceManager().removeChangeListener (this);
         closeSong (true);
@@ -1171,6 +1187,7 @@ private:
             if (auto wip = dm.getWaveInDevice (i))
             {
                 wip->setEnabled (true);
+                wip->setRecordAdjustmentMs (props().getDoubleValue ("recordOffsetMs", 0.0));
                 if (edit) wip->setBitDepth (SongInfo::readFrom (*edit, songFile).bitDepth);
             }
     }
@@ -2020,7 +2037,8 @@ private:
     void autosaveIfDue()
     {
         const auto now = juce::Time::getMillisecondCounter();
-        if (now - lastAutosave < 120000 || edit->getTransport().isRecording()) return;
+        const auto every = (juce::uint32) juce::jlimit (5, 3600, props().getIntValue ("autosaveSeconds", 120)) * 1000;
+        if (now - lastAutosave < every || edit->getTransport().isRecording()) return;
         lastAutosave = now;
         if (! edit->hasChangedSinceSaved()) return;
         auto f = autosaveFile();
