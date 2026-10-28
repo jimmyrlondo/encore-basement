@@ -16,6 +16,7 @@ using namespace tracktion::literals;
 
 #include "Theme.h"
 #include "edit/Utilities.h"
+#include "EncorePlugins.h"
 #include "edit/Meters.h"
 #include "edit/Components.h"
 #include "edit/PluginWindow.h"

@@ -37,8 +37,23 @@ juce_generate_juce_header(Basement)
 target_sources(Basement PRIVATE Source/Main.cpp)
 target_include_directories(Basement PRIVATE Source)
 
+# Encore's own plugins (Vox, Verb, Equalize, Master), built in: Basement hosts
+# their processors directly. The sources in encore/ come from the plugin repo
+# (tools/sync-encore-plugins.ps1); each plugin's files get its product name.
+foreach (entry "Vox|Encore Vox" "Verb|Encore Verb" "EQ|Encore Equalize" "Master|Encore Master")
+    string (REPLACE "|" ";" parts "${entry}")
+    list (GET parts 0 dir)
+    list (GET parts 1 product)
+    file (GLOB plugin_sources CONFIGURE_DEPENDS encore/plugins/${dir}/Source/*.cpp)
+    list (APPEND plugin_sources Source/encore/Make${dir}.cpp)
+    target_sources(Basement PRIVATE ${plugin_sources})
+    set_source_files_properties(${plugin_sources} PROPERTIES COMPILE_DEFINITIONS "JucePlugin_Name=\"${product}\"")
+endforeach()
+target_include_directories(Basement PRIVATE encore/shared)
+
 target_compile_definitions(Basement PRIVATE
-    JUCE_ASIO=1
+    $<$<PLATFORM_ID:Windows>:JUCE_ASIO=1>
+    BASEMENT_BUILTIN=1
     JUCE_PLUGINHOST_VST3=1
     JUCE_PLUGINHOST_AU=1
     JUCE_PLUGINHOST_LADSPA=1
@@ -57,6 +72,7 @@ target_link_libraries(Basement PRIVATE
     juce::juce_audio_devices
     juce::juce_audio_processors
     juce::juce_audio_utils
+    juce::juce_dsp
     juce::juce_recommended_config_flags
     juce::juce_recommended_lto_flags)
 

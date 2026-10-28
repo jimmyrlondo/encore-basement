@@ -19,6 +19,7 @@ namespace selftest
 
         auto* ui = new HeadlessUIBehaviour();
         te::Engine engine { "Encore Basement Plugintest", std::unique_ptr<te::UIBehaviour> (ui), std::make_unique<BasementBehaviour>() };
+        registerEncorePlugins (engine);
         auto& pm = engine.getPluginManager();
         VST3PluginFormat* vst3 = nullptr;
         for (auto* f : pm.pluginFormatManager.getFormats())

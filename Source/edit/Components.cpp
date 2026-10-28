@@ -310,8 +310,10 @@ inline void showEffectsMenu (te::Track::Ptr track, te::SelectionManager* sm, Com
     {
         auto maker = d.manufacturerName.trim().isEmpty() ? String ("Other") : d.manufacturerName.trim();
         auto item = [&edit, add, d] { add (edit.getPluginCache().createNewPlugin (te::ExternalPlugin::xmlTypeName, d)); };
-        if (maker.containsIgnoreCase ("Encore") || maker.containsIgnoreCase ("Sick & Sad"))
-            encore.addItem (d.name, item);
+        if (d.pluginFormatName == "Encore")
+            encore.addItem (d.name + "  (" + d.category + ")", item);
+        else if (maker.containsIgnoreCase ("Encore") || maker.containsIgnoreCase ("Sick & Sad"))
+            continue; // installed VST3 copies of the same plugins: the built-in ones replace them
         else if (d.isInstrument)
             instruments.addItem (d.name, false, false, nullptr);
         else
@@ -1388,8 +1390,6 @@ void TrackComponent::paint (Graphics& g)
 void TrackComponent::mouseDown (const MouseEvent& e)
 {
     if (! e.mods.isShiftDown()) editViewState.selectionManager.selectOnly (track.get());
-    // clicking an empty part of the lane moves the playhead there
-    track->edit.getTransport().setPosition (te::TimePosition::fromSeconds (jmax (0.0, editViewState.xToTime (e.x, getWidth()).inSeconds())));
 }
 
 void TrackComponent::mouseDrag (const MouseEvent& e)
@@ -1401,9 +1401,12 @@ void TrackComponent::mouseDrag (const MouseEvent& e)
     }
 }
 
-void TrackComponent::mouseUp (const MouseEvent&)
+void TrackComponent::mouseUp (const MouseEvent& e)
 {
     if (auto ec = findParentComponentOfClass<EditComponent>()) ec->lassoEnd();
+    // a click (not a box-select) on an empty part of the lane moves the playhead there
+    if (! e.mouseWasDraggedSinceMouseDown())
+        track->edit.getTransport().setPosition (te::TimePosition::fromSeconds (jmax (0.0, editViewState.xToTime (e.x, getWidth()).inSeconds())));
 }
 
 void TrackComponent::changeListenerCallback (ChangeBroadcaster*)
@@ -1833,12 +1836,110 @@ void TimeRulerComponent::paint (Graphics& g)
         g.setColour (theme::strong);
         g.fillRect (x, getHeight() - 10, 1, 10);
         g.setColour (theme::muted);
-        g.drawText (String (bar + 1), x + 4, 0, 40, getHeight() - 4, Justification::centredLeft);
+        g.drawText (String (bar + 1), x + 4, markerLaneH, 40, getHeight() - markerLaneH - 2, Justification::centredLeft);
     }
+    // markers: a flag and a name in the top lane
+    g.setColour (theme::base.withAlpha (0.5f));
+    g.fillRect (getLocalBounds().removeFromTop (markerLaneH));
+    g.setFont (FontOptions (11.0f, Font::bold));
+    for (auto m : markers::list (edit))
+    {
+        const int x = editViewState.timeToX (markers::timeOf (m), getWidth());
+        if (x < -150 || x > getWidth()) continue;
+        auto name = m["name"].toString();
+        const int w = GlyphArrangement::getStringWidthInt (g.getCurrentFont(), name) + 12;
+        g.setColour (theme::accent2);
+        g.fillRect (x, 0, 2, getHeight());
+        g.fillRoundedRectangle (Rectangle<float> ((float) x, 1.0f, (float) w, (float) markerLaneH - 3.0f), 3.0f);
+        g.setColour (theme::base);
+        g.drawText (name, x + 6, 1, w - 6, markerLaneH - 3, Justification::centredLeft);
+    }
+
     int px = editViewState.timeToX (edit.getTransport().getPosition(), getWidth());
-    Path p; p.addTriangle ((float) px - 6, 0, (float) px + 6, 0, (float) px, 9);
+    Path p; p.addTriangle ((float) px - 6, (float) markerLaneH, (float) px + 6, (float) markerLaneH, (float) px, (float) markerLaneH + 9);
     g.setColour (theme::paper);
     g.fillPath (p);
+}
+
+ValueTree TimeRulerComponent::markerAt (int x) const
+{
+    // the flag is the clickable part: from the marker line to the end of its name
+    Font f (FontOptions (11.0f, Font::bold));
+    for (auto m : markers::list (edit))
+    {
+        const int mx = editViewState.timeToX (markers::timeOf (m), getWidth());
+        if (x >= mx - 3 && x <= mx + GlyphArrangement::getStringWidthInt (f, m["name"].toString()) + 12) return m;
+    }
+    return {};
+}
+
+void TimeRulerComponent::mouseDown (const MouseEvent& e)
+{
+    movedMarker = false;
+    if (e.y < markerLaneH)
+    {
+        auto m = markerAt (e.x);
+        if (e.mods.isPopupMenu())
+        {
+            PopupMenu menu;
+            const auto t = te::TimePosition::fromSeconds (jmax (0.0, editViewState.xToTime (e.x, getWidth()).inSeconds()));
+            if (m.isValid())
+            {
+                PopupMenu names;
+                for (auto& n : markers::quickNames()) names.addItem (n, [this, m, n] { edit.getUndoManager().beginNewTransaction ("Rename marker"); auto mm = m; mm.setProperty ("name", n, &edit.getUndoManager()); });
+                menu.addSubMenu ("Name", names);
+                menu.addItem ("Rename...", [this, m] { renameMarker (m); });
+                menu.addItem ("Delete Marker", [this, m] { edit.getUndoManager().beginNewTransaction ("Delete marker"); markers::list (edit).removeChild (m, &edit.getUndoManager()); });
+            }
+            else
+            {
+                for (auto& n : markers::quickNames()) menu.addItem ("Add \"" + n + "\" here", [this, t, n] { markers::add (edit, editViewState.snap (t), n); });
+                menu.addItem ("Add Marker here", [this, t] { markers::add (edit, editViewState.snap (t)); });
+            }
+            menu.showMenuAsync (PopupMenu::Options());
+            return;
+        }
+        if (m.isValid())
+        {
+            draggedMarker = m;
+            edit.getTransport().setPosition (markers::timeOf (m)); // click a marker: jump there
+            return;
+        }
+    }
+    mouseDrag (e);
+}
+
+void TimeRulerComponent::mouseDrag (const MouseEvent& e)
+{
+    const auto t = te::TimePosition::fromSeconds (jmax (0.0, editViewState.xToTime (e.x, getWidth()).inSeconds()));
+    if (draggedMarker.isValid())
+    {
+        if (! e.mouseWasDraggedSinceMouseDown()) return;
+        if (! movedMarker) { edit.getUndoManager().beginNewTransaction ("Move marker"); movedMarker = true; }
+        draggedMarker.setProperty ("time", editViewState.snap (t, e.mods.isShiftDown()).inSeconds(), &edit.getUndoManager());
+        return;
+    }
+    edit.getTransport().setPosition (t);
+}
+
+void TimeRulerComponent::mouseDoubleClick (const MouseEvent& e)
+{
+    if (e.y >= markerLaneH) return;
+    if (auto m = markerAt (e.x); m.isValid()) renameMarker (m);
+    else markers::add (edit, editViewState.snap (te::TimePosition::fromSeconds (jmax (0.0, editViewState.xToTime (e.x, getWidth()).inSeconds()))));
+}
+
+void TimeRulerComponent::renameMarker (ValueTree m)
+{
+    auto* w = new AlertWindow ("Rename Marker", {}, MessageBoxIconType::NoIcon);
+    w->addTextEditor ("name", m["name"].toString());
+    w->addButton ("OK", 1, KeyPress (KeyPress::returnKey));
+    w->addButton ("Cancel", 0, KeyPress (KeyPress::escapeKey));
+    w->enterModalState (true, ModalCallbackFunction::create ([this, w, m] (int r) mutable
+    {
+        auto name = w->getTextEditorContents ("name").trim();
+        if (r == 1 && name.isNotEmpty()) { edit.getUndoManager().beginNewTransaction ("Rename marker"); m.setProperty ("name", name, &edit.getUndoManager()); }
+    }), true);
 }
 
 

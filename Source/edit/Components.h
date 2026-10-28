@@ -44,6 +44,43 @@ struct BasementHooks
 };
 
 //==============================================================================
+/** Song markers (Intro, Verse, Chorus...): saved in the song as BASEMENTMARKERS,
+    each MARKER with a time in seconds and a name. Changes are undoable. */
+namespace markers
+{
+    inline ValueTree list (te::Edit& e)  { return e.state.getOrCreateChildWithName ("BASEMENTMARKERS", nullptr); }
+
+    inline ValueTree add (te::Edit& e, te::TimePosition t, const String& name = {})
+    {
+        auto l = list (e);
+        ValueTree m ("MARKER");
+        m.setProperty ("time", t.inSeconds(), nullptr);
+        m.setProperty ("name", name.isNotEmpty() ? name : "Marker " + String (l.getNumChildren() + 1), nullptr);
+        e.getUndoManager().beginNewTransaction ("Add marker");
+        l.appendChild (m, &e.getUndoManager());
+        return m;
+    }
+
+    inline te::TimePosition timeOf (const ValueTree& m) { return te::TimePosition::fromSeconds ((double) m.getProperty ("time")); }
+
+    /** The marker after (dir 1) or before (dir -1) t, or t itself if there isn't one */
+    inline te::TimePosition next (te::Edit& e, te::TimePosition t, int dir)
+    {
+        std::optional<te::TimePosition> best;
+        for (auto m : list (e))
+        {
+            auto mt = timeOf (m);
+            if (dir > 0 ? mt > t + te::TimeDuration::fromSeconds (0.001) : mt < t - te::TimeDuration::fromSeconds (0.001))
+                if (! best || (dir > 0 ? mt < *best : mt > *best)) best = mt;
+        }
+        if (! best && dir < 0) return te::TimePosition();
+        return best.value_or (t);
+    }
+
+    inline StringArray quickNames() { return { "Intro", "Verse", "Pre-Chorus", "Chorus", "Bridge", "Solo", "Breakdown", "Outro" }; }
+}
+
+//==============================================================================
 void drawMidiClip (juce::Graphics&, te::MidiClip&, juce::Rectangle<int>, te::TimeRange);
 
 //==============================================================================
@@ -376,15 +413,19 @@ class TimeRulerComponent : public Component,
 public:
     TimeRulerComponent (te::Edit& e, EditViewState& evs) : edit (e), editViewState (evs) { startTimerHz (10); }
     void paint (Graphics& g) override;
-    void mouseDown (const MouseEvent& e) override { mouseDrag (e); }
-    void mouseDrag (const MouseEvent& e) override
-    {
-        edit.getTransport().setPosition (te::TimePosition::fromSeconds (jmax (0.0, editViewState.xToTime (e.x, getWidth()).inSeconds())));
-    }
+    void mouseDown (const MouseEvent& e) override;
+    void mouseDrag (const MouseEvent& e) override;
+    void mouseUp (const MouseEvent&) override       { draggedMarker = {}; }
+    void mouseDoubleClick (const MouseEvent& e) override;
+    static constexpr int markerLaneH = 18;
 private:
     void timerCallback() override { repaint(); }
+    ValueTree markerAt (int x) const;
+    void renameMarker (ValueTree m);
     te::Edit& edit;
     EditViewState& editViewState;
+    ValueTree draggedMarker;
+    bool movedMarker = false;
 };
 
 //==============================================================================
@@ -415,7 +456,7 @@ public:
     void mouseWheelMove (const MouseEvent&, const MouseWheelDetails&) override;
     void paint (Graphics&) override;
 
-    static constexpr int rulerHeight = 28, trackHeight = 88, trackGap = 1, headerWidth = 250, footerWidth = 170;
+    static constexpr int rulerHeight = 46, trackHeight = 88, trackGap = 1, headerWidth = 250, footerWidth = 170;
 
 private:
     void valueTreeChanged() override {}

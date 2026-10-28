@@ -439,6 +439,7 @@ public:
         cmdNormalize, cmdGainUp, cmdGainDown, cmdGainReset, cmdFadeIn, cmdFadeOut, cmdRemoveFades, cmdReverse,
         // Media
         cmdShowSongFolder, cmdShowRecordings, cmdShowAudio, cmdChangeProjectsFolder,
+        cmdAddMarker, cmdPrevMarker, cmdNextMarker,
         // Transport
         cmdPlay, cmdRecord, cmdToStart, cmdToEnd, cmdBarBack, cmdBarForward, cmdLoop, cmdLoopToSelection, cmdClick,
         cmdCountNone, cmdCount1Beat, cmdCount2Beats, cmdCount1Bar, cmdCount2Bars, cmdMetronome, cmdPunch,
@@ -453,6 +454,7 @@ public:
     MainComponent()
     {
         basementLog ("startup: engine ready in " + juce::String (juce::Time::getMillisecondCounterHiRes() - constructionStarted, 0) + " ms");
+        registerEncorePlugins (engine);
         behaviour->songFolder = [this] { return songFile.getParentDirectory(); };
 
         commandManager.registerAllCommandsForTarget (this);
@@ -757,8 +759,9 @@ public:
                 break;
             case 2: // Project
                 add (cmdAddTrack); add (cmdDuplicateTrack); add (cmdRenameTrack); add (cmdRemoveTrack); m.addSeparator();
-                add (cmdSongSetup);
-                later ({ "Add Instrument Track", "Add Group Track", "Add FX Track", "Markers", "Arranger Track" });
+                add (cmdSongSetup); m.addSeparator();
+                add (cmdAddMarker);
+                later ({ "Add Instrument Track", "Add Group Track", "Add FX Track", "Arranger Track" });
                 break;
             case 3: // Audio
                 add (cmdNormalize); add (cmdGainUp); add (cmdGainDown); add (cmdGainReset); m.addSeparator();
@@ -780,7 +783,7 @@ public:
             case 7: // Transport
             {
                 add (cmdPlay); add (cmdRecord); m.addSeparator();
-                add (cmdToStart); add (cmdToEnd); add (cmdBarBack); add (cmdBarForward); m.addSeparator();
+                add (cmdToStart); add (cmdToEnd); add (cmdBarBack); add (cmdBarForward); add (cmdPrevMarker); add (cmdNextMarker); m.addSeparator();
                 add (cmdLoop); add (cmdLoopToSelection); add (cmdPunch); m.addSeparator();
                 add (cmdClick); add (cmdMetronome);
                 juce::PopupMenu count;
@@ -850,6 +853,7 @@ public:
         else if (c == KP::deleteKey) key = "Del";
         else if (c == KP::backspaceKey) key = "Backspace";
         else if (c == KP::F2Key) key = "F2";
+        else if (c == KP::insertKey) key = "Insert";
         else key = juce::String::charToString ((juce::juce_wchar) c).toUpperCase();
         parts.add (key);
         return parts.joinIntoString ("+");
@@ -926,6 +930,9 @@ public:
             case cmdRenameTrack:    set ("Rename Track...", "Project", songShown && selectedTrack() != nullptr); key (KP::F2Key, none); break;
             case cmdRemoveTrack:    set ("Remove Selected Track", "Project", songShown && selectedTrack() != nullptr); break;
             case cmdSongSetup:      set ("Song Setup...", "Project", song); key ('s', shift); break;
+            case cmdAddMarker:      set ("Add Marker at Playhead", "Project", songShown); key (KP::insertKey, none); break;
+            case cmdPrevMarker:     set ("Previous Marker", "Transport", songShown); key (KP::leftKey, shift); break;
+            case cmdNextMarker:     set ("Next Marker", "Transport", songShown); key (KP::rightKey, shift); break;
 
             case cmdNormalize:      set ("Normalize Clip (to -0.3 dB)", "Audio", anyClip); break;
             case cmdGainUp:         set ("Clip Gain +1 dB", "Audio", anyClip); key ('=', alt); break;
@@ -956,7 +963,7 @@ public:
             case cmdCount1Bar:      set ("1 Bar", "Transport", song); info.setTicked (song && edit->getCountInMode() == te::Edit::CountIn::oneBar); break;
             case cmdCount2Bars:     set ("2 Bars", "Transport", song); info.setTicked (song && edit->getCountInMode() == te::Edit::CountIn::twoBar); break;
             case cmdMetronome:      set ("Metronome Settings...", "Transport", song); break;
-            case cmdPunch:          set ("Punch In/Out (records only inside the loop range)", "Transport", songShown); key ('i', none); info.setTicked (song && edit->recordingPunchInOut.get()); break;
+            case cmdPunch:          set ("Punch In/Out", "Transport", songShown); key ('i', none); info.setTicked (song && edit->recordingPunchInOut.get()); break;
 
             case cmdAudioSetup:     set ("Audio Setup...", "Studio"); break;
             case cmdPlugins:        set ("Plugin Manager...", "Studio"); break;
@@ -1027,6 +1034,9 @@ public:
             case cmdRenameTrack:    renameTrack(); return true;
             case cmdRemoveTrack:    if (auto t = selectedTrack()) { edit->deleteTrack (t); selectionManager.deselectAll(); } return true;
             case cmdSongSetup:      songSetup(); return true;
+            case cmdAddMarker:      markers::add (*edit, edit->getTransport().getPosition()); status ("Marker added: double-click it on the ruler to rename, right-click for quick names"); return true;
+            case cmdPrevMarker:     edit->getTransport().setPosition (markers::next (*edit, edit->getTransport().getPosition(), -1)); return true;
+            case cmdNextMarker:     edit->getTransport().setPosition (markers::next (*edit, edit->getTransport().getPosition(), 1)); return true;
 
             case cmdNormalize:      normalizeClips(); return true;
             case cmdGainUp:         forClips ("Clip gain", [] (te::AudioClipBase& c) { c.setGainDB (juce::jmin (24.0f, c.getGainDB() + 1.0f)); }); return true;
@@ -1644,6 +1654,7 @@ private:
         copyClips();
         pasteClips (end, track);
         clipboard = keep;
+        status ("Duplicated " + juce::String (clips.size()) + (clips.size() == 1 ? " clip" : " clips"));
     }
 
     /** Splits the selected clips at the playhead, or every clip under it if none are selected */
@@ -2061,11 +2072,14 @@ private:
         auto& tr = edit->getTransport();
         if (auto* ctx = tr.getCurrentPlaybackContext()) masterMeter.setSource (&ctx->masterLevels);
         const auto pos = tr.getPosition().inSeconds();
-        timeLabel.setText (juce::String ((int) pos / 60) + ":" + juce::String (std::fmod (pos, 60.0), 1).paddedLeft ('0', 4), juce::dontSendNotification);
+        const double a = std::abs (pos);
+        timeLabel.setText ((pos < 0 ? "-" : "") + juce::String ((int) a / 60) + ":" + juce::String (std::fmod (a, 60.0), 1).paddedLeft ('0', 4), juce::dontSendNotification);
         auto& ts = edit->tempoSequence;
         const int num = juce::jmax (1, ts.getTimeSig (0)->numerator.get());
         const double beats = ts.toBeats (tr.getPosition()).inBeats();
-        barLabel.setText ("Bar " + juce::String ((int) (beats / num) + 1) + "." + juce::String ((int) std::fmod (beats, (double) num) + 1), juce::dontSendNotification);
+        barLabel.setText (pos < 0 ? juce::String ("Count-in")
+                                  : "Bar " + juce::String ((int) (beats / num) + 1) + "." + juce::String ((int) std::fmod (beats, (double) num) + 1),
+                          juce::dontSendNotification);
         playButton.setButtonText (tr.isPlaying() ? "Stop" : "Play");
         if (currentExport) status ("Exporting... " + juce::String (juce::roundToInt (currentExport->progress() * 100)) + "%");
         recordButton.setToggleState (tr.isRecording(), juce::dontSendNotification);

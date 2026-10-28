@@ -76,6 +76,7 @@ namespace selftest
         auto* behaviour = new BasementBehaviour();
         auto* ui = new HeadlessUIBehaviour();
         te::Engine engine { "Encore Basement Selftest", std::unique_ptr<te::UIBehaviour> (ui), std::unique_ptr<te::EngineBehaviour> (behaviour) };
+        registerEncorePlugins (engine);
         auto songFile = songDir.getChildFile ("Self Test.basement");
         behaviour->songFolder = [songFile] { return songFile.getParentDirectory(); };
 
@@ -180,6 +181,48 @@ namespace selftest
             // the template list includes the built-in starting points
             auto all = templates::all();
             expect ("built-in templates", all.size() >= 6 && all[2].trackNames.size() == 10 && all[3].allInputs && all[5].importStems);
+        }
+
+        // the built-in Encore plugins: each loads on a track, passes audio, and keeps its settings
+        {
+            auto songFile2 = dir.getChildFile ("Encore Plugins").getChildFile ("Encore Plugins.basement");
+            songFile2.getParentDirectory().deleteRecursively();
+            songFile2.getParentDirectory().createDirectory();
+            auto e = songs::create (engine, songFile2);
+            e->ensureNumberOfAudioTracks (1);
+            auto track = te::getAudioTracks (*e)[0];
+            for (auto& entry : EncorePluginFormat::entries())
+            {
+                auto plugin = e->getPluginCache().createNewPlugin (te::ExternalPlugin::xmlTypeName, EncorePluginFormat::describe (entry));
+                track->pluginList.insertPlugin (plugin, 0, nullptr);
+                auto* ext = dynamic_cast<te::ExternalPlugin*> (plugin.get());
+                for (int i = 0; i < 100 && ext != nullptr && ext->getAudioPluginInstance() == nullptr; ++i)
+                    MessageManager::getInstance()->runDispatchLoopUntil (20);
+                auto* inst = ext != nullptr ? ext->getAudioPluginInstance() : nullptr;
+                bool passes = false, editor = false;
+                if (inst != nullptr)
+                {
+                    inst->prepareToPlay (48000, 512);
+                    AudioBuffer<float> buf (2, 512);
+                    for (int i = 0; i < 512; ++i) buf.setSample (0, i, 0.2f * (float) std::sin (i * 0.05)), buf.setSample (1, i, buf.getSample (0, i));
+                    MidiBuffer midi;
+                    for (int block = 0; block < 20; ++block) inst->processBlock (buf, midi);
+                    passes = std::isfinite (buf.getMagnitude (0, 512));
+                    std::unique_ptr<AudioProcessorEditor> ed (inst->createEditorIfNeeded());
+                    editor = ed != nullptr;
+                    inst->editorBeingDeleted (ed.get());
+                    ed = nullptr;
+                    inst->releaseResources();
+                }
+                expect (String ("built-in ") + entry.name + " loads, runs and has its window", inst != nullptr && passes && editor,
+                        ext != nullptr ? ext->getLoadError() : String());
+            }
+            te::EditFileOperations (*e).save (true, true, false);
+            auto reopened = songs::open (engine, songFile2);
+            int encoreOnTrack = 0;
+            for (auto p : te::getAudioTracks (*reopened)[0]->pluginList.getPlugins())
+                if (auto ext = dynamic_cast<te::ExternalPlugin*> (p)) if (ext->desc.pluginFormatName == "Encore") ++encoreOnTrack;
+            expect ("Encore plugins saved with the song", encoreOnTrack == 4, String (encoreOnTrack));
         }
 
         out.appendText (String (failures == 0 ? "ALL PASSED" : "FAILED") + ": " + String (failures) + " failure(s)\n");
