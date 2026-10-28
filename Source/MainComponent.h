@@ -459,6 +459,7 @@ public:
         cmdAudioSetup, cmdPlugins, cmdFindPlugins, cmdReassignInputs,
         // Window
         cmdEffects, cmdZoomIn, cmdZoomOut, cmdZoomFit, cmdHeightSmall, cmdHeightMedium, cmdHeightLarge, cmdHeightHuge,
+        cmdMixer, cmdAddFxReverb, cmdAddFxDelay, cmdAddFxEmpty,
         // Help
         cmdShortcuts, cmdGuide, cmdReport, cmdUpdates, cmdLogFolder, cmdAbout
     };
@@ -490,6 +491,10 @@ public:
         for (auto* l : { &timeLabel, &barLabel, &tempoLabel, &tempoCaption, &statusLabel })
             addChildComponent (l);
         addChildComponent (masterMeter);
+        addChildComponent (mixerButton);
+        mixerButton.setTooltip ("Switch between the tracks and the mixer (F3)");
+        mixerButton.setMouseClickGrabsKeyboardFocus (false);
+        mixerButton.onClick = [this] { invoke (cmdMixer); };
         addChildComponent (countIn);
         deviceLabel.setColour (juce::Label::textColourId, theme::muted);
         deviceLabel.setJustificationType (juce::Justification::centredRight);
@@ -665,21 +670,24 @@ public:
         tempoCaption.setBounds (tempo.removeFromTop (12));
         tempoLabel.setBounds (tempo);
         t.removeFromLeft (8);
-        place (clickButton, 60, 8);
-        place (snapBox, 112);
+        place (clickButton, 56, 6);
+        place (snapBox, 104, 6);
+        place (mixerButton, 66);
+        mixerButton.setToggleState (mixerShown, juce::dontSendNotification);
         // narrow windows drop the extras first (they're all in the menus too)
         exportButton.setBounds (t.removeFromRight (110)); t.removeFromRight (10);
         masterMeter.setBounds (t.removeFromRight (100).withSizeKeepingCentre (100, 14)); t.removeFromRight (10);
-        const bool roomy = t.getWidth() >= 98 + 116 + 16;
+        const bool roomy = t.getWidth() >= 80 + 78 + 16;
         importButton.setVisible (roomy && ! hubShown);
         addTrackButton.setVisible (roomy && ! hubShown);
         if (roomy)
         {
-            importButton.setBounds (t.removeFromRight (116)); t.removeFromRight (6);
-            addTrackButton.setBounds (t.removeFromRight (98)); t.removeFromRight (10);
+            importButton.setBounds (t.removeFromRight (78)); t.removeFromRight (6);
+            addTrackButton.setBounds (t.removeFromRight (80)); t.removeFromRight (10);
         }
 
         if (editComponent) editComponent->setBounds (r);
+        if (mixer) mixer->setBounds (r);
         countIn.setBounds (r);
     }
 
@@ -776,8 +784,9 @@ public:
             case 2: // Project
                 add (cmdAddTrack); add (cmdDuplicateTrack); add (cmdRenameTrack); add (cmdRemoveTrack); m.addSeparator();
                 add (cmdSongSetup); m.addSeparator();
-                add (cmdAddMarker);
-                later ({ "Add Instrument Track", "Add Group Track", "Add FX Track", "Arranger Track" });
+                add (cmdAddMarker); m.addSeparator();
+                add (cmdAddFxReverb); add (cmdAddFxDelay); add (cmdAddFxEmpty);
+                later ({ "Add Instrument Track", "Add Group Track", "Arranger Track" });
                 break;
             case 3: // Audio
                 add (cmdNormalize); add (cmdGainUp); add (cmdGainDown); add (cmdGainReset); m.addSeparator();
@@ -813,7 +822,7 @@ public:
                 m.addSeparator(); add (cmdPreferences);
                 break;
             case 9: // Window
-                add (cmdHub); m.addSeparator();
+                add (cmdHub); add (cmdMixer); m.addSeparator();
                 add (cmdEffects); m.addSeparator();
                 add (cmdZoomIn); add (cmdZoomOut); add (cmdZoomFit); m.addSeparator();
                 {
@@ -823,7 +832,7 @@ public:
                     heights.addItem (comingSoonId, "Or drag a track's bottom edge (Alt: all tracks)", false);
                     m.addSubMenu ("Track Height", heights, edit != nullptr && ! hubShown);
                 }
-                later ({ "Mixer", "Clip Editor" });
+                later ({ "Clip Editor" });
                 break;
             case 10: // Help
                 add (cmdShortcuts); add (cmdGuide); m.addSeparator();
@@ -870,6 +879,7 @@ public:
         else if (c == KP::backspaceKey) key = "Backspace";
         else if (c == KP::F2Key) key = "F2";
         else if (c == KP::insertKey) key = "Insert";
+        else if (c == KP::F3Key) key = "F3";
         else key = juce::String::charToString ((juce::juce_wchar) c).toUpperCase();
         parts.add (key);
         return parts.joinIntoString ("+");
@@ -994,6 +1004,10 @@ public:
             case cmdHeightMedium:   set ("Medium", "Window", songShown); break;
             case cmdHeightLarge:    set ("Large", "Window", songShown); break;
             case cmdHeightHuge:     set ("Extra Large", "Window", songShown); break;
+            case cmdMixer:          set ("Mixer", "Window", songShown); key (KP::F3Key, none); info.setTicked (mixerShown); break;
+            case cmdAddFxReverb:    set ("Add FX Track: Reverb", "Project", songShown); break;
+            case cmdAddFxDelay:     set ("Add FX Track: Delay", "Project", songShown); break;
+            case cmdAddFxEmpty:     set ("Add FX Track: Empty", "Project", songShown); break;
 
             case cmdShortcuts:      set ("Keyboard Shortcuts...", "Help"); break;
             case cmdGuide:          set ("User Guide", "Help"); break;
@@ -1098,6 +1112,10 @@ public:
             case cmdHeightMedium:   setAllTrackHeights (EditComponent::trackHeight); return true;
             case cmdHeightLarge:    setAllTrackHeights (150); return true;
             case cmdHeightHuge:     setAllTrackHeights (260); return true;
+            case cmdMixer:          showMixer (! mixerShown); return true;
+            case cmdAddFxReverb:    addFxTrack (0); return true;
+            case cmdAddFxDelay:     addFxTrack (1); return true;
+            case cmdAddFxEmpty:     addFxTrack (2); return true;
 
             case cmdShortcuts:      showShortcuts(); return true;
             case cmdGuide:          url ("https://github.com/jimmyrlondo/encore-basement#readme"); return true;
@@ -1128,9 +1146,12 @@ private:
     juce::Array<juce::File> recentFiles;
 
     juce::TextButton homeButton { "|<" }, playButton { "Play" }, recordButton { "Record" }, loopButton { "Loop" }, clickButton { "Click" },
-                     addTrackButton { "Add track" }, importButton { "Import audio" }, exportButton { "Export mix" };
+                     addTrackButton { "+ Track" }, importButton { "Import" }, exportButton { "Export mix" };
     juce::Label timeLabel { {}, "0:00.0" }, barLabel { {}, "Bar 1.1" }, tempoLabel { {}, "120" }, tempoCaption { {}, "BPM" }, statusLabel;
     LevelMeter masterMeter { LevelMeter::Orientation::horizontal };
+    std::unique_ptr<MixerComponent> mixer;
+    bool mixerShown = false;
+    juce::TextButton mixerButton { "Mixer" };
     juce::ComboBox snapBox;
     juce::Label deviceLabel;
     CountInOverlay countIn;
@@ -1151,9 +1172,10 @@ private:
         if (show) hub->refresh (edit ? songTitle() : juce::String());
         const bool tools = ! show && edit != nullptr;
         for (auto* c : std::initializer_list<juce::Component*> { &homeButton, &playButton, &recordButton, &loopButton, &clickButton,
-                                                                 &exportButton, &timeLabel, &barLabel, &tempoLabel, &tempoCaption, &masterMeter, &snapBox })
+                                                                 &exportButton, &timeLabel, &barLabel, &tempoLabel, &tempoCaption, &masterMeter, &snapBox, &mixerButton })
             c->setVisible (tools);
-        if (editComponent) editComponent->setVisible (! show);
+        if (editComponent) editComponent->setVisible (! show && ! mixerShown);
+        if (mixer) mixer->setVisible (! show && mixerShown);
         commandManager.commandStatusChanged();
         resized();
         repaint();
@@ -1328,6 +1350,7 @@ private:
         edit->getTransport().stop (false, true);
         edit->getTransport().removeChangeListener (this);
         selectionManager.deselectAll();
+        mixer = nullptr;
         editComponent = nullptr;
         edit = nullptr;
         songFile = juce::File();
@@ -1370,6 +1393,18 @@ private:
 
         editComponent = std::make_unique<EditComponent> (*edit, selectionManager);
         addAndMakeVisible (*editComponent);
+        mixer = std::make_unique<MixerComponent> (*edit, selectionManager);
+        mixer->onAddFxTrack = [this]
+        {
+            juce::PopupMenu m;
+            m.addItem ("Reverb (Encore Verb)", [this] { addFxTrack (0); });
+            m.addItem ("Delay", [this] { addFxTrack (1); });
+            m.addItem ("Empty (add your own effect)", [this] { addFxTrack (2); });
+            m.showMenuAsync ({});
+        };
+        addChildComponent (*mixer);
+        mixer->setVisible (mixerShown);
+        editComponent->setVisible (! mixerShown);
         snapBox.setSelectedId (editComponent->getEditViewState().snapMode.get() + 1, juce::dontSendNotification);
         props().setValue ("lastSong", f.getFullPathName());
         recent::remember (props(), *edit, songFile);
@@ -1955,6 +1990,31 @@ private:
             m.addSeparator();
             m.addItem ("Show File in Folder", f.existsAsFile(), false, [f] { f.revealToUser(); });
         }
+    }
+
+    void showMixer (bool show)
+    {
+        mixerShown = show;
+        if (editComponent) editComponent->setVisible (! hubShown && ! show);
+        if (mixer) mixer->setVisible (! hubShown && show);
+        mixerButton.setToggleState (show, juce::dontSendNotification);
+        commandManager.commandStatusChanged();
+    }
+
+    /** 0 reverb (Encore Verb), 1 delay, 2 empty */
+    void addFxTrack (int kind)
+    {
+        juce::PluginDescription verb;
+        for (auto& d : engine.getPluginManager().knownPluginList.getTypes())
+            if (d.pluginFormatName == "Encore" && d.name == "Encore Verb") verb = d;
+        int n = fx::tracks (*edit).size() + 1;
+        juce::String name = kind == 0 ? "Reverb" : kind == 1 ? "Delay" : "FX " + juce::String (n);
+        for (auto t : fx::tracks (*edit)) if (t->getName() == name) name << " " << n;
+        auto t = kind == 0 ? fx::addTrack (*edit, name, te::ExternalPlugin::xmlTypeName, verb)
+               : kind == 1 ? fx::addTrack (*edit, name, te::DelayPlugin::xmlTypeName)
+                           : fx::addTrack (*edit, name, {});
+        if (t != nullptr)
+            status ("Added the FX track \"" + name + "\": turn up its send on any track in the mixer (F3)");
     }
 
     void setAllTrackHeights (int h)

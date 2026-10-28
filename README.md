@@ -40,8 +40,10 @@ From [Releases](https://github.com/jimmyrlondo/encore-basement/releases):
   Shift-click, nudge, cut, copy, paste, duplicate, split, clip gain,
   normalize, reverse, mute, takes, and right-click any clip for all of it.
   Markers along the ruler (Intro, Verse, Chorus...) to jump around the song.
-- **Mix**: volume, pan, mute, solo and a meter per track, a master meter,
-  and effects on any track:
+- **Mix**: a mixer (F3) with a channel strip per track (effects, sends,
+  pan, mute, solo, record, fader and meter), FX tracks that several tracks
+  can send to (one shared reverb or delay), and a master strip with effects
+  on the whole mix. Effects on any track:
   - **Encore's plugins, built in**: Encore Vox (a whole vocal chain with tune
     and harmony), Verb, Equalize and Master. Nothing to install.
   - **Your plugins**: Basement finds your VST3 plugins by itself (in the
@@ -64,7 +66,6 @@ Help > Keyboard Shortcuts has the full list.
 
 ## Coming next
 
-- A mixer view with sends, FX tracks and a master bus with its own plugins
 - Volume and pan automation lanes
 - Exporting stems, MP3 and FLAC, and mastering on export
 - Sign in with Encore and send a song to your catalog as a draft
