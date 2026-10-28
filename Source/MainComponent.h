@@ -95,7 +95,20 @@ struct SongExport
     float progress() const { return handle ? handle->getProgress() : 0.0f; }
 };
 
-inline std::shared_ptr<SongExport> exportSong (te::Engine& engine, const juce::File& songFile, const juce::File& dest, double sampleRate,
+/** How a mix (or one track) is written out */
+struct ExportOptions
+{
+    double sampleRate = 48000.0;
+    int bitDepth = 24;                 // 16, 24, or 32 (WAV only: float)
+    bool flac = false;
+    std::optional<te::TimeRange> range;// the whole song when empty
+    int trackIndex = -1;               // one audio track (a stem), or -1 for the mix
+    bool masterEffects = true;
+    bool tail = true;                  // let reverbs and delays ring out (2 s)
+    bool loudness = false;             // normalise to -14 LUFS (streaming level)
+};
+
+inline std::shared_ptr<SongExport> exportSong (te::Engine& engine, const juce::File& songFile, const juce::File& dest, ExportOptions o,
                                                std::function<void (juce::File, juce::String)> done)
 {
     auto job = std::make_shared<SongExport>();
@@ -104,15 +117,21 @@ inline std::shared_ptr<SongExport> exportSong (te::Engine& engine, const juce::F
 
     te::Renderer::Parameters p (*job->edit);
     p.destFile = dest;
-    p.audioFormat = engine.getAudioFileFormatManager().getWavFormat();
-    p.bitDepth = 24;
-    p.sampleRateForAudio = sampleRate;
-    p.time = { 0_tp, job->edit->getLength() };
-    p.tracksToDo = te::toBitSet (te::getAllTracks (*job->edit));
+    p.audioFormat = o.flac ? engine.getAudioFileFormatManager().getFlacFormat() : engine.getAudioFileFormatManager().getWavFormat();
+    p.bitDepth = o.flac ? juce::jmin (24, o.bitDepth) : o.bitDepth;
+    p.sampleRateForAudio = o.sampleRate;
+    p.time = o.range ? *o.range : te::TimeRange { 0_tp, job->edit->getLength() };
+    if (o.tail) p.endAllowance = te::TimeDuration::fromSeconds (2.0);
+    auto tracks = te::getAudioTracks (*job->edit);
+    if (o.trackIndex >= 0 && o.trackIndex < tracks.size())
+        p.tracksToDo = te::toBitSet (juce::Array<te::Track*> { tracks[o.trackIndex] });
+    else
+        p.tracksToDo = te::toBitSet (te::getAllTracks (*job->edit));
     p.usePlugins = true;
-    p.useMasterPlugins = true;
+    p.useMasterPlugins = o.masterEffects && o.trackIndex < 0;
     p.canRenderInMono = false;
-    p.ditheringEnabled = true;
+    p.ditheringEnabled = p.bitDepth < 32;
+    if (o.loudness) { p.shouldNormaliseByLUFS = true; p.normaliseToLevelDb = -14.0f; }
     dest.deleteFile();
     std::weak_ptr<SongExport> weak = job;
     job->handle = te::EditRenderer::render (p, [weak, done] (tl::expected<juce::File, std::string> res)
@@ -313,6 +332,113 @@ private:
         pluginFolders.setText ("Always searched: the standard VST3 folders. "
                                + (added.isEmpty() ? juce::String ("Add any other folder you keep plugins in.") : "Also: " + added.joinIntoString ("; ")),
                                juce::dontSendNotification);
+    }
+};
+
+/** File > Export > Audio Mixdown: the mix or every track (stems), whole song or loop, format and level */
+class ExportComponent : public juce::Component
+{
+public:
+    std::function<void (ExportOptions, bool stems, juce::File folder, juce::String baseName)> onExport;
+
+    ExportComponent (const juce::String& songName, const juce::File& defaultFolder, double songRate, bool hasLoop)
+        : folder (defaultFolder)
+    {
+        for (auto* l : { &whatL, &rangeL, &formatL, &rateL, &whereL, &nameL }) { hubui::styleLabel (*l); addAndMakeVisible (l); }
+        what.addItemList ({ "The whole mix", "Each track as its own file (stems)" }, 1);
+        range.addItemList ({ "Whole song", "Loop range" }, 1);
+        range.setItemEnabled (2, hasLoop);
+        format.addItemList ({ "WAV 24-bit", "WAV 16-bit (CD)", "WAV 32-bit float", "FLAC 24-bit" }, 1);
+        rate.addItem ("Same as the song (" + juce::String (songRate / 1000.0, 1) + " kHz)", 1);
+        rate.addItemList ({ "44.1 kHz", "48 kHz", "96 kHz" }, 2);
+        for (auto* c : { &what, &range, &format, &rate }) { c->setSelectedId (1, juce::dontSendNotification); hubui::styleCombo (*c); addAndMakeVisible (c); }
+        what.onChange = [this] { master.setEnabled (what.getSelectedId() == 1); loud.setEnabled (what.getSelectedId() == 1); };
+        hubui::styleEditor (name);
+        name.setText (songName, false);
+        addAndMakeVisible (name);
+        hubui::styleLabel (path, 12.0f, theme::paper);
+        path.setText (folder.getFullPathName(), juce::dontSendNotification);
+        addAndMakeVisible (path);
+        change.onClick = [this]
+        {
+            auto chooser = std::make_shared<juce::FileChooser> ("Export to", folder);
+            chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories, [this, chooser] (const juce::FileChooser&)
+            {
+                if (chooser->getResult() == juce::File()) return;
+                folder = chooser->getResult();
+                path.setText (folder.getFullPathName(), juce::dontSendNotification);
+            });
+        };
+        addAndMakeVisible (change);
+        master.setToggleState (true, juce::dontSendNotification);
+        tail.setToggleState (true, juce::dontSendNotification);
+        for (auto* b : { &master, &tail, &loud })
+        {
+            b->setColour (juce::ToggleButton::textColourId, theme::paper);
+            b->setColour (juce::ToggleButton::tickColourId, theme::accent);
+            addAndMakeVisible (b);
+        }
+        go.setColour (juce::TextButton::buttonColourId, theme::brand);
+        go.onClick = [this] { start(); };
+        cancel.onClick = [this] { close(); };
+        addAndMakeVisible (go);
+        addAndMakeVisible (cancel);
+        songSampleRate = songRate;
+        setSize (560, 470);
+    }
+
+    void paint (juce::Graphics& g) override { g.fillAll (theme::surface); }
+    void resized() override
+    {
+        auto r = getLocalBounds().reduced (24, 20);
+        auto row = [&r] (juce::Label& l, int h = 30) { auto x = r.removeFromTop (h); r.removeFromTop (10); l.setBounds (x.removeFromLeft (120)); return x; };
+        what.setBounds (row (whatL));
+        range.setBounds (row (rangeL).removeFromLeft (220));
+        format.setBounds (row (formatL).removeFromLeft (220));
+        rate.setBounds (row (rateL).removeFromLeft (260));
+        name.setBounds (row (nameL));
+        auto w = row (whereL);
+        change.setBounds (w.removeFromRight (90));
+        path.setBounds (w.withTrimmedRight (8));
+        r.removeFromTop (4);
+        master.setBounds (r.removeFromTop (26).withTrimmedLeft (120));
+        tail.setBounds (r.removeFromTop (26).withTrimmedLeft (120));
+        loud.setBounds (r.removeFromTop (26).withTrimmedLeft (120));
+        auto b = r.removeFromBottom (36);
+        go.setBounds (b.removeFromRight (120));
+        b.removeFromRight (8);
+        cancel.setBounds (b.removeFromRight (90));
+    }
+
+private:
+    juce::File folder;
+    double songSampleRate = 48000.0;
+    juce::ComboBox what, range, format, rate;
+    juce::TextEditor name;
+    juce::Label whatL { {}, "Export" }, rangeL { {}, "Range" }, formatL { {}, "Format" }, rateL { {}, "Sample rate" },
+                whereL { {}, "Folder" }, nameL { {}, "File name" }, path;
+    juce::TextButton change { "Change..." }, go { "Export" }, cancel { "Cancel" };
+    juce::ToggleButton master { "Include the master effects (Encore Master and the rest)" },
+                       tail { "Let reverbs and delays ring out at the end" },
+                       loud { "Make it streaming-loud (normalise to -14 LUFS)" };
+
+    void close() { if (auto* d = findParentComponentOfClass<juce::DialogWindow>()) d->exitModalState (0); }
+
+    void start()
+    {
+        ExportOptions o;
+        const int f = format.getSelectedId();
+        o.bitDepth = f == 2 ? 16 : f == 3 ? 32 : 24;
+        o.flac = f == 4;
+        const double rates[] = { songSampleRate, 44100.0, 48000.0, 96000.0 };
+        o.sampleRate = rates[juce::jlimit (0, 3, rate.getSelectedId() - 1)];
+        o.masterEffects = master.getToggleState();
+        o.tail = tail.getToggleState();
+        o.loudness = loud.getToggleState() && what.getSelectedId() == 1;
+        if (range.getSelectedId() == 2) o.range = te::TimeRange(); // filled in by the caller from the loop
+        auto base = juce::File::createLegalFileName (name.getText().trim().isEmpty() ? juce::String ("Mix") : name.getText().trim());
+        if (onExport) onExport (o, what.getSelectedId() == 2, folder, base);
+        close();
     }
 };
 
@@ -926,7 +1052,7 @@ public:
             case cmdSaveTemplate:   set ("Save as Template...", "File", song); break;
             case cmdRevert:         set ("Revert", "File", song); break;
             case cmdImportAudio:    set ("Audio File...", "File", song); key ('i', cmd); break;
-            case cmdExportMix:      set ("Audio Mixdown...", "File", song && ! currentExport); key ('e', cmd); break;
+            case cmdExportMix:      set ("Audio Mixdown or Stems...", "File", song && ! currentExport); key ('e', cmd); break;
             case cmdExportZip:      set ("Song Folder as Zip...", "File", song); break;
             case cmdPreferences:    set ("Preferences...", "File"); key (',', cmd); break;
             case cmdQuit:           set ("Quit", "File"); key ('q', cmd); break;
@@ -1798,24 +1924,61 @@ private:
         if (currentExport) { status ("Already exporting..."); return; }
         if (edit->getLength() <= 0s) { status ("Nothing to export yet: record or import something first."); return; }
         save();
-        auto def = songFile.getParentDirectory().getChildFile (songTitle() + " mix.wav");
-        auto chooser = std::make_shared<juce::FileChooser> ("Export the mix", def, "*.wav");
-        chooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::warnAboutOverwriting,
-                              [this, chooser] (const juce::FileChooser&)
-                              {
-                                  auto f = chooser->getResult();
-                                  if (f == juce::File()) return;
-                                  const double sr = engine.getDeviceManager().getSampleRate() > 0 ? engine.getDeviceManager().getSampleRate() : 48000.0;
-                                  exportButton.setEnabled (false);
-                                  currentExport = exportSong (engine, songFile, f.withFileExtension ("wav"), sr, [this] (juce::File out, juce::String err)
-                                  {
-                                      currentExport = nullptr;
-                                      exportButton.setEnabled (true);
-                                      if (out.existsAsFile()) { status ("Exported " + out.getFileName()); out.revealToUser(); }
-                                      else status ("The export didn't work: " + err);
-                                  });
-                                  if (currentExport == nullptr) exportButton.setEnabled (true);
-                              });
+        const bool hasLoop = edit->getTransport().getLoopRange().getLength() > 0s;
+        auto* c = new ExportComponent (songTitle(), songFile.getParentDirectory().getChildFile ("Exports"),
+                                       SongInfo::readFrom (*edit, songFile).sampleRate, hasLoop);
+        c->onExport = [this] (ExportOptions o, bool stems, juce::File folder, juce::String base)
+        {
+            if (o.range) o.range = edit->getTransport().getLoopRange();
+            folder.createDirectory();
+            exportQueue.clear();
+            const auto ext = o.flac ? juce::String (".flac") : juce::String (".wav");
+            if (stems)
+            {
+                auto tracks = te::getAudioTracks (*edit);
+                for (int i = 0; i < tracks.size(); ++i)
+                {
+                    auto job = o;
+                    job.trackIndex = i;
+                    exportQueue.add ({ job, folder.getChildFile (base + " - " + juce::File::createLegalFileName (tracks[i]->getName()) + ext), tracks[i]->getName() });
+                }
+            }
+            else exportQueue.add ({ o, folder.getChildFile (base + ext), "the mix" });
+            exportTotal = exportQueue.size();
+            exportFolder = folder;
+            exportFailures.clear();
+            runNextExport();
+        };
+        showDialog ("Export", c, this);
+    }
+
+    struct ExportJob { ExportOptions options; juce::File dest; juce::String what; };
+    juce::Array<ExportJob> exportQueue;
+    int exportTotal = 0;
+    juce::File exportFolder;
+    juce::StringArray exportFailures;
+    juce::String exportingWhat;
+
+    /** One render at a time (each reopens the song for rendering), then the next */
+    void runNextExport()
+    {
+        if (exportQueue.isEmpty())
+        {
+            exportButton.setEnabled (true);
+            if (exportFailures.isEmpty()) { status ("Exported " + juce::String (exportTotal) + (exportTotal == 1 ? " file" : " files") + " to " + exportFolder.getFullPathName()); exportFolder.revealToUser(); }
+            else status ("Some exports didn't work: " + exportFailures.joinIntoString ("; "));
+            return;
+        }
+        auto job = exportQueue.removeAndReturn (0);
+        exportingWhat = job.what + (exportTotal > 1 ? " (" + juce::String (exportTotal - exportQueue.size()) + " of " + juce::String (exportTotal) + ")" : juce::String());
+        exportButton.setEnabled (false);
+        currentExport = exportSong (engine, songFile, job.dest, job.options, [this, job] (juce::File out, juce::String err)
+        {
+            currentExport = nullptr;
+            if (! out.existsAsFile()) exportFailures.add (job.what + ": " + err);
+            runNextExport();
+        });
+        if (currentExport == nullptr && exportQueue.isEmpty()) exportButton.setEnabled (true);
     }
     std::shared_ptr<SongExport> currentExport;
 
@@ -2159,7 +2322,7 @@ private:
                                   : "Bar " + juce::String ((int) (beats / num) + 1) + "." + juce::String ((int) std::fmod (beats, (double) num) + 1),
                           juce::dontSendNotification);
         playButton.setButtonText (tr.isPlaying() ? "Stop" : "Play");
-        if (currentExport) status ("Exporting... " + juce::String (juce::roundToInt (currentExport->progress() * 100)) + "%");
+        if (currentExport) status ("Exporting " + exportingWhat + "... " + juce::String (juce::roundToInt (currentExport->progress() * 100)) + "%");
         recordButton.setToggleState (tr.isRecording(), juce::dontSendNotification);
         clickButton.setToggleState (edit->clickTrackEnabled.get(), juce::dontSendNotification);
         loopButton.setToggleState (tr.looping.get(), juce::dontSendNotification);

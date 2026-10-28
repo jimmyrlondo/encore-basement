@@ -108,7 +108,9 @@ namespace selftest
             std::atomic<bool> done { false };
             juce::File rendered;
             juce::String err;
-            auto job = exportSong (engine, songFile, mix, 48000.0, [&] (juce::File f, juce::String e) { rendered = f; err = e; done = true; });
+            ExportOptions eo;
+            eo.tail = false;
+            auto job = exportSong (engine, songFile, mix, eo, [&] (juce::File f, juce::String e) { rendered = f; err = e; done = true; });
             for (int i = 0; i < 600 && ! done; ++i) juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
             expect ("mix exported", rendered.existsAsFile(), rendered.getFullPathName() + " " + err);
 
@@ -127,6 +129,47 @@ namespace selftest
                     expect ("mix has sound", L > 0.05f && R > 0.05f, "L " + String (L, 3) + " R " + String (R, 3));
                     expect ("pan + volume land where expected (left louder)", L > R * 1.5f, "L " + String (L, 3) + " R " + String (R, 3));
                 }
+            }
+
+            // a stem (track 2 alone, as FLAC) and a loudness-normalised mix
+            {
+                auto stem = songDir.getChildFile ("stem b.flac");
+                ExportOptions so; so.flac = true; so.trackIndex = 1; so.tail = false;
+                done = false; rendered = juce::File();
+                auto stemJob = exportSong (engine, songFile, stem, so, [&] (juce::File f, juce::String e) { rendered = f; err = e; done = true; });
+                for (int i = 0; i < 600 && ! done; ++i) juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+                AudioFormatManager fm; fm.registerBasicFormats();
+                std::unique_ptr<AudioFormatReader> r (rendered.existsAsFile() ? fm.createReaderFor (rendered) : nullptr);
+                Range<float> lr[2];
+                if (r) r->readMaxLevels (r->sampleRate * 1, (int) r->sampleRate, lr, 2);
+                // track 2 is panned hard left, so its stem has the left side only
+                expect ("stem export (FLAC, one track)", r != nullptr && lr[0].getEnd() > 0.05f && lr[1].getEnd() < 0.01f, err);
+
+                auto loud = songDir.getChildFile ("loud mix.wav");
+                ExportOptions lo; lo.loudness = true; lo.tail = false;
+                done = false; rendered = juce::File();
+                auto loudJob = exportSong (engine, songFile, loud, lo, [&] (juce::File f, juce::String e) { rendered = f; err = e; done = true; });
+                for (int i = 0; i < 600 && ! done; ++i) juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+                std::unique_ptr<AudioFormatReader> lr2 (rendered.existsAsFile() ? fm.createReaderFor (rendered) : nullptr);
+                Range<float> ll[2];
+                if (lr2) lr2->readMaxLevels (lr2->sampleRate * 1, (int) lr2->sampleRate, ll, 2);
+                // loudness of steady tones: -0.691 + 10 log10 (sum of the channels' mean squares)
+                // (K-weighting is flat around 220-330 Hz, and there's nothing quiet to gate)
+                double lufs = -100.0;
+                if (lr2)
+                {
+                    AudioBuffer<float> b ((int) lr2->numChannels, (int) lr2->sampleRate * 2);
+                    lr2->read (&b, 0, b.getNumSamples(), (juce::int64) lr2->sampleRate, true, true);
+                    double sum = 0;
+                    for (int c = 0; c < b.getNumChannels(); ++c)
+                    {
+                        double ms = 0;
+                        for (int i = 0; i < b.getNumSamples(); ++i) ms += (double) b.getSample (c, i) * b.getSample (c, i);
+                        sum += ms / b.getNumSamples();
+                    }
+                    lufs = -0.691 + 10.0 * std::log10 (juce::jmax (1.0e-12, sum));
+                }
+                expect ("streaming-loud export lands at -14 LUFS", lr2 != nullptr && std::abs (lufs + 14.0) < 1.0, String (lufs, 1) + " LUFS");
             }
 
             te::EditFileOperations (*edit).save (true, true, false);
