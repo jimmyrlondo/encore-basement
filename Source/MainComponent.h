@@ -585,7 +585,7 @@ public:
         cmdAudioSetup, cmdPlugins, cmdFindPlugins, cmdReassignInputs,
         // Window
         cmdEffects, cmdZoomIn, cmdZoomOut, cmdZoomFit, cmdHeightSmall, cmdHeightMedium, cmdHeightLarge, cmdHeightHuge,
-        cmdMixer, cmdAddFxReverb, cmdAddFxDelay, cmdAddFxEmpty,
+        cmdMixer, cmdAddFxReverb, cmdAddFxDelay, cmdAddFxEmpty, cmdAutomationOff, cmdAutomationVolume, cmdAutomationPan, cmdAutomationCycle,
         // Help
         cmdShortcuts, cmdGuide, cmdReport, cmdUpdates, cmdLogFolder, cmdAbout
     };
@@ -969,7 +969,15 @@ public:
                 break;
             case 9: // Window
                 add (cmdHub); add (cmdMixer); m.addSeparator();
-                add (cmdEffects); m.addSeparator();
+                add (cmdEffects);
+                {
+                    juce::PopupMenu automation;
+                    for (auto id : { cmdAutomationOff, cmdAutomationVolume, cmdAutomationPan }) addCommand (automation, id);
+                    automation.addSeparator();
+                    automation.addItem (comingSoonId, "Click a track to add points, drag them, double-click to remove", false);
+                    m.addSubMenu ("Automation (A)", automation, edit != nullptr && ! hubShown);
+                }
+                m.addSeparator();
                 add (cmdZoomIn); add (cmdZoomOut); add (cmdZoomFit); m.addSeparator();
                 {
                     juce::PopupMenu heights;
@@ -1151,6 +1159,10 @@ public:
             case cmdHeightLarge:    set ("Large", "Window", songShown); break;
             case cmdHeightHuge:     set ("Extra Large", "Window", songShown); break;
             case cmdMixer:          set ("Mixer", "Window", songShown); key (KP::F3Key, none); info.setTicked (mixerShown); break;
+            case cmdAutomationOff:  set ("Off", "Window", songShown); info.setTicked (automationIs (0)); break;
+            case cmdAutomationVolume: set ("Volume", "Window", songShown); info.setTicked (automationIs (1)); break;
+            case cmdAutomationPan:  set ("Pan", "Window", songShown); info.setTicked (automationIs (2)); break;
+            case cmdAutomationCycle: set ("Show Automation (cycle)", "Window", songShown); key ('a', none); break;
             case cmdAddFxReverb:    set ("Add FX Track: Reverb", "Project", songShown); break;
             case cmdAddFxDelay:     set ("Add FX Track: Delay", "Project", songShown); break;
             case cmdAddFxEmpty:     set ("Add FX Track: Empty", "Project", songShown); break;
@@ -1259,6 +1271,10 @@ public:
             case cmdHeightLarge:    setAllTrackHeights (150); return true;
             case cmdHeightHuge:     setAllTrackHeights (260); return true;
             case cmdMixer:          showMixer (! mixerShown); return true;
+            case cmdAutomationOff:  setAutomation (0); return true;
+            case cmdAutomationVolume: setAutomation (1); return true;
+            case cmdAutomationPan:  setAutomation (2); return true;
+            case cmdAutomationCycle: setAutomation ((editComponent->getEditViewState().automationMode.get() + 1) % 3); return true;
             case cmdAddFxReverb:    addFxTrack (0); return true;
             case cmdAddFxDelay:     addFxTrack (1); return true;
             case cmdAddFxEmpty:     addFxTrack (2); return true;
@@ -1414,22 +1430,24 @@ private:
             for (auto& w : words) match = match || lower.contains (w);
             if (! match) continue;
 
-            auto before = setup;
-            auto beforeType = dm.getCurrentAudioDeviceType();
-            dm.setCurrentAudioDeviceType ("ASIO", true);
-            auto s = dm.getAudioDeviceSetup();
-            s.inputDeviceName = s.outputDeviceName = name;
-            s.useDefaultInputChannels = s.useDefaultOutputChannels = true;
-            auto err = dm.setAudioDeviceSetup (s, true);
-            if (err.isEmpty() && dm.getCurrentAudioDevice() != nullptr)
+            // try exactly this driver (no falling back to some other ASIO device), and go back if it won't open
+            const auto beforeType = dm.getCurrentAudioDeviceType();
+            auto before = dm.createStateXml();
+            juce::XmlElement want ("DEVICESETUP");
+            want.setAttribute ("deviceType", "ASIO");
+            want.setAttribute ("audioOutputDeviceName", name);
+            want.setAttribute ("audioInputDeviceName", name);
+            auto err = dm.initialise (512, 512, &want, false);
+            if (err.isEmpty() && dm.getCurrentAudioDevice() != nullptr && dm.getCurrentAudioDevice()->getName() == name)
             {
                 basementLog ("switched to the interface's ASIO driver: " + name);
+                status ("Now using " + name + "'s own driver (ASIO) for low latency. Studio > Audio Setup to change.");
                 return;
             }
             basementLog ("ASIO driver " + name + " didn't open (" + err + "), staying on " + beforeType);
             props().setValue ("asioChecked", false); // try again next time (another app may have had it)
-            dm.setCurrentAudioDeviceType (beforeType, true);
-            dm.setAudioDeviceSetup (before, true);
+            if (before != nullptr) dm.initialise (512, 512, before.get(), true);
+            else { dm.setCurrentAudioDeviceType (beforeType, true); dm.setAudioDeviceSetup (setup, true); }
             return;
         }
     }
@@ -2135,6 +2153,18 @@ private:
         v.viewX1 = te::TimePosition::fromSeconds (start);
         v.viewX2 = te::TimePosition::fromSeconds (start + w);
     }
+    bool automationIs (int mode) { return editComponent != nullptr && editComponent->getEditViewState().automationMode.get() == mode; }
+
+    void setAutomation (int mode)
+    {
+        if (editComponent == nullptr) return;
+        if (mixerShown) showMixer (false);
+        editComponent->getEditViewState().automationMode = mode;
+        const char* names[] = { "Automation hidden", "Volume automation: click a track to add points, drag them, double-click to remove",
+                                "Pan automation: click a track to add points, drag them, double-click to remove" };
+        status (names[juce::jlimit (0, 2, mode)]);
+    }
+
     bool snapIs (int mode) { return editComponent != nullptr && editComponent->getEditViewState().snapMode.get() == mode; }
 
     void setSnap (int mode)

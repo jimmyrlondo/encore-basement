@@ -1389,11 +1389,132 @@ void TrackComponent::paint (Graphics& g)
 
 void TrackComponent::mouseDown (const MouseEvent& e)
 {
+    if (auto* p = automationParam())
+    {
+        // automation: grab a point, or add one where you click
+        auto& um = track->edit.getUndoManager();
+        um.beginNewTransaction ("Automation");
+        draggingPoint = pointNear (e.getPosition());
+        if (draggingPoint < 0)
+        {
+            auto t = editViewState.snap (te::TimePosition::fromSeconds (jmax (0.0, editViewState.xToTime (e.x, getWidth()).inSeconds())), e.mods.isShiftDown());
+            draggingPoint = p->getCurve().addPoint (t, valueAtY (e.y), 0.0f, &um);
+        }
+        repaint();
+        return;
+    }
     if (! e.mods.isShiftDown()) editViewState.selectionManager.selectOnly (track.get());
+}
+
+te::AutomatableParameter* TrackComponent::automationParam() const
+{
+    auto at = dynamic_cast<te::AudioTrack*> (track.get());
+    if (at == nullptr) return nullptr;
+    auto vp = at->getVolumePlugin();
+    if (vp == nullptr) return nullptr;
+    switch (editViewState.automationMode.get())
+    {
+        case 1: return vp->volParam.get();
+        case 2: return vp->panParam.get();
+        default: return nullptr;
+    }
+}
+
+float TrackComponent::valueAtY (int y) const
+{
+    auto* p = automationParam();
+    const float norm = jlimit (0.0f, 1.0f, 1.0f - float (y - 4) / float (jmax (1, getHeight() - 8)));
+    return p != nullptr ? p->valueRange.convertFrom0to1 (norm) : 0.0f;
+}
+
+int TrackComponent::yForValue (float v) const
+{
+    auto* p = automationParam();
+    const float norm = p != nullptr ? p->valueRange.convertTo0to1 (v) : 0.0f;
+    return 4 + roundToInt ((1.0f - norm) * float (getHeight() - 8));
+}
+
+int TrackComponent::pointNear (Point<int> pos) const
+{
+    auto* p = automationParam();
+    if (p == nullptr) return -1;
+    auto& curve = p->getCurve();
+    for (int i = 0; i < curve.getNumPoints(); ++i)
+    {
+        Point<int> pt (editViewState.timeToX (curve.getPointTime (i), getWidth()), yForValue (curve.getPointValue (i)));
+        if (pt.getDistanceFrom (pos) <= 7) return i;
+    }
+    return -1;
+}
+
+void TrackComponent::mouseDoubleClick (const MouseEvent& e)
+{
+    if (auto* p = automationParam())
+        if (auto i = pointNear (e.getPosition()); i >= 0)
+        {
+            track->edit.getUndoManager().beginNewTransaction ("Remove automation point");
+            p->getCurve().removePoint (i, &track->edit.getUndoManager());
+            draggingPoint = -1;
+            repaint();
+        }
+}
+
+/** In automation mode the clips step aside so clicks land on the curve */
+void TrackComponent::updateClipInterception()
+{
+    const bool clipsClickable = automationParam() == nullptr;
+    for (auto* c : clips) c->setInterceptsMouseClicks (clipsClickable, clipsClickable);
+}
+
+void TrackComponent::paintOverChildren (Graphics& g)
+{
+    auto* p = automationParam();
+    if (p == nullptr) return;
+    auto& curve = p->getCurve();
+    const auto colour = editViewState.automationMode.get() == 1 ? theme::solo : theme::accent2;
+    g.setColour (theme::base.withAlpha (0.35f));
+    g.fillRect (getLocalBounds());
+
+    // the line: follows the curve (or sits at the current value when there are no points)
+    Path line;
+    for (int x = 0; x <= getWidth(); x += 3)
+    {
+        const auto t = editViewState.xToTime (x, getWidth());
+        const float v = curve.getNumPoints() > 0 ? curve.getValueAt (t, p->getCurrentValue()) : p->getCurrentValue();
+        if (x == 0) line.startNewSubPath ((float) x, (float) yForValue (v));
+        else line.lineTo ((float) x, (float) yForValue (v));
+    }
+    g.setColour (colour);
+    g.strokePath (line, PathStrokeType (2.0f));
+    for (int i = 0; i < curve.getNumPoints(); ++i)
+    {
+        const float x = (float) editViewState.timeToX (curve.getPointTime (i), getWidth()), y = (float) yForValue (curve.getPointValue (i));
+        g.setColour (theme::base);
+        g.fillEllipse (x - 5.0f, y - 5.0f, 10.0f, 10.0f);
+        g.setColour (colour);
+        g.drawEllipse (x - 5.0f, y - 5.0f, 10.0f, 10.0f, 2.0f);
+    }
+    g.setColour (colour);
+    g.setFont (FontOptions (11.0f, Font::bold));
+    g.drawText ((editViewState.automationMode.get() == 1 ? "Volume: " : "Pan: ") + p->getCurrentValueAsStringWithLabel()
+                    + (curve.getNumPoints() == 0 ? "   (click to add points)" : String()),
+                getLocalBounds().reduced (8, 4), Justification::bottomLeft);
 }
 
 void TrackComponent::mouseDrag (const MouseEvent& e)
 {
+    if (auto* p = automationParam())
+    {
+        if (draggingPoint < 0) return;
+        auto& curve = p->getCurve();
+        // a point stays between its neighbours
+        auto t = editViewState.snap (te::TimePosition::fromSeconds (jmax (0.0, editViewState.xToTime (e.x, getWidth()).inSeconds())), e.mods.isShiftDown());
+        if (draggingPoint > 0) t = jmax (t, curve.getPointTime (draggingPoint - 1));
+        if (draggingPoint < curve.getNumPoints() - 1) t = jmin (t, curve.getPointTime (draggingPoint + 1));
+        draggingPoint = curve.movePoint (*p, draggingPoint, t, valueAtY (e.y), false, &track->edit.getUndoManager());
+        repaint();
+        return;
+    }
     if (auto ec = findParentComponentOfClass<EditComponent>())
     {
         auto ev = e.getEventRelativeTo (ec);
@@ -1403,6 +1524,7 @@ void TrackComponent::mouseDrag (const MouseEvent& e)
 
 void TrackComponent::mouseUp (const MouseEvent& e)
 {
+    if (automationParam() != nullptr) { draggingPoint = -1; return; }
     if (auto ec = findParentComponentOfClass<EditComponent>()) ec->lassoEnd();
     // a click (not a box-select) on an empty part of the lane moves the playhead there
     if (! e.mouseWasDraggedSinceMouseDown())
@@ -1458,6 +1580,7 @@ void TrackComponent::handleAsyncUpdate()
 
 void TrackComponent::resized()
 {
+    updateClipInterception();
     for (auto cc : clips)
     {
         auto& c = cc->getClip();
@@ -1613,6 +1736,10 @@ void EditComponent::valueTreePropertyChanged (juce::ValueTree& v, const juce::Id
         else if (i == IDs::drawWaveforms)
         {
             repaint();
+        }
+        else if (i == Identifier ("automationMode"))
+        {
+            for (auto* t : tracks) { t->updateClipInterception(); t->repaint(); }
         }
     }
 }

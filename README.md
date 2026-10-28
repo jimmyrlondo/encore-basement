@@ -43,7 +43,8 @@ From [Releases](https://github.com/jimmyrlondo/encore-basement/releases):
 - **Mix**: a mixer (F3) with a channel strip per track (effects, sends,
   pan, mute, solo, record, fader and meter), FX tracks that several tracks
   can send to (one shared reverb or delay), and a master strip with effects
-  on the whole mix. Effects on any track:
+  on the whole mix. Volume and pan automation drawn right on the tracks
+  (press A). Effects on any track:
   - **Encore's plugins, built in**: Encore Vox (a whole vocal chain with tune
     and harmony), Verb, Equalize and Master. Nothing to install.
   - **Your plugins**: Basement finds your VST3 plugins by itself (in the
@@ -69,7 +70,6 @@ Help > Keyboard Shortcuts has the full list.
 
 ## Coming next
 
-- Volume and pan automation lanes
 - MP3 export, and mastering on export with Encore's album engine
 - Sign in with Encore and send a song to your catalog as a draft
 - MIDI and instruments

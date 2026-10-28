@@ -110,7 +110,11 @@ public:
         viewX2.referTo (state, IDs::viewX2, um, 60s);
         viewY.referTo (state, IDs::viewY, um, 0);
         snapMode.referTo (state, "snapMode", um, 2);
+        automationMode.referTo (state, "automationMode", um, 0);
     }
+
+    /** Automation shown on the tracks: 0 none, 1 volume, 2 pan */
+    CachedValue<int> automationMode;
 
     /** Snap: 0 off, 1 bar, 2 beat, 3 half beat, 4 quarter beat */
     CachedValue<int> snapMode;
@@ -355,8 +359,14 @@ public:
     void mouseDown (const MouseEvent& e) override;
     void mouseDrag (const MouseEvent& e) override;
     void mouseUp (const MouseEvent& e) override;
+    void mouseDoubleClick (const MouseEvent& e) override;
+    void paintOverChildren (Graphics&) override;
     void resized() override;
     te::Track* getTrack() const     { return track.get(); }
+
+    /** The parameter being drawn on this track (volume or pan), if automation is shown */
+    te::AutomatableParameter* automationParam() const;
+    void updateClipInterception();
     const OwnedArray<ClipComponent>& getClipComponents() const { return clips; }
 
 private:
@@ -378,6 +388,10 @@ private:
     te::Track::Ptr track;
 
     OwnedArray<ClipComponent> clips;
+    int draggingPoint = -1;
+    float valueAtY (int y) const;
+    int yForValue (float v) const;
+    int pointNear (Point<int>) const;
     std::unique_ptr<RecordingClipComponent> recordingClip;
 
     bool updateClips = false, updatePositions = false, updateRecordClips = false;
