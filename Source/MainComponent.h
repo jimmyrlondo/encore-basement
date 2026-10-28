@@ -676,11 +676,11 @@ public:
         BasementHooks::applyRecordOffset = [this] { setupInputs(); };
         BasementHooks::showPluginManager = [this] { showPluginList(); };
         BasementHooks::pluginScanStatus = [this] { return pluginFinder.status(); };
-        pluginFinder.onProgress = [this] (juce::String s) { status (s); };
+        pluginFinder.onProgress = [this] (juce::String s) { statusSoft (s); };
         pluginFinder.onFinished = [this] (int found)
         {
-            status (found > 0 ? "Found " + juce::String (found) + (found == 1 ? " new plugin" : " new plugins") + ": they're in every track's Effects menu"
-                              : juce::String ("Plugins up to date"));
+            statusSoft (found > 0 ? "Found " + juce::String (found) + (found == 1 ? " new plugin" : " new plugins") + ": they're in every track's Effects menu"
+                                  : juce::String());
             commandManager.commandStatusChanged();
         };
         // look for new plugins once things have settled (the window is up first)
@@ -713,8 +713,28 @@ public:
         {
             if (safe == nullptr) return;
             const auto t = juce::Time::getMillisecondCounterHiRes();
+            juce::String wanted;
+            if (auto xml = safe->engine.getPropertyStorage().getXmlProperty (te::SettingID::audio_device_setup))
+                wanted = xml->getStringAttribute ("audioInputDeviceName", xml->getStringAttribute ("audioOutputDeviceName"));
             safe->engine.getDeviceManager().initialise();
-            basementLog ("startup: audio interface opened in " + juce::String (juce::Time::getMillisecondCounterHiRes() - t, 0) + " ms");
+            auto* d = safe->engine.getDeviceManager().deviceManager.getCurrentAudioDevice();
+            basementLog ("startup: audio interface opened in " + juce::String (juce::Time::getMillisecondCounterHiRes() - t, 0) + " ms: "
+                         + (d ? d->getName() : juce::String ("none")) + (wanted.isNotEmpty() ? " (saved: " + wanted + ")" : juce::String()));
+            // the interface from last time didn't open (unplugged, or another app has it)
+            auto& dm = safe->engine.getDeviceManager().deviceManager;
+            auto setup = dm.getAudioDeviceSetup();
+            if (wanted.isNotEmpty() && setup.inputDeviceName != wanted && setup.outputDeviceName != wanted && (d == nullptr || d->getName() != wanted))
+            {
+                // never sit on a generic ASIO wrapper by accident (ASIO4ALL etc. show "Not Connected" inputs): use Windows audio instead
+                if (d != nullptr && dm.getCurrentAudioDeviceType() == "ASIO" && isGenericAsio (d->getName()))
+                {
+                    dm.setCurrentAudioDeviceType ("Windows Audio", true);
+                    d = dm.getCurrentAudioDevice();
+                    basementLog ("startup: " + wanted + " didn't open, so not using a generic ASIO driver; now on " + (d ? d->getName() : juce::String ("none")));
+                }
+                safe->warn ("Couldn't open " + wanted + " (unplugged, or another app like Cubase is using it?). Using "
+                              + (d ? d->getName() : juce::String ("no interface")) + " for now. Studio > Audio Setup to change.");
+            }
             safe->setupInputs();
             if (openLast) safe->loadSong (last);
             if (safe->hub) safe->hub->repaint();
@@ -1287,7 +1307,17 @@ private:
 
     juce::PropertiesFile& props() { return engine.getPropertyStorage().getPropertiesFile(); }
     static bool isAudioFile (const juce::File& f) { return f.hasFileExtension ("wav;aif;aiff;flac;mp3;ogg;m4a;caf;w64;bwf"); }
-    void status (const juce::String& s) { statusLabel.setText (s, juce::dontSendNotification); }
+    void status (const juce::String& s) { statusLabel.setColour (juce::Label::textColourId, theme::muted); statusLabel.setText (s, juce::dontSendNotification); }
+    /** A message that stays put for a while (background progress doesn't replace it) */
+    void warn (const juce::String& s) { status (s); statusHoldUntil = juce::Time::getMillisecondCounter() + 20000; statusLabel.setColour (juce::Label::textColourId, theme::solo); }
+    /** Background progress: only when nothing more important is showing */
+    void statusSoft (const juce::String& s)
+    {
+        if (juce::Time::getMillisecondCounter() < statusHoldUntil) return;
+        statusLabel.setColour (juce::Label::textColourId, theme::muted);
+        status (s);
+    }
+    juce::uint32 statusHoldUntil = 0;
     void invoke (int id) { commandManager.invokeDirectly (id, false); }
     juce::String songTitle() { return edit ? SongInfo::readFrom (*edit, songFile).title : juce::String(); }
 
@@ -1340,6 +1370,13 @@ private:
             }
     }
 
+    /** ASIO drivers that wrap other sound cards rather than belonging to an interface */
+    static bool isGenericAsio (const juce::String& name)
+    {
+        auto lower = name.toLowerCase();
+        return lower.contains ("asio4all") || lower.contains ("generic") || lower.contains ("magix") || lower.contains ("built-in") || lower.contains ("flexasio");
+    }
+
     /** Windows' shared audio path adds latency and its own input level in the
         way. When the interface you're using has its own ASIO driver (most do:
         Volt, Scarlett, Audient, MOTU...), switch to it, once. Generic
@@ -1371,7 +1408,7 @@ private:
         for (auto& name : asio->getDeviceNames())
         {
             auto lower = name.toLowerCase();
-            if (lower.contains ("asio4all") || lower.contains ("generic") || lower.contains ("magix") || lower.contains ("built-in") || lower.contains ("flexasio"))
+            if (isGenericAsio (name))
                 continue;
             bool match = false;
             for (auto& w : words) match = match || lower.contains (w);
@@ -1439,7 +1476,9 @@ private:
         if (pick == nullptr) return false;
         auto res = pick->setTarget (t.itemID, true, &edit->getUndoManager(), 0);
         basementLog (t.getName() + " <- " + pick->getInputDevice().getName() + (res ? " ok" : " FAILED: " + juce::String (res.error())));
-        if (res) t.state.setProperty ("basementInput", pick->getInputDevice().getName(), nullptr);
+        // remember the input, unless this is a stand-in for one that isn't here right now
+        if (res && (wanted.isEmpty() || wanted == pick->getInputDevice().getName()))
+            t.state.setProperty ("basementInput", pick->getInputDevice().getName(), nullptr);
         return (bool) res;
     }
 
@@ -1538,7 +1577,7 @@ private:
         if (crashedLastSession) juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MainComponent> (this)] { if (safe) safe->offerAutosave(); });
         edit->restartPlayback();
         showHub (false);
-        status ("Opened " + info.title);
+        statusSoft ("Opened " + info.title);
         statusLabel.setTooltip (info.title + ": " + info.formatText() + ", " + info.bpmText() + " BPM " + info.sigText());
     }
 

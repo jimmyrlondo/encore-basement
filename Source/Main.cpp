@@ -62,6 +62,7 @@ public:
         }
         if (args.contains ("--profile"))
             basementProfile() = args.fromFirstOccurrenceOf ("--profile", false, false).trim().unquoted();
+        juce::Logger::setCurrentLogger (&logger);
         juce::LookAndFeel::setDefaultLookAndFeel (&lookAndFeel);
         const auto t0 = juce::Time::getMillisecondCounterHiRes();
         mainWindow = std::make_unique<MainWindow> (*this);
@@ -71,6 +72,7 @@ public:
     void shutdown() override
     {
         mainWindow = nullptr;
+        juce::Logger::setCurrentLogger (nullptr);
         juce::LookAndFeel::setDefaultLookAndFeel (nullptr);
     }
 
@@ -104,6 +106,7 @@ private:
     };
 
     BasementLookAndFeel lookAndFeel;
+    BasementLogger logger;
     std::unique_ptr<MainWindow> mainWindow;
 };
 

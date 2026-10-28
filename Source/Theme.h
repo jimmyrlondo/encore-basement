@@ -47,6 +47,12 @@ inline void basementLog (const juce::String& line)
     f.appendText (juce::Time::getCurrentTime().toString (true, true, true, true) + "  " + line + juce::newLine);
 }
 
+/** Tracktion's and JUCE's own log lines go to Basement.log too */
+struct BasementLogger : public juce::Logger
+{
+    void logMessage (const juce::String& m) override { basementLog ("engine: " + m.trim()); }
+};
+
 /** The Encore icon (Assets/encore-icon.svg), drawn into r keeping its shape */
 inline void drawEncoreIcon (juce::Graphics& g, juce::Rectangle<float> r)
 {
