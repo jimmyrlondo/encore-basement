@@ -17,6 +17,7 @@ using namespace tracktion::literals;
 #include "Theme.h"
 #include "edit/Utilities.h"
 #include "EncorePlugins.h"
+#include "BridgedPlugins.h"
 #include "edit/Meters.h"
 #include "edit/Components.h"
 #include "edit/Mixer.h"
@@ -56,6 +57,14 @@ public:
             auto rest = juce::StringArray::fromTokens (args.fromFirstOccurrenceOf ("--plugintest", false, false), true);
             rest.removeEmptyStrings();
             setApplicationReturnValue (selftest::plugins (juce::File (rest[0].unquoted()), juce::File (rest[1].unquoted())));
+            quit();
+            return;
+        }
+        if (args.contains ("--bridgetest"))
+        {
+            auto rest = juce::StringArray::fromTokens (args.fromFirstOccurrenceOf ("--bridgetest", false, false), true);
+            rest.removeEmptyStrings();
+            setApplicationReturnValue (selftest::bridge (juce::File (rest[0].unquoted()), juce::File (rest[1].unquoted())));
             quit();
             return;
         }

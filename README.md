@@ -11,11 +11,13 @@ and [JUCE](https://juce.com).
 
 From [Releases](https://github.com/jimmyrlondo/encore-studio/releases):
 
-- **Windows**: `Encore-Studio-windows.zip`. Unzip it anywhere and run
-  `Encore Studio.exe`; nothing to install. It isn't code-signed yet, so
-  SmartScreen warns the first time: click **More info**, then **Run anyway**.
-- **Mac** (Apple Silicon and Intel): `Encore-Studio-macos.zip`. Unzip it and
-  move `Encore Studio.app` to Applications. It isn't notarized yet, so the
+- **Windows**: `Encore-Studio-<version>-windows-setup.exe`, the installer
+  (Start menu, desktop shortcut, opens .encore songs). Or
+  `Encore-Studio-windows.zip` to run it from any folder without installing.
+  It isn't code-signed yet, so SmartScreen warns the first time: click
+  **More info**, then **Run anyway**.
+- **Mac** (Apple Silicon and Intel): `Encore-Studio-<version>-macos.dmg`. Open
+  it and drag `Encore Studio` to Applications. It isn't notarized yet, so the
   first time right-click it, choose **Open**, then **Open** again.
 
 ## What it does

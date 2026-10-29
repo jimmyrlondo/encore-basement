@@ -911,6 +911,7 @@ public:
     {
         studioLog ("startup: engine ready in " + juce::String (juce::Time::getMillisecondCounterHiRes() - constructionStarted, 0) + " ms");
         registerEncorePlugins (engine);
+        registerBridgedPlugins (engine);   // 32-bit plugins, through the bridge
         behaviour->songFolder = [this] { return songFile.getParentDirectory(); };
 
         commandManager.registerAllCommandsForTarget (this);

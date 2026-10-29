@@ -26,6 +26,14 @@ jobs:
       - name: Build
         run: cmake --build build --config Release --parallel
 
+      # The 32-bit plugin bridge: its own 32-bit build, then beside Encore Studio.exe
+      - name: Build the 32-bit plugin bridge
+        shell: pwsh
+        run: |
+          cmake -B build32 -A Win32 -DSTUDIO_BRIDGE_ONLY=ON
+          cmake --build build32 --config Release --parallel
+          Copy-Item "build32/EncoreStudioBridge32_artefacts/Release/Encore Studio Bridge32.exe" "build/EncoreStudio_artefacts/Release/"
+
       - name: Self-test
         shell: pwsh
         run: |
@@ -40,7 +48,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory dist | Out-Null
-          Copy-Item "build/EncoreStudio_artefacts/Release/Encore Studio.exe", LICENSE, README.md dist/
+          Copy-Item "build/EncoreStudio_artefacts/Release/Encore Studio.exe", "build/EncoreStudio_artefacts/Release/Encore Studio Bridge32.exe", LICENSE, README.md dist/
           Compress-Archive dist/* Encore-Studio-windows.zip
 
       # The installer (Inno Setup): Start menu + desktop shortcuts, opens .encore songs, uninstaller

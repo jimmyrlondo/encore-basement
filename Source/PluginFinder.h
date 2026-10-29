@@ -76,7 +76,7 @@ public:
     {
         juce::StringArray out;
         for (auto* f : e.getPluginManager().pluginFormatManager.getFormats())
-            if (f->getName() == "VST3" || f->getName() == "VST")
+            if (f->getName() == "VST3" || f->getName() == "VST" || f->getName().startsWith ("32-bit"))
             {
                 auto paths = f->getDefaultLocationsToSearch();
                 if (f->getName() == "VST") addCommonVst2Folders (paths);
@@ -226,7 +226,8 @@ private:
         const auto t0 = juce::Time::getMillisecondCounter();
         for (auto* format : engine.getPluginManager().pluginFormatManager.getFormats())
         {
-            if (! (format->getName() == "VST3" || format->getName() == "VST")) continue;
+            const bool bits32 = format->getName().startsWith ("32-bit");   // run through the bridge (and so already out of Studio's process)
+            if (! (format->getName() == "VST3" || format->getName() == "VST" || (bits32 && format->canScanForPlugins()))) continue;
             auto paths = format->getDefaultLocationsToSearch();
             if (format->getName() == "VST") addCommonVst2Folders (paths);
             for (auto& f : extra) if (juce::File (f).isDirectory()) paths.addIfNotAlreadyThere (juce::File (f));
@@ -253,8 +254,9 @@ private:
                 {
                     // VST2 folders are full of helper .dlls that aren't plugins: note them so later searches skip them
                     // (Plugin Manager can clear the list)
-                    if (format->getName() == "VST") list.addToBlacklist (failed);
-                    studioLog ("plugin skipped (didn't load" + juce::String (format->getName() == "VST" ? ", won't check again" : "") + "): " + failed);
+                    const bool forget = format->getName() == "VST" || bits32;
+                    if (forget) list.addToBlacklist (failed);
+                    studioLog ("plugin skipped (didn't load" + juce::String (forget ? ", won't check again" : "") + "): " + failed);
                 }
             }
         }

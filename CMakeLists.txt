@@ -15,6 +15,37 @@ if (MSVC)
 endif()
 
 add_subdirectory(external/JUCE)
+
+# The 32-bit plugin bridge (Windows): a small 32-bit program Studio runs 32-bit
+# plugins in. It's built on its own, in a 32-bit build folder:
+#   cmake -B build32 -A Win32 -DSTUDIO_BRIDGE_ONLY=ON
+#   cmake --build build32 --config Release
+# and goes beside "Encore Studio.exe" (the installer puts it there).
+option(STUDIO_BRIDGE_ONLY "Build only the 32-bit plugin bridge" OFF)
+if (STUDIO_BRIDGE_ONLY)
+    juce_add_gui_app(EncoreStudioBridge32
+        PRODUCT_NAME "Encore Studio Bridge32"
+        COMPANY_NAME "Encore"
+        VERSION ${PROJECT_VERSION}
+        ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/Assets/encore-icon.png"
+        NEEDS_CURL FALSE
+        NEEDS_WEB_BROWSER FALSE)
+    juce_generate_juce_header(EncoreStudioBridge32)
+    target_sources(EncoreStudioBridge32 PRIVATE Source/bridge/BridgeMain.cpp Source/bridge/Shm.cpp)
+    target_include_directories(EncoreStudioBridge32 PRIVATE Source/bridge external/fst)
+    target_compile_definitions(EncoreStudioBridge32 PRIVATE
+        JUCE_PLUGINHOST_VST3=1
+        JUCE_PLUGINHOST_VST=1
+        JUCE_USE_CURL=0
+        JUCE_WEB_BROWSER=0
+        JUCE_DISPLAY_SPLASH_SCREEN=0)
+    target_link_libraries(EncoreStudioBridge32 PRIVATE
+        juce::juce_audio_processors
+        juce::juce_gui_extra
+        juce::juce_recommended_config_flags)
+    return()
+endif()
+
 add_subdirectory(external/tracktion_engine/modules ${CMAKE_BINARY_DIR}/tracktion)
 
 juce_add_gui_app(EncoreStudio
@@ -34,7 +65,7 @@ juce_add_binary_data(StudioAssets SOURCES Assets/encore-icon.svg)
 
 juce_generate_juce_header(EncoreStudio)
 
-target_sources(EncoreStudio PRIVATE Source/Main.cpp)
+target_sources(EncoreStudio PRIVATE Source/Main.cpp $<$<PLATFORM_ID:Windows>:Source/bridge/Shm.cpp>)
 target_include_directories(EncoreStudio PRIVATE Source)
 
 # Encore's own plugins (Vox, Verb, Equalize, Master), built in: Encore Studio hosts

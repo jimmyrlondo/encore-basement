@@ -2,6 +2,38 @@
 
 ## 0.4.0 (not released yet)
 
+**Encore: Basement is now Encore: Studio.** Your settings and songs carry
+over by themselves. New songs are saved as .encore files, and .basement songs
+still open as they are.
+
+- Who you're making music as: the first screen asks for an artist or band, or
+  a record label and its artists (a profile on this computer until Encore
+  sign-in arrives). Pick the artist on the start page or in the Account menu,
+  and new songs get their name and genre filled in.
+- A folder for each artist, in a music library you choose: Songs, Releases,
+  Masters and Live. Every finished export of a whole song is also kept in
+  Masters, and when it's mastered again the earlier one moves to "Earlier
+  masters", so nothing is lost. Send to Encore packages go in Releases, and
+  live shows go in Live.
+- An installer for Windows (Start menu and desktop shortcuts, opens .encore
+  songs on double-click, and an uninstaller that leaves your music alone) and
+  a disk image for the Mac.
+- 32-bit plugins work (Windows): each one runs in a small 32-bit helper
+  beside Studio, so old VST and VST3 plugins show up in the menus marked
+  "(32-bit)". Their own window opens in front of Studio, and if one crashes,
+  only that plugin goes quiet.
+- Tempo and time signature changes: right-click the bar numbers (or Project >
+  Tempo or Time Signature Change at the Playhead). A tempo can jump or ramp.
+  Bars, the grid and snapping follow.
+- Audio that follows the song's tempo: right-click a clip > Follow the Song's
+  Tempo. A loop with its tempo in the name ("Beat 92bpm.wav") does it when
+  you import it. The pitch stays the same.
+- Four drum kits, all made by Studio itself: Studio, 808, Rock and Lo-fi (the
+  Kit box in the drum grid).
+- Recording a drum track from pads or a keyboard puts the hits into the beat
+  that's there, snapped to 16ths (MIDI > Snap Recorded Drum Hits to the Grid).
+- The title bar is dark like the rest of the app.
+
 - A piano roll: double-click a MIDI clip (or MIDI > Open Piano Roll,
   Ctrl+Shift+E). Click to add a note, drag to move it, drag its end to
   resize, double-click to delete, a velocity strip along the bottom, grid
@@ -24,8 +56,8 @@
   seconds first, so the whole song is mastered evenly. Your song doesn't
   change. Listen plays 30 seconds mastered; flip to the original, or match
   their loudness for a fair comparison.
-- Drum tracks: Project > Add Drum Track (Ctrl+Alt+T) gives you the Basement
-  Kit (ten drum sounds Basement makes itself, saved in the song folder) and a
+- Drum tracks: Project > Add Drum Track (Ctrl+Alt+T) gives you the Studio
+  Kit (ten drum sounds Studio makes itself, saved in the song folder) and a
   drum grid. Click steps for hits, drag to paint, Shift+click for accents,
   right-click to fill or clear a row. The piano roll and drum grid switch
   with one button.
@@ -35,12 +67,12 @@
   each, switching between them).
 - Import a live recording (File > Import > Live Recording): an Encore Live
   session or any multichannel WAV becomes a track per input, grouped by name
-  (drums, vocals, guitars), with a marker at each song, or a Basement song for
+  (drums, vocals, guitars), with a marker at each song, or a Studio song for
   each song in the show. Inputs with nothing on them are left out.
-- Help > Check for Updates looks for a newer Basement (and once a day by
+- Help > Check for Updates looks for a newer Studio (and once a day by
   itself, which you can switch off), and Help > Report a Problem makes a zip
   of the log and your setup on the Desktop and opens a GitHub issue to attach
-  it to. If Basement didn't close properly, it says so next time.
+  it to. If Studio didn't close properly, it says so next time.
 - MP3 export: MP3 320 kbps or 192 kbps in the Export box, for the mix or
   stems, with the title, artist, album and genre written into the file.
   Made with LAME (LGPL).

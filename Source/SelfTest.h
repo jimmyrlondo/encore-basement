@@ -77,6 +77,7 @@ namespace selftest
         auto* ui = new HeadlessUIBehaviour();
         te::Engine engine { "Encore Studio Selftest", std::unique_ptr<te::UIBehaviour> (ui), std::unique_ptr<te::EngineBehaviour> (behaviour) };
         registerEncorePlugins (engine);
+        registerBridgedPlugins (engine);   // 32-bit plugins, through the bridge
         // plugin formats: VST3 and VST2 (through FST) are both compiled in
         {
             StringArray names;
