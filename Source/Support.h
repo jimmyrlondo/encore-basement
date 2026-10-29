@@ -71,8 +71,13 @@ namespace support
                         r.download = {};
                         if (auto* assets = rel["assets"].getArray())
                             for (auto& a : *assets)
-                                if (a["name"].toString().containsIgnoreCase (platformZip))
+                            {
+                                // the installer if there is one (setup.exe / .dmg), else the zip
+                                const auto name = a["name"].toString();
+                                const bool installer = name.endsWithIgnoreCase ("setup.exe") || name.endsWithIgnoreCase (".dmg");
+                                if (name.containsIgnoreCase (platformZip) && (installer || r.download.isEmpty()))
                                     r.download = a["browser_download_url"].toString();
+                            }
                     }
                 if (! r.found) r.problem = "no releases listed";
             }

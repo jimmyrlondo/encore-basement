@@ -262,6 +262,7 @@ PluginWindow::~PluginWindow()
 void PluginWindow::show()
 {
     setVisible (true);
+    darkTitleBar (*this);
     toFront (false);
     setBoundsConstrained (getBounds());
 }

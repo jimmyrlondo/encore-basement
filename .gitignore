@@ -2,3 +2,5 @@ build/
 out/
 .vs/
 *.user
+dist/
+build32/

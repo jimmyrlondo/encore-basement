@@ -849,7 +849,7 @@ inline void showDialog (const juce::String& title, juce::Component* content, juc
     o.resizable = false;
     o.componentToCentreAround = over;
     o.content.setOwned (content);
-    o.launchAsync();
+    if (auto* w = o.launchAsync()) darkTitleBar (*w);
 }
 
 //==============================================================================
@@ -1222,6 +1222,9 @@ public:
         for (auto& f : files) if (isAudioFile (juce::File (f))) list.add (juce::File (f));
         importFiles (list);
     }
+
+    /** Opens a song from outside (double-clicked in Explorer / Finder) */
+    void openSongFile (const juce::File& f) { showHub (false); loadSong (f); }
 
     void updateTitle()
     {
@@ -2613,7 +2616,7 @@ private:
                                                  std::addressof (props()), true);
         v->setSize (800, 560);
         o.content.setOwned (v);
-        o.launchAsync();
+        if (auto* w = o.launchAsync()) darkTitleBar (*w);
         status ("Options > Scan for new or updated plug-ins finds everything installed, Encore's included.");
     }
 
@@ -3112,6 +3115,7 @@ private:
         tunerWindow = std::make_unique<TunerWindow> (std::make_unique<TunerComponent> (engine, inputName));
         tunerWindow->centreAroundComponent (this, tunerWindow->getWidth(), tunerWindow->getHeight());
         tunerWindow->setVisible (true);
+        darkTitleBar (*tunerWindow);
     }
     std::unique_ptr<TunerWindow> tunerWindow;
 

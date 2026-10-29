@@ -67,6 +67,33 @@ inline void studioLog (const juce::String& line)
     f.appendText (juce::Time::getCurrentTime().toString (true, true, true, true) + "  " + line + juce::newLine);
 }
 
+#if JUCE_WINDOWS
+ // one dwmapi call, declared here rather than pulling all of <windows.h> into Studio
+ #pragma comment (lib, "dwmapi.lib")
+ extern "C" __declspec(dllimport) long __stdcall DwmSetWindowAttribute (void*, unsigned long, const void*, unsigned long);
+#endif
+
+/** Windows draws the title bar above the menus white by default: make it dark like the rest of
+    the app (Windows 11 takes the exact colour; Windows 10 gets its dark title bar). Call once the
+    window is on screen. Mac title bars follow the system's appearance by themselves. */
+inline void darkTitleBar (juce::Component& window)
+{
+   #if JUCE_WINDOWS
+    if (auto* hwnd = window.getWindowHandle())
+    {
+        const int dark = 1;
+        DwmSetWindowAttribute (hwnd, 20, &dark, sizeof (dark));   // DWMWA_USE_IMMERSIVE_DARK_MODE
+        auto colorRef = [] (juce::Colour c) { return (unsigned long) (c.getRed() | (c.getGreen() << 8) | (c.getBlue() << 16)); };
+        const unsigned long caption = colorRef (juce::Colour (0xff171412)), text = colorRef (juce::Colour (0xfff2efe8)), border = caption;
+        DwmSetWindowAttribute (hwnd, 35, &caption, sizeof (caption));   // DWMWA_CAPTION_COLOR (the menu bar's colour)
+        DwmSetWindowAttribute (hwnd, 36, &text, sizeof (text));         // DWMWA_TEXT_COLOR
+        DwmSetWindowAttribute (hwnd, 34, &border, sizeof (border));     // DWMWA_BORDER_COLOR
+    }
+   #else
+    juce::ignoreUnused (window);
+   #endif
+}
+
 /** Tracktion's and JUCE's own log lines go to Encore Studio.log too */
 struct StudioLogger : public juce::Logger
 {

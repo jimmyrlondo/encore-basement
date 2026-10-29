@@ -76,6 +76,19 @@ public:
         const auto t0 = juce::Time::getMillisecondCounterHiRes();
         mainWindow = std::make_unique<MainWindow> (*this);
         studioLog ("startup: window up in " + juce::String (juce::Time::getMillisecondCounterHiRes() - t0, 0) + " ms");
+        openFrom (args);
+    }
+
+    void anotherInstanceStarted (const juce::String& args) override { openFrom (args); }
+
+    /** "Encore Studio.exe "C:\...\Song.encore"": open that song once the window is up */
+    void openFrom (const juce::String& args)
+    {
+        if (mainWindow == nullptr) return;
+        auto tokens = juce::StringArray::fromTokens (args, true);
+        for (auto& t : tokens)
+            if (juce::File::isAbsolutePath (t.unquoted()))
+                mainWindow->openSong (juce::File (t.unquoted()));
     }
 
     void shutdown() override
@@ -104,6 +117,7 @@ private:
             setUsingNativeTitleBar (true);
             setIcon (encoreIconImage (256)); // title bar and taskbar (the .exe itself carries it too)
             auto* main = new MainComponent();
+            content = main;
             main->onTitleChange = [this] (const juce::String& t) { setName (t); };
             main->updateTitle();
             setContentOwned (main, true);
@@ -112,9 +126,19 @@ private:
             setResizeLimits (960, 600, 10000, 10000);
             centreWithSize (getWidth(), getHeight());
             setVisible (true);
+            darkTitleBar (*this);
         }
 
         void closeButtonPressed() override { app.systemRequestedQuit(); }
+
+        /** A song double-clicked in Explorer / Finder (or dropped on the app's icon) */
+        void openSong (const juce::File& f)
+        {
+            if (content != nullptr && songfile::isSong (f) && f.existsAsFile())
+                juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MainComponent> (content), f] { if (safe) safe->openSongFile (f); });
+        }
+
+        juce::Component::SafePointer<MainComponent> content;
 
     private:
         juce::JUCEApplication& app;

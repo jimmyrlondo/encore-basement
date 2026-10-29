@@ -116,7 +116,7 @@ namespace EngineHelpers
         o.content.setOwned (new AudioDeviceSelectorComponent (engine.getDeviceManager().deviceManager,
                                                               0, 512, 1, 512, false, false, true, true));
         o.content->setSize (400, 600);
-        o.launchAsync();
+        if (auto* w = o.launchAsync()) darkTitleBar (*w);
     }
 
     inline void browseForAudioFile (te::Engine& engine, std::function<void (const File&)> fileChosenCallback)
