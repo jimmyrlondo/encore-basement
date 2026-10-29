@@ -10,9 +10,10 @@
 //   right-click           velocity, and clearing or filling a whole row
 //   click a drum's name   plays it
 //
-// Drum tracks play the Studio Kit: drum sounds Studio makes itself the first
-// time (no samples to download), copied into the song folder so the song is
-// complete on its own. Rows follow General MIDI, so any MIDI drum part or drum
+// Drum tracks play one of Studio's own kits (Studio, 808, Rock, Lo-fi): drum
+// sounds it makes itself the first time (no samples to download), written into
+// the song folder so the song is complete on its own. The drum grid's Kit box
+// swaps them. Rows follow General MIDI, so any MIDI drum part or drum
 // plugin lines up too.
 #pragma once
 
@@ -43,10 +44,46 @@ namespace drums
     inline bool isDrumTrack (te::AudioTrack& t) { return t.state.getProperty ("basementRole").toString() == "drums"; }
 
     //==============================================================================
-    // The Studio Kit, synthesised: short, punchy, mix-ready one-shots.
+    // The kits, synthesised: short, punchy, mix-ready one-shots. Every kit is the same recipe
+    // with different settings, so each is a full kit on the same GM notes.
     namespace kit
     {
         constexpr double fs = 48000.0;
+
+        struct Style
+        {
+            const char* name;
+            double kickLo, kickHi, kickBend, kickDecay; float click;          // the kick's pitch drop and length
+            double snareTone1, snareTone2, snareToneDecay, snareNoiseHp, snareNoiseDecay; float snareNoise;
+            double hatDecay, cymbalBright;                                   // multipliers on the Studio kit's
+            double tomPitch, tomDecay;
+            float drive;                                                     // 0 clean .. 1 saturated
+            int crushBits, crushHold; double lowpass;                        // the lo-fi part (0 = off)
+        };
+
+        /** The kits: Studio (the default), 808 (long boom, tight hats), Rock (punchy and roomy), Lo-fi (crunchy and dark) */
+        inline const std::array<Style, 4>& styles()
+        {
+            static const std::array<Style, 4> s { {
+                { "Studio", 48, 150, 0.035, 0.32, 0.5f,  185, 330, 0.06, 1200, 0.12, 0.8f,  1.0, 1.0,   1.0,  0.28, 0.0f,  0, 1, 0 },
+                { "808",    45, 120, 0.060, 0.90, 0.15f, 230, 476, 0.09, 2500, 0.08, 0.55f, 0.7, 1.2,   0.85, 0.50, 0.3f,  0, 1, 0 },
+                { "Rock",   55, 180, 0.020, 0.22, 0.9f,  170, 290, 0.10,  800, 0.20, 1.0f,  1.3, 0.75,  0.9,  0.40, 0.5f,  0, 1, 0 },
+                { "Lo-fi",  50, 140, 0.035, 0.30, 0.4f,  190, 320, 0.07, 1500, 0.10, 0.7f,  0.9, 0.8,   1.0,  0.25, 0.25f, 8, 3, 6500 },
+            } };
+            return s;
+        }
+
+        inline int styleIndex (const juce::String& name)
+        {
+            for (int i = 0; i < (int) styles().size(); ++i) if (name == styles()[(size_t) i].name) return i;
+            return 0;
+        }
+
+        /** Where a kit's WAVs go in a song ("Drum kit" for the Studio kit, as songs made before had it) */
+        inline juce::File folderFor (const juce::File& songFolder, int style)
+        {
+            return songFolder.getChildFile (style <= 0 ? juce::String ("Drum kit") : "Drum kit " + juce::String (styles()[(size_t) juce::jmin (style, 3)].name));
+        }
 
         inline float noise (juce::Random& r) { return r.nextFloat() * 2.0f - 1.0f; }
 
@@ -59,13 +96,15 @@ namespace drums
             return s / 6.0f;
         }
 
-        inline juce::AudioBuffer<float> make (int note)
+        inline juce::AudioBuffer<float> make (int note, int styleIndex = 0)
         {
+            const auto& st = styles()[(size_t) juce::jlimit (0, 3, styleIndex)];
             juce::Random rnd (note * 7919);
-            auto seconds = [note]
+            auto seconds = [note, &st]
             {
-                switch (note) { case 36: return 0.6; case 38: return 0.4; case 39: return 0.45; case 42: return 0.18; case 46: return 0.7;
-                                case 49: return 2.2; case 51: return 1.6; default: return 0.7; }
+                switch (note) { case 36: return juce::jmax (0.6, st.kickDecay * 3.0); case 38: return 0.4; case 39: return 0.45;
+                                case 42: return 0.18 * st.hatDecay; case 46: return 0.7 * st.hatDecay;
+                                case 49: return 2.2; case 51: return 1.6; default: return juce::jmax (0.7, st.tomDecay * 2.5); }
             }();
             const int n = (int) (fs * seconds);
             juce::AudioBuffer<float> b (1, n);
@@ -78,20 +117,20 @@ namespace drums
                     for (int i = 0; i < n; ++i)
                     {
                         const double t = i / fs;
-                        const double f = 48.0 + 102.0 * std::exp (-t / 0.035);
+                        const double f = st.kickLo + (st.kickHi - st.kickLo) * std::exp (-t / st.kickBend);
                         phase += f / fs;
-                        out[i] = (float) (std::sin (juce::MathConstants<double>::twoPi * phase) * std::exp (-t / 0.32))
-                               + (t < 0.004 ? 0.5f * noise (rnd) * (float) (1.0 - t / 0.004) : 0.0f);
+                        out[i] = (float) (std::sin (juce::MathConstants<double>::twoPi * phase) * std::exp (-t / st.kickDecay))
+                               + (t < 0.004 ? st.click * noise (rnd) * (float) (1.0 - t / 0.004) : 0.0f);
                     }
                     break;
                 case 38: // snare: two drum tones and a crack of filtered noise
-                    hp.setCoefficients (juce::IIRCoefficients::makeHighPass (fs, 1200.0));
+                    hp.setCoefficients (juce::IIRCoefficients::makeHighPass (fs, st.snareNoiseHp));
                     for (int i = 0; i < n; ++i)
                     {
                         const double t = i / fs;
-                        const float tone = (float) ((std::sin (juce::MathConstants<double>::twoPi * 185.0 * t) * 0.6
-                                                     + std::sin (juce::MathConstants<double>::twoPi * 330.0 * t) * 0.3) * std::exp (-t / 0.06));
-                        out[i] = tone + 0.8f * hp.processSingleSampleRaw (noise (rnd)) * (float) std::exp (-t / 0.12);
+                        const float tone = (float) ((std::sin (juce::MathConstants<double>::twoPi * st.snareTone1 * t) * 0.6
+                                                     + std::sin (juce::MathConstants<double>::twoPi * st.snareTone2 * t) * 0.3) * std::exp (-t / st.snareToneDecay));
+                        out[i] = tone + st.snareNoise * hp.processSingleSampleRaw (noise (rnd)) * (float) std::exp (-t / st.snareNoiseDecay);
                     }
                     break;
                 case 39: // clap: three quick bursts, then the tail
@@ -106,8 +145,8 @@ namespace drums
                     break;
                 case 42: case 46: case 49: case 51: // hats and cymbals: metal plus air
                 {
-                    const double decay = note == 42 ? 0.035 : note == 46 ? 0.25 : note == 49 ? 0.75 : 0.5;
-                    hp.setCoefficients (juce::IIRCoefficients::makeHighPass (fs, note == 51 ? 5000.0 : 7000.0));
+                    const double decay = (note == 42 ? 0.035 : note == 46 ? 0.25 : note == 49 ? 0.75 : 0.5) * (note == 42 || note == 46 ? st.hatDecay : 1.0);
+                    hp.setCoefficients (juce::IIRCoefficients::makeHighPass (fs, (note == 51 ? 5000.0 : 7000.0) * st.cymbalBright));
                     hp2.setCoefficients (juce::IIRCoefficients::makeHighPass (fs, 3000.0));
                     const float air = note == 49 ? 0.7f : note == 51 ? 0.25f : 0.5f;
                     for (int i = 0; i < n; ++i)
@@ -122,15 +161,37 @@ namespace drums
                 }
                 default: // toms: a falling sine, a little skin noise
                 {
-                    const double f0 = note == 41 ? 92.0 : note == 45 ? 124.0 : 165.0;
+                    const double f0 = (note == 41 ? 92.0 : note == 45 ? 124.0 : 165.0) * st.tomPitch;
                     for (int i = 0; i < n; ++i)
                     {
                         const double t = i / fs;
                         phase += (f0 * (1.0 + 0.6 * std::exp (-t / 0.05))) / fs;
-                        out[i] = (float) (std::sin (juce::MathConstants<double>::twoPi * phase) * std::exp (-t / 0.28))
+                        out[i] = (float) (std::sin (juce::MathConstants<double>::twoPi * phase) * std::exp (-t / st.tomDecay))
                                + 0.05f * noise (rnd) * (float) std::exp (-t / 0.02);
                     }
                 }
+            }
+            // the kit's colour: saturation, then the lo-fi crunch (fewer bits, a lower sample rate, darker)
+            if (st.drive > 0)
+            {
+                const float k = 1.0f + st.drive * 4.0f, norm = 1.0f / std::tanh (k);
+                for (int i = 0; i < n; ++i) out[i] = std::tanh (out[i] * k) * norm;
+            }
+            if (st.crushBits > 0)
+            {
+                const float levels = (float) (1 << (st.crushBits - 1));
+                float held = 0;
+                for (int i = 0; i < n; ++i)
+                {
+                    if (i % juce::jmax (1, st.crushHold) == 0) held = std::round (out[i] * levels) / levels;
+                    out[i] = held;
+                }
+            }
+            if (st.lowpass > 0)
+            {
+                juce::IIRFilter lp;
+                lp.setCoefficients (juce::IIRCoefficients::makeLowPass (fs, st.lowpass));
+                lp.processSamples (out, n);
             }
             // a few ms fade at the end, then peak at -1 dB
             for (int i = 0; i < juce::jmin (n, 240); ++i) out[n - 1 - i] *= i / 240.0f;
@@ -139,15 +200,15 @@ namespace drums
             return b;
         }
 
-        /** The kit's WAVs in a folder (made if they aren't there) */
-        inline juce::File ensure (const juce::File& folder)
+        /** A kit's WAVs in a folder (made if they aren't there) */
+        inline juce::File ensure (const juce::File& folder, int style = 0)
         {
             folder.createDirectory();
             for (auto& l : lanes())
             {
                 auto f = folder.getChildFile (juce::String (l.name) + ".wav");
                 if (f.existsAsFile()) continue;
-                auto audio = make (l.note);
+                auto audio = make (l.note, style);
                 juce::WavAudioFormat wav;
                 std::unique_ptr<juce::OutputStream> os (f.createOutputStream().release());
                 if (os == nullptr) continue;
@@ -157,10 +218,10 @@ namespace drums
             return folder;
         }
 
-        /** Loads the kit into a Sampler: each sound on its own key, played to the end of the sample */
-        inline void load (te::SamplerPlugin& sampler, const juce::File& songFolder)
+        /** Loads a kit into a Sampler: each sound on its own key, played to the end of the sample */
+        inline void load (te::SamplerPlugin& sampler, const juce::File& songFolder, int style = 0)
         {
-            auto folder = ensure (songFolder.getChildFile ("Drum kit"));
+            auto folder = ensure (folderFor (songFolder, style), style);
             while (sampler.getNumSounds() > 0) sampler.removeSound (0);
             for (auto& l : lanes())
             {
@@ -194,13 +255,19 @@ public:
         gridBox.setTooltip ("Step size");
         gridBox.onChange = [this] { repaint(); };
         addAndMakeVisible (gridBox);
+        for (int i = 0; i < (int) drums::kit::styles().size(); ++i) kitBox.addItem (juce::String ("Kit: ") + drums::kit::styles()[(size_t) i].name, i + 1);
+        if (auto* t = dynamic_cast<te::AudioTrack*> (c.getTrack()))
+            kitBox.setSelectedId (drums::kit::styleIndex (t->state.getProperty ("drumKit", "Studio").toString()) + 1, juce::dontSendNotification);
+        kitBox.setTooltip ("Which of Studio's drum kits this track plays");
+        kitBox.onChange = [this] { switchKit (kitBox.getSelectedId() - 1); };
+        addAndMakeVisible (kitBox);
         pianoButton.setTooltip ("Edit these notes in the piano roll instead");
         pianoButton.onClick = [this] { if (onSwitchView) onSwitchView(); };
         addAndMakeVisible (pianoButton);
         closeButton.setTooltip ("Close (Esc)");
         closeButton.onClick = [this] { if (onClose) onClose(); };
         addAndMakeVisible (closeButton);
-        for (auto* b : std::initializer_list<juce::Component*> { &gridBox, &pianoButton, &closeButton }) b->setMouseClickGrabsKeyboardFocus (false);
+        for (auto* b : std::initializer_list<juce::Component*> { &gridBox, &kitBox, &pianoButton, &closeButton }) b->setMouseClickGrabsKeyboardFocus (false);
         updateRows();
         startTimerHz (20);
     }
@@ -287,6 +354,8 @@ public:
         pianoButton.setBounds (r.removeFromRight (90));
         r.removeFromRight (6);
         gridBox.setBounds (r.removeFromRight (90));
+        r.removeFromRight (6);
+        kitBox.setBounds (r.removeFromRight (120));
         r.removeFromRight (10);
         title.setBounds (r);
         // cells as wide as fit (the whole clip when it can), never narrower than 14 px
@@ -351,7 +420,22 @@ public:
 private:
     te::SafeSelectable<te::MidiClip> clip;
     juce::Label title;
-    juce::ComboBox gridBox;
+    juce::ComboBox gridBox, kitBox;
+
+    /** Swaps the track's Sampler to another of Studio's kits (written into the song folder the first time) */
+    void switchKit (int style)
+    {
+        if (clip == nullptr) return;
+        auto* t = dynamic_cast<te::AudioTrack*> (clip->getTrack());
+        if (t == nullptr || ! clip->edit.editFileRetriever) return;
+        for (auto p : t->pluginList.getPlugins())
+            if (auto* s = dynamic_cast<te::SamplerPlugin*> (p))
+            {
+                drums::kit::load (*s, clip->edit.editFileRetriever().getParentDirectory(), style);
+                t->state.setProperty ("drumKit", drums::kit::styles()[(size_t) style].name, nullptr);
+                return;
+            }
+    }
     juce::TextButton pianoButton { "Piano roll" }, closeButton { "X" };
     struct Row { int note; juce::String name; };
     juce::Array<Row> rows;

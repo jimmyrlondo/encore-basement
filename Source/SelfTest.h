@@ -473,6 +473,16 @@ namespace selftest
                                                                    && library::releaseFolder (artist, "Live at the Hall", "Beer Barrel").getFileName() == "Live at the Hall");
         }
 
+        // the kits: every one makes all ten drums, and they sound different (the 808 kick booms longer)
+        {
+            bool all = true;
+            for (int k = 0; k < (int) drums::kit::styles().size(); ++k)
+                for (auto& l : drums::lanes()) { auto s = drums::kit::make (l.note, k); all = all && s.getNumSamples() > 1000 && s.getMagnitude (0, 0, s.getNumSamples()) > 0.5f; }
+            const auto studio = drums::kit::make (36, 0), boom = drums::kit::make (36, 1);
+            expect ("4 drum kits, each with all 10 drums", all && drums::kit::styles().size() == 4);
+            expect ("the 808 kick is longer than the Studio kick", boom.getNumSamples() > studio.getNumSamples() * 1.4, String (boom.getNumSamples() / 48000.0, 2) + " s");
+        }
+
         // a drum track: the Studio Kit (made in the song folder) plays a kick on beat 1 and a snare on beat 2
         {
             auto drumSong = dir.getChildFile ("Drum Song").getChildFile ("Drum Song.encore");

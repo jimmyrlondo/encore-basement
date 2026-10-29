@@ -1307,6 +1307,7 @@ public:
             case 4: // MIDI
             {
                 add (cmdPianoRoll); m.addSeparator();
+                m.addItem (drumSnapId, "Snap Recorded Drum Hits to the Grid", true, props().getBoolValue ("drumRecordSnap", true));
                 add (cmdQuantize);
                 const bool notes = ! midiTargets().empty();
                 juce::PopupMenu tr; addCommand (tr, cmdTransposeUp); addCommand (tr, cmdTransposeDown); addCommand (tr, cmdOctaveUp); addCommand (tr, cmdOctaveDown);
@@ -1426,6 +1427,7 @@ public:
         if (id >= recentBaseId && id < recentBaseId + recentFiles.size())
             if (recentFiles[id - recentBaseId].existsAsFile()) loadSong (recentFiles[id - recentBaseId]);
         if (id >= accountBaseId && id <= accountLastId) accountItem (id);
+        if (id == drumSnapId) props().setValue ("drumRecordSnap", ! props().getBoolValue ("drumRecordSnap", true));
         if (id == tempoChangeId && editComponent != nullptr && edit) editComponent->getRuler().editTempoChange (edit->getTransport().getPosition());
     }
 
@@ -1948,7 +1950,7 @@ private:
     //==============================================================================
     // Account: who you're making music as (Account menu, the Hub's artist picker, the first screen)
     std::unique_ptr<AccountComponent> firstScreen;
-    static constexpr int tempoChangeId = 0x5200;
+    static constexpr int tempoChangeId = 0x5200, drumSnapId = 0x5201;
     static constexpr int accountBaseId = 0x5100, accountAddId = 0x51f0, accountFolderId = 0x51f1, accountEditId = 0x51f2,
                          accountSignInId = 0x51f3, accountSignOutId = 0x51f4, accountLastId = 0x51f4;
 
@@ -2961,6 +2963,15 @@ private:
         bool anyArmed = false;
         for (auto t : te::getAudioTracks (*edit)) anyArmed = anyArmed || EngineHelpers::isTrackArmed (*t);
         if (! anyArmed) { status ("Arm a track first: the R button on the track, after choosing its input."); return; }
+        // playing a drum track from pads or a keyboard: hits go into the beat that's there (merged, not a new
+        // clip on top) and snap to 16ths, like a drum machine. Other MIDI is recorded exactly as played.
+        bool drums = false;
+        for (auto t : te::getAudioTracks (*edit)) drums = drums || (EngineHelpers::isTrackArmed (*t) && drums::isDrumTrack (*t));
+        for (auto& dev : engine.getDeviceManager().getMidiInDevices())
+        {
+            dev->mergeRecordings = true;
+            dev->quantisation.setType (drums && props().getBoolValue ("drumRecordSnap", true) ? "1/4 beat" : "(none)");
+        }
         const int beats = tr.isPlaying() ? 0 : edit->getNumCountInBeats();
         tr.record (false);
         if (beats > 0)
