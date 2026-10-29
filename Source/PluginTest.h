@@ -92,6 +92,11 @@ namespace selftest
         Opens no audio device and no plugin window. */
     inline int bridge (const juce::File& outFile, const juce::File& pluginFile)
     {
+       #if ! JUCE_WINDOWS
+        outFile.replaceWithText ("32-bit plugins are Windows only");
+        juce::ignoreUnused (pluginFile);
+        return 1;
+       #else
         using namespace juce;
         String report;
         int failures = 0;
@@ -175,5 +180,6 @@ namespace selftest
         report << (failures == 0 ? "ALL PASSED" : "FAILED") << newLine;
         outFile.replaceWithText (report);
         return failures == 0 ? 0 : 1;
+       #endif
     }
 }
