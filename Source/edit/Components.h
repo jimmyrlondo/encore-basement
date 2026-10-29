@@ -223,6 +223,109 @@ namespace markers
 }
 
 //==============================================================================
+/** Tempo and time-signature changes partway through a song. The first tempo and time signature
+    are the song's own (Song Setup, the toolbar); bar numbers and the bar grid follow every change.
+    A tempo either jumps at its change or ramps there from the one before (Tracktion's curve on
+    the earlier setting: 1 holds it until the change, 0 is a straight ramp). */
+namespace tempos
+{
+    inline te::TimePosition barStart (te::TempoSequence& ts, int bar) { return ts.toTime (te::tempo::BarsAndBeats { jmax (0, bar), {} }); }
+    inline int barAt (te::TempoSequence& ts, te::TimePosition t)       { return ts.toBarsAndBeats (t).bars; }
+
+    /** The nearest bar line to t */
+    inline te::TimePosition nearestBar (te::TempoSequence& ts, te::TimePosition t)
+    {
+        const int b = barAt (ts, t);
+        auto a = barStart (ts, b), n = barStart (ts, b + 1);
+        return (t - a) <= (n - t) ? a : n;
+    }
+
+    struct Change
+    {
+        te::TimePosition time;
+        double bpm = 0;           // 0: the tempo carries on
+        bool ramp = false;        // ramps to bpm from the tempo before
+        int num = 0, den = 0;     // 0: the time signature carries on
+        String text() const
+        {
+            String s;
+            if (bpm > 0) { auto b = String (bpm, 1); s << (ramp ? "-> " : "") << (b.endsWith (".0") ? b.dropLastCharacters (2) : b); }
+            if (num > 0) s << (s.isEmpty() ? "" : "  ") << num << "/" << den;
+            return s;
+        }
+    };
+
+    /** Every change after the start, in time order (a tempo and a time signature in the same place are one) */
+    inline Array<Change> list (te::Edit& e)
+    {
+        auto& ts = e.tempoSequence;
+        std::map<double, Change> at;   // by beat
+        const auto& t = ts.getTempos();
+        for (int i = 1; i < t.size(); ++i)
+        {
+            auto& c = at[t[i]->getStartBeat().inBeats()];
+            c.time = t[i]->getStartTime();
+            c.bpm = t[i]->getBpm();
+            c.ramp = t[i - 1]->getCurve() < 0.5f;
+        }
+        const auto& s = ts.getTimeSigs();
+        for (int i = 1; i < s.size(); ++i)
+        {
+            auto& c = at[s[i]->getStartBeat().inBeats()];
+            c.time = ts.toTime (s[i]->getStartBeat());
+            c.num = s[i]->numerator; c.den = s[i]->denominator;
+        }
+        Array<Change> out;
+        for (auto& [beat, c] : at) out.add (c);
+        return out;
+    }
+
+    /** Adds or changes the tempo and/or time signature at t (a time signature lands on the nearest bar line).
+        One undo step. */
+    inline void set (te::Edit& e, te::TimePosition t, double bpm, bool ramp, int num, int den)
+    {
+        auto& ts = e.tempoSequence;
+        auto* um = &e.getUndoManager();
+        um->beginNewTransaction ("Tempo change");
+        if (num > 0 && den > 0)
+        {
+            t = nearestBar (ts, t);
+            const auto beat = ts.toBeats (t);
+            te::TimeSigSetting::Ptr sig = &ts.getTimeSigAt (beat);
+            if (std::abs ((sig->getStartBeat() - beat).inBeats()) > 0.001 || ts.indexOfTimeSig (sig.get()) == 0) sig = ts.insertTimeSig (t);
+            sig->numerator = num;
+            sig->denominator = den;
+        }
+        if (bpm > 0)
+        {
+            const auto beat = te::roundToNearestBeat (ts.toBeats (t));
+            te::TempoSetting::Ptr tempo = &ts.getTempoAt (beat);
+            if (std::abs ((tempo->getStartBeat() - beat).inBeats()) > 0.001 || ts.indexOfTempo (tempo.get()) == 0)
+                tempo = ts.insertTempo (beat, bpm, 1.0f);
+            tempo->setBpm (bpm);
+            const int i = ts.indexOfTempo (tempo.get());
+            if (i > 0) ts.getTempo (i - 1)->setCurve (ramp ? 0.0f : 1.0f);
+        }
+    }
+
+    /** Takes out the change at t (never the song's first tempo or time signature) */
+    inline void remove (te::Edit& e, te::TimePosition t)
+    {
+        auto& ts = e.tempoSequence;
+        e.getUndoManager().beginNewTransaction ("Remove tempo change");
+        const auto beat = ts.toBeats (t).inBeats();
+        for (int i = ts.getNumTempos(); --i > 0;)
+            if (std::abs (ts.getTempo (i)->getStartBeat().inBeats() - beat) < 0.01)
+            {
+                ts.getTempo (i - 1)->setCurve (1.0f);
+                ts.removeTempo (i, false);
+            }
+        for (int i = ts.getNumTimeSigs(); --i > 0;)
+            if (std::abs (ts.getTimeSig (i)->getStartBeat().inBeats() - beat) < 0.01) ts.removeTimeSig (i);
+    }
+}
+
+//==============================================================================
 void drawMidiClip (juce::Graphics&, te::MidiClip&, juce::Rectangle<int>, te::TimeRange);
 
 //==============================================================================
@@ -277,6 +380,7 @@ public:
     {
         if (bypass || snapMode.get() == 0) return t;
         auto& ts = edit.tempoSequence;
+        if (snapMode.get() == 1) { const int b = ts.toBarsAndBeats (t).bars; auto a = ts.toTime (te::tempo::BarsAndBeats { b, {} }), n = ts.toTime (te::tempo::BarsAndBeats { b + 1, {} }); return (t - a) <= (n - t) ? a : n; }
         const double g = gridBeats(), beats = ts.toBeats (t).inBeats();
         return ts.toTime (te::BeatPosition::fromBeats (jmax (0.0, std::round (beats / g) * g)));
     }
@@ -578,11 +682,15 @@ public:
     void mouseDrag (const MouseEvent& e) override;
     void mouseUp (const MouseEvent&) override       { draggedMarker = {}; }
     void mouseDoubleClick (const MouseEvent& e) override;
-    static constexpr int markerLaneH = 18;
+    static constexpr int markerLaneH = 18, tempoTagOffset = 22;   // tempo tags sit after the bar number
 private:
     void timerCallback() override { repaint(); }
     ValueTree markerAt (int x) const;
     void renameMarker (ValueTree m);
+public:
+    void editTempoChange (te::TimePosition t);
+private:
+    std::optional<tempos::Change> tempoChangeAt (int x) const;
     te::Edit& edit;
     EditViewState& editViewState;
     ValueTree draggedMarker;
@@ -600,6 +708,7 @@ public:
     ~EditComponent() override;
 
     EditViewState& getEditViewState()   { return editViewState; }
+    TimeRulerComponent& getRuler()      { return ruler; }
 
     /** Track heights: each track keeps its own (dragged on its header, or set
         for all from Window > Track Height) */

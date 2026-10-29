@@ -1450,12 +1450,11 @@ void TrackComponent::paint (Graphics& g)
 
     // a faint line per bar
     auto& ts = editViewState.edit.tempoSequence;
-    const int num = jmax (1, ts.getTimeSig (0)->numerator.get());
     g.setColour (theme::strong.withAlpha (0.6f));
-    auto b0 = (int) std::floor (ts.toBeats (editViewState.viewX1.get()).inBeats() / num);
+    auto b0 = tempos::barAt (ts, editViewState.viewX1.get());
     for (int bar = jmax (0, b0); bar < b0 + 4000; ++bar)
     {
-        int x = editViewState.timeToX (ts.toTime (te::BeatPosition::fromBeats (bar * num)), getWidth());
+        int x = editViewState.timeToX (tempos::barStart (ts, bar), getWidth());
         if (x > getWidth()) break;
         g.fillRect (x, 0, 1, getHeight());
     }
@@ -2027,22 +2026,34 @@ void TimeRulerComponent::paint (Graphics& g)
         g.fillRect (x2, 0, 1, getHeight());
     }
     auto& ts = edit.tempoSequence;
-    const int num = jmax (1, ts.getTimeSig (0)->numerator.get());
     // label every bar, or every 2nd/4th/... bar when zoomed out
-    const double pxPerBar = editViewState.timeToX (ts.toTime (te::BeatPosition::fromBeats (num)), getWidth())
-                          - editViewState.timeToX (ts.toTime (te::BeatPosition::fromBeats (0)), getWidth());
+    auto b0 = tempos::barAt (ts, editViewState.viewX1.get());
+    const double pxPerBar = editViewState.timeToX (tempos::barStart (ts, b0 + 1), getWidth()) - editViewState.timeToX (tempos::barStart (ts, b0), getWidth());
     int every = 1;
     while (pxPerBar * every < 44 && every < 4096) every *= 2;
     g.setFont (FontOptions (11.0f));
-    auto b0 = (int) std::floor (ts.toBeats (editViewState.viewX1.get()).inBeats() / num);
     for (int bar = jmax (0, b0 - b0 % every); bar < b0 + 100000; bar += every)
     {
-        int x = editViewState.timeToX (ts.toTime (te::BeatPosition::fromBeats (bar * num)), getWidth());
+        int x = editViewState.timeToX (tempos::barStart (ts, bar), getWidth());
         if (x > getWidth()) break;
         g.setColour (theme::strong);
         g.fillRect (x, getHeight() - 10, 1, 10);
         g.setColour (theme::muted);
         g.drawText (String (bar + 1), x + 4, markerLaneH, 40, getHeight() - markerLaneH - 2, Justification::centredLeft);
+    }
+    // tempo and time signature changes: a yellow tag after the bar number (right-click the bar numbers to add one)
+    g.setFont (FontOptions (11.0f, Font::bold));
+    for (auto& c : tempos::list (edit))
+    {
+        const int x = editViewState.timeToX (c.time, getWidth());
+        if (x < -150 || x > getWidth()) continue;
+        const auto text = c.text();
+        const int w = GlyphArrangement::getStringWidthInt (g.getCurrentFont(), text) + 10;
+        g.setColour (theme::solo);
+        g.fillRect (x, markerLaneH, 2, getHeight() - markerLaneH);
+        g.fillRoundedRectangle (Rectangle<float> ((float) x + tempoTagOffset, (float) markerLaneH + 2.0f, (float) w, (float) getHeight() - markerLaneH - 4.0f), 3.0f);
+        g.setColour (theme::base);
+        g.drawText (text, x + tempoTagOffset + 5, markerLaneH + 2, w - 5, getHeight() - markerLaneH - 4, Justification::centredLeft);
     }
     // markers: a flag and a name in the top lane
     g.setColour (theme::base.withAlpha (0.5f));
@@ -2079,9 +2090,66 @@ ValueTree TimeRulerComponent::markerAt (int x) const
     return {};
 }
 
+std::optional<tempos::Change> TimeRulerComponent::tempoChangeAt (int x) const
+{
+    Font f (FontOptions (11.0f, Font::bold));
+    for (auto& c : tempos::list (edit))
+    {
+        const int cx = editViewState.timeToX (c.time, getWidth());
+        if (x >= cx - 3 && x <= cx + tempoTagOffset + GlyphArrangement::getStringWidthInt (f, c.text()) + 10) return c;
+    }
+    return {};
+}
+
+/** Add or change the tempo / time signature at t: a small box with both, and jump or ramp */
+void TimeRulerComponent::editTempoChange (te::TimePosition t)
+{
+    auto& ts = edit.tempoSequence;
+    auto existing = tempoChangeAt (editViewState.timeToX (t, getWidth()));
+    if (existing) t = existing->time;
+    auto* w = new AlertWindow (existing ? "Tempo Change" : "Add a Tempo Change",
+                               "At bar " + String (tempos::barAt (ts, t) + 1) + ". Leave a box empty to keep it as it is.", MessageBoxIconType::NoIcon);
+    auto bpmNow = String (ts.getTempoAt (t).getBpm(), 1);
+    w->addTextEditor ("bpm", existing && existing->bpm > 0 ? String (existing->bpm, 1) : bpmNow, "Tempo (BPM)");
+    auto& sig = ts.getTimeSigAt (t);
+    w->addTextEditor ("sig", existing && existing->num > 0 ? String (existing->num) + "/" + String (existing->den) : String(), "Time signature (like 3/4 or 7/8)");
+    w->getTextEditor ("sig")->setTextToShowWhenEmpty ("now " + String (sig.numerator.get()) + "/" + String (sig.denominator.get()), theme::muted);
+    w->addComboBox ("how", { "Jump to the new tempo", "Ramp to it from the tempo before" }, "How the tempo gets there");
+    w->getComboBoxComponent ("how")->setSelectedItemIndex (existing && existing->ramp ? 1 : 0);
+    w->addButton ("OK", 1, KeyPress (KeyPress::returnKey));
+    if (existing) w->addButton ("Remove", 2);
+    w->addButton ("Cancel", 0, KeyPress (KeyPress::escapeKey));
+    w->enterModalState (true, ModalCallbackFunction::create ([this, w, t, bpmNow] (int r)
+    {
+        if (r == 2) { tempos::remove (edit, t); return; }
+        if (r != 1) return;
+        auto bpmText = w->getTextEditorContents ("bpm").trim();
+        const double bpm = bpmText.getDoubleValue();
+        auto parts = StringArray::fromTokens (w->getTextEditorContents ("sig"), "/", {});
+        const int num = parts.size() == 2 ? jlimit (1, 32, parts[0].getIntValue()) : 0;
+        int den = parts.size() == 2 ? parts[1].getIntValue() : 0;
+        if (den != 2 && den != 4 && den != 8 && den != 16) den = num > 0 ? 4 : 0;
+        const bool ramp = w->getComboBoxComponent ("how")->getSelectedItemIndex() == 1;
+        tempos::set (edit, t, bpm >= 20 && bpm <= 400 ? bpm : 0.0, ramp, num, den);
+    }), true);
+}
+
 void TimeRulerComponent::mouseDown (const MouseEvent& e)
 {
     movedMarker = false;
+    if (e.y >= markerLaneH && e.mods.isPopupMenu())
+    {
+        const auto t = te::TimePosition::fromSeconds (jmax (0.0, editViewState.xToTime (e.x, getWidth()).inSeconds()));
+        PopupMenu menu;
+        if (auto c = tempoChangeAt (e.x))
+        {
+            menu.addItem ("Edit Tempo Change...", [this, c] { editTempoChange (c->time); });
+            menu.addItem ("Remove Tempo Change", [this, c] { tempos::remove (edit, c->time); });
+        }
+        else menu.addItem ("Add Tempo or Time Signature Change here...", [this, t] { editTempoChange (t); });
+        menu.showMenuAsync (PopupMenu::Options());
+        return;
+    }
     if (e.y < markerLaneH)
     {
         auto m = markerAt (e.x);
@@ -2130,7 +2198,7 @@ void TimeRulerComponent::mouseDrag (const MouseEvent& e)
 
 void TimeRulerComponent::mouseDoubleClick (const MouseEvent& e)
 {
-    if (e.y >= markerLaneH) return;
+    if (e.y >= markerLaneH) { if (auto c = tempoChangeAt (e.x)) editTempoChange (c->time); return; }
     if (auto m = markerAt (e.x); m.isValid()) renameMarker (m);
     else markers::add (edit, editViewState.snap (te::TimePosition::fromSeconds (jmax (0.0, editViewState.xToTime (e.x, getWidth()).inSeconds()))));
 }

@@ -420,6 +420,27 @@ namespace selftest
                                                            && liveimport::groupFor ("Guitar") == "Guitars" && liveimport::groupFor ("Bass").isEmpty());
         }
 
+        // tempo changes: at bar 3 (4 s at 120 BPM 4/4) the song goes to 60 BPM in 3/4, so bar 4 starts 3 s later;
+        // a ramp instead passes 90 BPM halfway; removing the change puts it all back
+        {
+            auto e = songs::create (engine, dir.getChildFile ("Tempo Song").getChildFile (String ("Tempo Song") + songfile::ext));
+            auto& ts = e->tempoSequence;
+            ts.getTempo (0)->setBpm (120.0);
+            tempos::set (*e, te::TimePosition::fromSeconds (4.0), 60.0, false, 3, 4);
+            const double bar4 = tempos::barStart (ts, 3).inSeconds();
+            auto changes = tempos::list (*e);
+            expect ("a tempo and time signature change moves the bars after it", std::abs (bar4 - 7.0) < 0.01 && changes.size() == 1
+                                                                                  && changes[0].bpm == 60.0 && changes[0].num == 3, String (bar4, 3) + " s");
+            tempos::set (*e, te::TimePosition::fromSeconds (4.0), 60.0, true, 0, 0);
+            const double mid = ts.getBpmAt (te::TimePosition::fromSeconds (2.0));
+            expect ("a tempo ramp passes through the tempos between", mid > 70.0 && mid < 115.0 && tempos::list (*e)[0].ramp, String (mid, 1) + " BPM at 2 s");
+            tempos::remove (*e, tempos::list (*e)[0].time);   // the ramp moved it in seconds (same bar)
+            expect ("removing the change puts the song back", ts.getNumTempos() == 1 && ts.getNumTimeSigs() == 1
+                                                                && std::abs (tempos::barStart (ts, 3).inSeconds() - 6.0) < 0.01);
+            e->getUndoManager().undo();
+            expect ("and undo brings it back", ts.getNumTempos() == 2 && ts.getNumTimeSigs() == 2);
+        }
+
         // the account: a label's profile survives saving, each artist gets Songs/Releases/Masters/Live,
         // a song in an artist's folder knows whose it is, and remastering keeps the earlier master
         {

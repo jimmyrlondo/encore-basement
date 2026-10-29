@@ -1290,11 +1290,13 @@ public:
             case 2: // Project
                 add (cmdAddTrack); add (cmdAddDrumTrack); add (cmdDuplicateTrack); add (cmdRenameTrack); add (cmdRemoveTrack); m.addSeparator();
                 add (cmdSongSetup); m.addSeparator();
-                add (cmdAddMarker); m.addSeparator();
+                add (cmdAddMarker);
+                m.addItem (tempoChangeId, "Tempo or Time Signature Change at the Playhead...", editComponent != nullptr && ! hubShown);
+                m.addSeparator();
                 add (cmdAddFxReverb); add (cmdAddFxDelay); add (cmdAddFxEmpty); m.addSeparator();
                 add (cmdAddGroup); add (cmdGroupSelected); m.addSeparator();
                 m.addSubMenu ("Add Instrument Track", instrumentMenu(), edit != nullptr && ! hubShown);
-                later ({ "Arranger Track", "Piano Roll Editor" });
+                later ({ "Arranger Track" });
                 break;
             case 3: // Audio
                 add (cmdNormalize); add (cmdGainUp); add (cmdGainDown); add (cmdGainReset); m.addSeparator();
@@ -1424,6 +1426,7 @@ public:
         if (id >= recentBaseId && id < recentBaseId + recentFiles.size())
             if (recentFiles[id - recentBaseId].existsAsFile()) loadSong (recentFiles[id - recentBaseId]);
         if (id >= accountBaseId && id <= accountLastId) accountItem (id);
+        if (id == tempoChangeId && editComponent != nullptr && edit) editComponent->getRuler().editTempoChange (edit->getTransport().getPosition());
     }
 
     //==============================================================================
@@ -1945,6 +1948,7 @@ private:
     //==============================================================================
     // Account: who you're making music as (Account menu, the Hub's artist picker, the first screen)
     std::unique_ptr<AccountComponent> firstScreen;
+    static constexpr int tempoChangeId = 0x5200;
     static constexpr int accountBaseId = 0x5100, accountAddId = 0x51f0, accountFolderId = 0x51f1, accountEditId = 0x51f2,
                          accountSignInId = 0x51f3, accountSignOutId = 0x51f4, accountLastId = 0x51f4;
 
@@ -3003,9 +3007,10 @@ private:
     void setTempo (double bpm)
     {
         if (! edit) return;
-        if (bpm >= 20 && bpm <= 400) edit->tempoSequence.getTempo (0)->setBpm (bpm);
+        auto& tempo = edit->tempoSequence.getTempoAt (edit->getTransport().getPosition());   // the tempo where the playhead is
+        if (bpm >= 20 && bpm <= 400) tempo.setBpm (bpm);
         SongInfo i;
-        i.bpm = edit->tempoSequence.getTempo (0)->getBpm();
+        i.bpm = tempo.getBpm();
         tempoLabel.setText (i.bpmText(), juce::dontSendNotification);
     }
 
@@ -3559,10 +3564,9 @@ private:
         const double a = std::abs (pos);
         timeLabel.setText ((pos < 0 ? "-" : "") + juce::String ((int) a / 60) + ":" + juce::String (std::fmod (a, 60.0), 1).paddedLeft ('0', 4), juce::dontSendNotification);
         auto& ts = edit->tempoSequence;
-        const int num = juce::jmax (1, ts.getTimeSig (0)->numerator.get());
-        const double beats = ts.toBeats (tr.getPosition()).inBeats();
+        const auto bb = ts.toBarsAndBeats (tr.getPosition());
         barLabel.setText (pos < 0 ? juce::String ("Count-in")
-                                  : "Bar " + juce::String ((int) (beats / num) + 1) + "." + juce::String ((int) std::fmod (beats, (double) num) + 1),
+                                  : "Bar " + juce::String (bb.bars + 1) + "." + juce::String (bb.getWholeBeats() + 1),
                           juce::dontSendNotification);
         playButton.setButtonText (tr.isPlaying() ? "Stop" : "Play");
         if (liveImportProgress) status ("Bringing in the live recording: splitting it into a file per input... " + juce::String (juce::roundToInt (liveImportProgress->load() * 100)) + "%");
@@ -3574,7 +3578,7 @@ private:
         if (! tempoLabel.isBeingEdited())
         {
             SongInfo i;
-            i.bpm = ts.getTempo (0)->getBpm();
+            i.bpm = ts.getBpmAt (tr.getPosition());
             auto bpm = i.bpmText();
             if (tempoLabel.getText() != bpm) tempoLabel.setText (bpm, juce::dontSendNotification);
         }
