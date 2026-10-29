@@ -21,10 +21,13 @@ using namespace tracktion::literals;
 #include "edit/Components.h"
 #include "edit/Mixer.h"
 #include "edit/PianoRoll.h"
+#include "edit/DrumGrid.h"
 #include "edit/Tuner.h"
 #include "edit/PluginWindow.h"
 #include "PluginFinder.h"
 #include "Mp3.h"
+#include "Mastering.h"
+#include "LiveImport.h"
 #include "MainComponent.h"
 #include "SelfTest.h"
 #include "PluginTest.h"
@@ -66,6 +69,8 @@ public:
         if (args.contains ("--profile"))
             basementProfile() = args.fromFirstOccurrenceOf ("--profile", false, false).trim().unquoted();
         juce::Logger::setCurrentLogger (&logger);
+        // a crash leaves its last words in Basement.log (for Help > Report a Problem next time)
+        juce::SystemStats::setApplicationCrashHandler ([] (void*) { basementLog (juce::String ("CRASH: ") + juce::NewLine::getDefault() + juce::SystemStats::getStackBacktrace()); });
         juce::LookAndFeel::setDefaultLookAndFeel (&lookAndFeel);
         const auto t0 = juce::Time::getMillisecondCounterHiRes();
         mainWindow = std::make_unique<MainWindow> (*this);

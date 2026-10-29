@@ -90,7 +90,7 @@ namespace instruments
     }
 
     /** Puts the instrument at the start of the track and plays it from MIDI */
-    inline void makeInstrumentTrack (te::AudioTrack& t, te::Plugin::Ptr instrument)
+    inline void makeInstrumentTrack (te::AudioTrack& t, te::Plugin::Ptr instrument, bool openWindow = true)
     {
         if (instrument == nullptr) return;
         auto& e = t.edit;
@@ -101,7 +101,7 @@ namespace instruments
             if (te::isOnTargetTrack (*instance, t, 0)) [[maybe_unused]] auto r = instance->removeTarget (t.itemID, &e.getUndoManager());
         if (auto midi = midiInput (e)) [[maybe_unused]] auto r = midi->setTarget (t.itemID, true, &e.getUndoManager(), 0);
         t.state.setProperty ("basementInput", "midi", nullptr);
-        instrument->showWindowExplicitly();
+        if (openWindow) instrument->showWindowExplicitly();
     }
 }
 

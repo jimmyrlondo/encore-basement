@@ -18,6 +18,29 @@
   say whether a template fits your interface.
 - Send to Encore (File > Export): a release package with the master, stems,
   cover art and release.json, then Encore opens to upload it.
+- Master it on export: pick a style (Balanced, Heavy, Bright, Warm), a
+  loudness (Streaming -14, Balanced -11, Loud -9) and how hard, and the mix
+  goes out through Encore Master. It learns the song on its loudest 30
+  seconds first, so the whole song is mastered evenly. Your song doesn't
+  change. Listen plays 30 seconds mastered; flip to the original, or match
+  their loudness for a fair comparison.
+- Drum tracks: Project > Add Drum Track (Ctrl+Alt+T) gives you the Basement
+  Kit (ten drum sounds Basement makes itself, saved in the song folder) and a
+  drum grid. Click steps for hits, drag to paint, Shift+click for accents,
+  right-click to fill or clear a row. The piano roll and drum grid switch
+  with one button.
+- Song versions: Save New Version (Ctrl+Alt+S) asks what's changing, and
+  File > Versions (Ctrl+Alt+V) lists every version with its note, opens any
+  of them, and compares one with the open song by ear (the same 30 seconds of
+  each, switching between them).
+- Import a live recording (File > Import > Live Recording): an Encore Live
+  session or any multichannel WAV becomes a track per input, grouped by name
+  (drums, vocals, guitars), with a marker at each song, or a Basement song for
+  each song in the show. Inputs with nothing on them are left out.
+- Help > Check for Updates looks for a newer Basement (and once a day by
+  itself, which you can switch off), and Help > Report a Problem makes a zip
+  of the log and your setup on the Desktop and opens a GitHub issue to attach
+  it to. If Basement didn't close properly, it says so next time.
 - MP3 export: MP3 320 kbps or 192 kbps in the Export box, for the mix or
   stems, with the title, artist, album and genre written into the file.
   Made with LAME (LGPL).

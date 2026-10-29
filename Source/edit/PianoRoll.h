@@ -74,12 +74,22 @@ namespace midiedit
 }
 
 //==============================================================================
-class PianoRoll : public juce::Component,
-                  private juce::Timer
+/** The pane under the arrange view that edits a MIDI clip: the piano roll, or for drum tracks the drum grid */
+class NoteEditor : public juce::Component
 {
 public:
     std::function<void()> onClose;
+    std::function<void()> onSwitchView;   // piano roll <-> drum grid
+    virtual te::MidiClip* getClip() const = 0;
+    /** The notes the MIDI menu should act on */
+    virtual juce::Array<te::MidiNote*> targetNotes() = 0;
+    virtual double gridBeats() const = 0;
+};
 
+class PianoRoll : public NoteEditor,
+                  private juce::Timer
+{
+public:
     PianoRoll (te::MidiClip& c) : clip (&c)
     {
         setWantsKeyboardFocus (true);
@@ -97,6 +107,12 @@ public:
         quantizeButton.onClick = [this] { quantizeSelection(); };
         addAndMakeVisible (quantizeButton);
 
+        drumsButton.setTooltip ("Edit these notes in the drum grid instead");
+        drumsButton.onClick = [this] { if (onSwitchView) onSwitchView(); };
+        if (auto* at = dynamic_cast<te::AudioTrack*> (c.getTrack()); at != nullptr && at->state.getProperty ("basementRole").toString() == "drums")
+            addAndMakeVisible (drumsButton);
+        drumsButton.setMouseClickGrabsKeyboardFocus (false);
+
         closeButton.setTooltip ("Close the piano roll (Esc)");
         closeButton.onClick = [this] { if (onClose) onClose(); };
         addAndMakeVisible (closeButton);
@@ -110,16 +126,16 @@ public:
 
     ~PianoRoll() override { stopAudition(); }
 
-    te::MidiClip* getClip() const { return clip.get(); }
+    te::MidiClip* getClip() const override { return clip.get(); }
 
     /** The notes the MIDI menu should act on: the selection, or all of them */
-    juce::Array<te::MidiNote*> targetNotes()
+    juce::Array<te::MidiNote*> targetNotes() override
     {
         pruneSelection();
         return selection.isEmpty() && clip != nullptr ? midiedit::allNotes (*clip) : selection;
     }
 
-    double gridBeats() const { return midiedit::grids()[(size_t) juce::jlimit (0, 5, gridBox.getSelectedId() - 1)].beats; }
+    double gridBeats() const override { return midiedit::grids()[(size_t) juce::jlimit (0, 5, gridBox.getSelectedId() - 1)].beats; }
 
     void quantizeSelection()
     {
@@ -155,6 +171,7 @@ public:
         r.removeFromRight (10);
         quantizeButton.setBounds (r.removeFromRight (84));
         r.removeFromRight (6);
+        if (drumsButton.isVisible()) { drumsButton.setBounds (r.removeFromRight (90)); r.removeFromRight (6); }
         gridBox.setBounds (r.removeFromRight (120));
         r.removeFromRight (10);
         title.setBounds (r);
@@ -348,6 +365,7 @@ private:
     juce::Label title;
     juce::ComboBox gridBox;
     juce::TextButton quantizeButton { "Quantize" }, closeButton { "X" };
+    juce::TextButton drumsButton { "Drum grid" };
 
     double pxPerBeat = 60.0, viewStartBeat = 0.0, lastLength = 1.0;
     int topNote = 84, rowH = 14;

@@ -89,7 +89,6 @@ Help > Keyboard Shortcuts has the full list.
 
 ## Coming next
 
-- Mastering on export with Encore's album engine
 - Sign in with Encore and upload a song to your catalog as a draft
 - A drum editor, and more MIDI tools
 

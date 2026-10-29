@@ -96,8 +96,8 @@ struct SongExport
 {
     std::unique_ptr<te::Edit> edit;
     std::shared_ptr<te::EditRenderer::Handle> handle;
-    std::atomic<bool> encoding { false };   // rendered, now making the MP3
-    float progress() const { return encoding ? 1.0f : handle ? handle->getProgress() : 0.0f; }
+    std::atomic<int> finishing { 0 };   // rendered, now 1 mastering or 2 making the MP3
+    float progress() const { return finishing > 0 ? 1.0f : handle ? handle->getProgress() : 0.0f; }
 };
 
 /** How a mix (or one track) is written out */
@@ -113,6 +113,7 @@ struct ExportOptions
     bool masterEffects = true;
     bool tail = true;                  // let reverbs and delays ring out (2 s)
     bool loudness = false;             // normalise to -14 LUFS (streaming level)
+    mastering::Settings mastering;     // through Encore Master on the way out (the mix only)
 };
 
 inline std::shared_ptr<SongExport> exportSong (te::Engine& engine, const juce::File& songFile, juce::File dest, ExportOptions o,
@@ -122,28 +123,44 @@ inline std::shared_ptr<SongExport> exportSong (te::Engine& engine, const juce::F
     job->edit = songs::open (engine, songFile, te::Edit::EditRole::forRendering);
     if (job->edit == nullptr || job->edit->getLength() <= 0s) { done ({}, "There's nothing in the song to export yet."); return {}; }
 
-    if (o.mp3Kbps > 0)
+    // mastering and MP3 happen after the render: Tracktion writes a float WAV next to the
+    // file, then a background thread masters and/or encodes it into the real one
+    const bool master = o.mastering.on() && o.trackIndex < 0;
+    if (master || o.mp3Kbps > 0)
     {
-        // render a float WAV next to it, then make the MP3 from that on a background thread
-        const auto mp3File = dest;
-        dest = dest.getSiblingFile (dest.getFileNameWithoutExtension() + " (making MP3).wav");
+        const auto finalFile = dest;
+        const auto want = o;
+        dest = dest.getSiblingFile (dest.getFileNameWithoutExtension() + " (finishing).wav");
         o.flac = false;
         o.bitDepth = 32;
-        o.sampleRate = mp3::rateFor (o.sampleRate);
+        if (o.mp3Kbps > 0) o.sampleRate = mp3::rateFor (o.sampleRate);
+        if (master) o.loudness = false;   // Encore Master sets the loudness itself
         std::weak_ptr<SongExport> weak = job;
-        done = [weak, mp3File, kbps = o.mp3Kbps, tags = o.tags, done] (juce::File wav, juce::String err)
+        done = [weak, finalFile, want, master, done] (juce::File wav, juce::String err)
         {
             auto j = weak.lock();
             if (! wav.existsAsFile() || j == nullptr) { wav.deleteFile(); done ({}, err); return; }
-            j->encoding = true;
-            std::thread ([weak, wav, mp3File, kbps, tags, done]
+            j->finishing = master ? 1 : 2;
+            std::thread ([weak, wav, finalFile, want, master, done]
             {
-                auto problem = mp3::encode (wav, mp3File, kbps, tags);
+                juce::String problem;
+                auto source = wav;
+                const auto mastered = wav.getSiblingFile (wav.getFileNameWithoutExtension() + " mastered.wav");
+                if (master)
+                {
+                    const bool toMp3 = want.mp3Kbps > 0;
+                    problem = mastering::masterFile (wav, toMp3 ? mastered : finalFile, want.mastering, toMp3 ? 32 : want.bitDepth, ! toMp3 && want.flac);
+                    source = mastered;
+                    if (auto j2 = weak.lock()) j2->finishing = 2;
+                }
+                if (problem.isEmpty() && want.mp3Kbps > 0)
+                    problem = mp3::encode (source, finalFile, want.mp3Kbps, want.tags);
                 wav.deleteFile();
-                juce::MessageManager::callAsync ([weak, mp3File, problem, done]
+                mastered.deleteFile();
+                juce::MessageManager::callAsync ([weak, finalFile, problem, done]
                 {
                     if (weak.expired()) return;   // the app closed meanwhile
-                    done (problem.isEmpty() ? mp3File : juce::File(), problem);
+                    done (problem.isEmpty() ? finalFile : juce::File(), problem);
                 });
             }).detach();
         };
@@ -182,14 +199,20 @@ inline std::shared_ptr<SongExport> exportSong (te::Engine& engine, const juce::F
     if (o.loudness) { p.shouldNormaliseByLUFS = true; p.normaliseToLevelDb = -14.0f; }
     dest.deleteFile();
     std::weak_ptr<SongExport> weak = job;
-    job->handle = te::EditRenderer::render (p, [weak, done] (tl::expected<juce::File, std::string> res)
+    auto start = [weak, p, done]
     {
-        juce::MessageManager::callAsync ([weak, done, res]
+        auto j = weak.lock();
+        if (j == nullptr) return;
+        j->handle = te::EditRenderer::render (p, [weak, done] (tl::expected<juce::File, std::string> res)
         {
-            done (res ? *res : juce::File(), res ? juce::String() : juce::String (res.error()));
-            if (auto j = weak.lock()) { j->handle = nullptr; }
+            juce::MessageManager::callAsync ([weak, done, res]
+            {
+                done (res ? *res : juce::File(), res ? juce::String() : juce::String (res.error()));
+                if (auto j = weak.lock()) { j->handle = nullptr; }
+            });
         });
-    });
+    };
+    start();
     return job;
 }
 
@@ -239,6 +262,8 @@ public:
 
 
 #include "Hub.h"
+#include "Support.h"
+#include "Versions.h"
 
 //==============================================================================
 /** Small dialogs: Song Setup and Preferences */
@@ -383,24 +408,67 @@ private:
     }
 };
 
-/** File > Export > Audio Mixdown: the mix or every track (stems), whole song or loop, format and level */
+/** File > Export > Audio Mixdown: the mix or every track (stems), whole song or loop, format and level,
+    and optionally mastered on the way out with Encore Master (with a quick before/after listen) */
 class ExportComponent : public juce::Component
 {
 public:
     std::function<void (ExportOptions, bool stems, juce::File folder, juce::String baseName)> onExport;
+    // the before/after preview (MainComponent renders and plays it)
+    std::function<void (ExportOptions)> onListen;
+    std::function<void()> onStopListening;
+    std::function<void (bool original)> onHearOriginal;
+    std::function<void (bool same)> onSameLoudness;
 
-    ExportComponent (const juce::String& songName, const juce::File& defaultFolder, double songRate, bool hasLoop)
+    ExportComponent (const juce::String& songName, const juce::File& defaultFolder, double songRate, bool hasLoop, int lastStyle = -1)
         : folder (defaultFolder)
     {
-        for (auto* l : { &whatL, &rangeL, &formatL, &rateL, &whereL, &nameL }) { hubui::styleLabel (*l); addAndMakeVisible (l); }
+        for (auto* l : { &whatL, &rangeL, &formatL, &rateL, &whereL, &nameL, &masterL, &intensityL }) { hubui::styleLabel (*l); addAndMakeVisible (l); }
         what.addItemList ({ "The whole mix", "Each track as its own file (stems)" }, 1);
         range.addItemList ({ "Whole song", "Loop range" }, 1);
         range.setItemEnabled (2, hasLoop);
         format.addItemList ({ "WAV 24-bit", "WAV 16-bit (CD)", "WAV 32-bit float", "FLAC 24-bit", "MP3 320 kbps", "MP3 192 kbps (smaller)" }, 1);
         rate.addItem ("Same as the song (" + juce::String (songRate / 1000.0, 1) + " kHz)", 1);
         rate.addItemList ({ "44.1 kHz", "48 kHz", "96 kHz" }, 2);
-        for (auto* c : { &what, &range, &format, &rate }) { c->setSelectedId (1, juce::dontSendNotification); hubui::styleCombo (*c); addAndMakeVisible (c); }
-        what.onChange = [this] { master.setEnabled (what.getSelectedId() == 1); loud.setEnabled (what.getSelectedId() == 1); };
+        style.addItem ("No mastering", 1);
+        style.addItemList (mastering::styleNames(), 2);
+        target.addItemList (mastering::targetNames(), 1);
+        for (auto* c : { &what, &range, &format, &rate, &style, &target }) { c->setSelectedId (1, juce::dontSendNotification); hubui::styleCombo (*c); addAndMakeVisible (c); }
+        style.setSelectedId (lastStyle >= 0 ? lastStyle + 2 : 1, juce::dontSendNotification);
+        what.onChange = [this] { updateEnabled(); };
+        style.onChange = [this] { updateEnabled(); relisten(); };
+        target.onChange = [this] { relisten(); };
+
+        intensity.setRange (0.0, 1.0, 0.01);
+        intensity.setValue (0.5, juce::dontSendNotification);
+        intensity.setSliderStyle (juce::Slider::LinearHorizontal);
+        intensity.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
+        intensity.setColour (juce::Slider::thumbColourId, theme::paper);
+        intensity.setColour (juce::Slider::trackColourId, theme::accent);
+        intensity.setDoubleClickReturnValue (true, 0.5);
+        intensity.onDragEnd = [this] { relisten(); };
+        intensity.onValueChange = [this] { updateBlurb(); };
+        addAndMakeVisible (intensity);
+
+        hubui::styleLabel (blurb, 12.0f, theme::muted);
+        addAndMakeVisible (blurb);
+        listen.onClick = [this]
+        {
+            if (listening) { stopListening(); return; }
+            listening = true;
+            listen.setButtonText ("Stop");
+            if (onListen) onListen (options());
+        };
+        addAndMakeVisible (listen);
+        for (auto* b : { &original, &same, &master, &tail, &loud })
+        {
+            b->setColour (juce::ToggleButton::textColourId, theme::paper);
+            b->setColour (juce::ToggleButton::tickColourId, theme::accent);
+            addAndMakeVisible (b);
+        }
+        original.onClick = [this] { if (onHearOriginal) onHearOriginal (original.getToggleState()); };
+        same.onClick = [this] { if (onSameLoudness) onSameLoudness (same.getToggleState()); };
+
         hubui::styleEditor (name);
         name.setText (songName, false);
         addAndMakeVisible (name);
@@ -420,22 +488,28 @@ public:
         addAndMakeVisible (change);
         master.setToggleState (true, juce::dontSendNotification);
         tail.setToggleState (true, juce::dontSendNotification);
-        for (auto* b : { &master, &tail, &loud })
-        {
-            b->setColour (juce::ToggleButton::textColourId, theme::paper);
-            b->setColour (juce::ToggleButton::tickColourId, theme::accent);
-            addAndMakeVisible (b);
-        }
         go.setColour (juce::TextButton::buttonColourId, theme::brand);
         go.onClick = [this] { start(); };
         cancel.onClick = [this] { close(); };
         addAndMakeVisible (go);
         addAndMakeVisible (cancel);
         songSampleRate = songRate;
-        setSize (560, 470);
+        updateEnabled();
+        setSize (600, 600);
     }
 
-    void paint (juce::Graphics& g) override { g.fillAll (theme::surface); }
+    ~ExportComponent() override { if (listening && onStopListening) onStopListening(); }
+
+    /** What the preview is doing ("Rendering...", "Mastered is 3.2 dB louder") */
+    void setPreviewText (const juce::String& s) { blurb.setText (s, juce::dontSendNotification); previewNote = s.isNotEmpty(); }
+
+    void paint (juce::Graphics& g) override
+    {
+        g.fillAll (theme::surface);
+        // the mastering block
+        g.setColour (theme::subtle);
+        g.fillRoundedRectangle (masterArea.toFloat(), 8.0f);
+    }
     void resized() override
     {
         auto r = getLocalBounds().reduced (24, 20);
@@ -448,7 +522,28 @@ public:
         auto w = row (whereL);
         change.setBounds (w.removeFromRight (90));
         path.setBounds (w.withTrimmedRight (8));
-        r.removeFromTop (4);
+
+        masterArea = r.removeFromTop (132).expanded (8, 0);
+        auto m = masterArea.reduced (8, 10);
+        auto m1 = m.removeFromTop (30);
+        masterL.setBounds (m1.removeFromLeft (112));
+        style.setBounds (m1.removeFromLeft (170));
+        m1.removeFromLeft (8);
+        target.setBounds (m1.removeFromLeft (180));
+        m.removeFromTop (8);
+        auto m2 = m.removeFromTop (30);
+        intensityL.setBounds (m2.removeFromLeft (112));
+        listen.setBounds (m2.removeFromRight (90));
+        m2.removeFromRight (10);
+        intensity.setBounds (m2);
+        m.removeFromTop (6);
+        auto m3 = m.removeFromTop (26);
+        m3.removeFromLeft (112);
+        original.setBounds (m3.removeFromLeft (150));
+        same.setBounds (m3.removeFromLeft (170));
+        blurb.setBounds (m.withTrimmedLeft (112));
+        r.removeFromTop (14);
+
         master.setBounds (r.removeFromTop (26).withTrimmedLeft (120));
         tail.setBounds (r.removeFromTop (26).withTrimmedLeft (120));
         loud.setBounds (r.removeFromTop (26).withTrimmedLeft (120));
@@ -461,18 +556,61 @@ public:
 private:
     juce::File folder;
     double songSampleRate = 48000.0;
-    juce::ComboBox what, range, format, rate;
+    juce::ComboBox what, range, format, rate, style, target;
+    juce::Slider intensity;
     juce::TextEditor name;
     juce::Label whatL { {}, "Export" }, rangeL { {}, "Range" }, formatL { {}, "Format" }, rateL { {}, "Sample rate" },
-                whereL { {}, "Folder" }, nameL { {}, "File name" }, path;
-    juce::TextButton change { "Change..." }, go { "Export" }, cancel { "Cancel" };
-    juce::ToggleButton master { "Include the master effects (Encore Master and the rest)" },
+                whereL { {}, "Folder" }, nameL { {}, "File name" }, masterL { {}, "Master it" }, intensityL { {}, "How hard" }, path, blurb;
+    juce::TextButton change { "Change..." }, go { "Export" }, cancel { "Cancel" }, listen { "Listen" };
+    juce::ToggleButton master { "Include the master effects (your own, on the master track)" },
                        tail { "Let reverbs and delays ring out at the end" },
-                       loud { "Make it streaming-loud (normalise to -14 LUFS)" };
+                       loud { "Make it streaming-loud (normalise to -14 LUFS)" },
+                       original { "Hear the original" }, same { "Same loudness (fair A/B)" };
+    juce::Rectangle<int> masterArea;
+    bool listening = false, previewNote = false;
+
+    bool mixOnly() const { return what.getSelectedId() == 1; }
+    bool mastered() const { return mixOnly() && style.getSelectedId() > 1; }
+
+    void updateEnabled()
+    {
+        style.setEnabled (mixOnly());
+        for (juce::Component* c : { (juce::Component*) &target, (juce::Component*) &intensity, (juce::Component*) &listen,
+                                    (juce::Component*) &original, (juce::Component*) &same })
+            c->setEnabled (mastered());
+        master.setEnabled (mixOnly());
+        loud.setEnabled (mixOnly() && ! mastered());   // mastering sets its own loudness
+        if (! mastered() && listening) stopListening();
+        updateBlurb();
+    }
+
+    void updateBlurb()
+    {
+        if (previewNote) return;
+        if (! mixOnly()) blurb.setText ("Mastering is for the whole mix; stems go out as they are.", juce::dontSendNotification);
+        else if (! mastered()) blurb.setText ("Pick a style to run the mix through Encore Master as it exports. Your song doesn't change.", juce::dontSendNotification);
+        else
+        {
+            const auto v = intensity.getValue();
+            blurb.setText (mastering::styleBlurbs()[style.getSelectedId() - 2] + (v < 0.3 ? ", gently." : v > 0.7 ? ", pushed hard." : "."),
+                           juce::dontSendNotification);
+        }
+    }
+
+    void relisten() { if (listening && mastered() && onListen) { original.setToggleState (false, juce::dontSendNotification); onListen (options()); } }
+
+    void stopListening()
+    {
+        listening = false;
+        listen.setButtonText ("Listen");
+        previewNote = false;
+        updateBlurb();
+        if (onStopListening) onStopListening();
+    }
 
     void close() { if (auto* d = findParentComponentOfClass<juce::DialogWindow>()) d->exitModalState (0); }
 
-    void start()
+    ExportOptions options() const
     {
         ExportOptions o;
         const int f = format.getSelectedId();
@@ -481,10 +619,23 @@ private:
         o.mp3Kbps = f == 5 ? 320 : f == 6 ? 192 : 0;
         const double rates[] = { songSampleRate, 44100.0, 48000.0, 96000.0 };
         o.sampleRate = rates[juce::jlimit (0, 3, rate.getSelectedId() - 1)];
-        o.masterEffects = master.getToggleState();
+        o.masterEffects = master.getToggleState() || ! mixOnly();
         o.tail = tail.getToggleState();
-        o.loudness = loud.getToggleState() && what.getSelectedId() == 1;
+        if (mastered())
+        {
+            o.mastering.style = style.getSelectedId() - 2;
+            o.mastering.target = target.getSelectedId() - 1;
+            o.mastering.intensity = (float) intensity.getValue();
+        }
+        o.loudness = loud.getToggleState() && mixOnly() && ! mastered();
         if (range.getSelectedId() == 2) o.range = te::TimeRange(); // filled in by the caller from the loop
+        return o;
+    }
+
+    void start()
+    {
+        if (listening) stopListening();
+        auto o = options();
         auto base = juce::File::createLegalFileName (name.getText().trim().isEmpty() ? juce::String ("Mix") : name.getText().trim());
         if (onExport) onExport (o, what.getSelectedId() == 2, folder, base);
         close();
@@ -730,13 +881,13 @@ public:
     enum Commands
     {
         // File
-        cmdHub = 0x2000, cmdNew, cmdOpen, cmdClose, cmdSave, cmdSaveAs, cmdSaveVersion, cmdSaveTemplate, cmdRevert,
-        cmdImportAudio, cmdImportMidi, cmdExportMix, cmdExportZip, cmdPreferences, cmdQuit,
+        cmdHub = 0x2000, cmdNew, cmdOpen, cmdClose, cmdSave, cmdSaveAs, cmdSaveVersion, cmdVersions, cmdSaveTemplate, cmdRevert,
+        cmdImportAudio, cmdImportMidi, cmdImportLive, cmdExportMix, cmdExportZip, cmdPreferences, cmdQuit,
         // Edit
         cmdUndo, cmdRedo, cmdCut, cmdCopy, cmdPaste, cmdDuplicate, cmdDelete, cmdSplit, cmdSelectAll, cmdSelectNone, cmdMuteClip,
         cmdNudgeLeft, cmdNudgeRight, cmdSnapOff, cmdSnapBar, cmdSnapBeat, cmdSnapEighth, cmdSnapSixteenth, cmdRenameClip,
         // Project
-        cmdAddTrack, cmdDuplicateTrack, cmdRenameTrack, cmdRemoveTrack, cmdSongSetup,
+        cmdAddTrack, cmdAddDrumTrack, cmdDuplicateTrack, cmdRenameTrack, cmdRemoveTrack, cmdSongSetup,
         // Audio
         cmdNormalize, cmdGainUp, cmdGainDown, cmdGainReset, cmdFadeIn, cmdFadeOut, cmdRemoveFades, cmdReverse,
         // Media
@@ -751,7 +902,7 @@ public:
         cmdEffects, cmdZoomIn, cmdZoomOut, cmdZoomFit, cmdHeightSmall, cmdHeightMedium, cmdHeightLarge, cmdHeightHuge,
         cmdMixer, cmdTuner, cmdWaveBigger, cmdWaveSmaller, cmdAddFxReverb, cmdAddFxDelay, cmdAddFxEmpty, cmdAddGroup, cmdGroupSelected, cmdSendToEncore, cmdPianoRoll, cmdQuantize, cmdTransposeUp, cmdTransposeDown, cmdOctaveUp, cmdOctaveDown, cmdVelocityLouder, cmdVelocitySofter, cmdAutomationOff, cmdAutomationVolume, cmdAutomationPan, cmdAutomationCycle,
         // Help
-        cmdShortcuts, cmdGuide, cmdReport, cmdUpdates, cmdLogFolder, cmdAbout
+        cmdShortcuts, cmdGuide, cmdReport, cmdUpdates, cmdAutoUpdates, cmdLogFolder, cmdAbout
     };
 
     MainComponent()
@@ -856,6 +1007,8 @@ public:
                                   : juce::String());
             commandManager.commandStatusChanged();
         };
+        // a newer Basement? (once a day, a few seconds in)
+        juce::Timer::callAfterDelay (5000, [safe = juce::Component::SafePointer<MainComponent> (this)] { if (safe) safe->checkForUpdates (false); });
         // look for new plugins once things have settled (the window is up first)
         juce::Timer::callAfterDelay (2500, [safe = juce::Component::SafePointer<MainComponent> (this)] { if (safe) safe->startPluginSearch(); });
 
@@ -872,6 +1025,11 @@ public:
         startTimerHz (20);
 
         crashedLastSession = props().getBoolValue ("running", false);
+        if (crashedLastSession)
+            juce::Timer::callAfterDelay (3000, [safe = juce::Component::SafePointer<MainComponent> (this)]
+            {
+                if (safe) safe->warn ("Basement didn't close properly last time. Help > Report a Problem sends us what happened.");
+            });
         auto last = juce::File (props().getValue ("lastSong"));
         if (last.existsAsFile() && recent::load (props()).isEmpty()) // songs made before the Hub existed
             if (auto e = songs::open (engine, last, te::Edit::forExamining)) recent::remember (props(), *e, last, last.getLastModificationTime());
@@ -917,6 +1075,7 @@ public:
     ~MainComponent() override
     {
         stopTimer();
+        stopMasterPreview();
         if (autosaveWriter.joinable()) autosaveWriter.join();
         BasementHooks::findPlugins = nullptr;
         BasementHooks::applyRecordOffset = nullptr;
@@ -1089,7 +1248,7 @@ public:
                 }
                 m.addSubMenu ("Open Recent", recentMenu, ! recentFiles.isEmpty());
                 add (cmdClose); m.addSeparator();
-                add (cmdSave); add (cmdSaveAs); add (cmdSaveVersion); add (cmdSaveTemplate); add (cmdRevert); m.addSeparator();
+                add (cmdSave); add (cmdSaveAs); add (cmdSaveVersion); add (cmdVersions); add (cmdSaveTemplate); add (cmdRevert); m.addSeparator();
                 juce::PopupMenu imp; addCommand (imp, cmdImportAudio); addCommand (imp, cmdImportMidi);
                 m.addSubMenu ("Import", imp);
                 juce::PopupMenu exp; addCommand (exp, cmdExportMix); addCommand (exp, cmdExportZip);
@@ -1114,7 +1273,7 @@ public:
                 add (cmdSelectAll); add (cmdSelectNone);
                 break;
             case 2: // Project
-                add (cmdAddTrack); add (cmdDuplicateTrack); add (cmdRenameTrack); add (cmdRemoveTrack); m.addSeparator();
+                add (cmdAddTrack); add (cmdAddDrumTrack); add (cmdDuplicateTrack); add (cmdRenameTrack); add (cmdRemoveTrack); m.addSeparator();
                 add (cmdSongSetup); m.addSeparator();
                 add (cmdAddMarker); m.addSeparator();
                 add (cmdAddFxReverb); add (cmdAddFxDelay); add (cmdAddFxEmpty); m.addSeparator();
@@ -1141,7 +1300,7 @@ public:
                 m.addSubMenu ("Velocity", vel, notes);
                 m.addSeparator();
                 m.addSubMenu ("Add Instrument Track", instrumentMenu(), edit != nullptr && ! hubShown);
-                add (cmdImportMidi);
+                add (cmdImportMidi); add (cmdImportLive);
                 later ({ "Drum Editor" });
                 break;
             }
@@ -1192,7 +1351,7 @@ public:
                 break;
             case 10: // Help
                 add (cmdShortcuts); add (cmdGuide); m.addSeparator();
-                add (cmdReport); add (cmdUpdates); add (cmdLogFolder); m.addSeparator();
+                add (cmdReport); add (cmdUpdates); add (cmdAutoUpdates); add (cmdLogFolder); m.addSeparator();
                 add (cmdAbout);
                 break;
             default: break;
@@ -1280,11 +1439,13 @@ public:
             case cmdClose:          set ("Close", "File", song); key ('w', cmd); break;
             case cmdSave:           set ("Save", "File", song); key ('s', cmd); break;
             case cmdSaveAs:         set ("Save As...", "File", song); key ('s', cmd | shift); break;
-            case cmdSaveVersion:    set ("Save New Version", "File", song); key ('s', cmd | alt); break;
+            case cmdSaveVersion:    set ("Save New Version...", "File", song); key ('s', cmd | alt); break;
+            case cmdVersions:       set ("Versions...", "File", song); key ('v', cmd | alt); break;
             case cmdSaveTemplate:   set ("Save as Template...", "File", song); break;
             case cmdRevert:         set ("Revert", "File", song); break;
             case cmdImportAudio:    set ("Audio File...", "File", song); key ('i', cmd); break;
             case cmdImportMidi:     set ("MIDI File...", "File", songShown); break;
+            case cmdImportLive:     set ("Live Recording (Encore Live or multitrack WAV)...", "File"); break;
             case cmdExportMix:      set ("Audio Mixdown or Stems...", "File", song && ! currentExport); key ('e', cmd); break;
             case cmdExportZip:      set ("Song Folder as Zip...", "File", song); break;
             case cmdPreferences:    set ("Preferences...", "File"); key (',', cmd); break;
@@ -1311,6 +1472,7 @@ public:
             case cmdSnapSixteenth:  set ("1/16", "Edit", songShown); info.setTicked (snapIs (4)); break;
 
             case cmdAddTrack:       set ("Add Audio Track", "Project", songShown); key ('t', cmd); break;
+            case cmdAddDrumTrack:   set ("Add Drum Track", "Project", songShown); key ('t', cmd | alt); break;
             case cmdDuplicateTrack: set ("Duplicate Track", "Project", songShown && selectedTrack() != nullptr); key ('d', cmd | shift); break;
             case cmdRenameTrack:    set ("Rename Track...", "Project", songShown && selectedTrack() != nullptr); key (KP::F2Key, none); break;
             case cmdRemoveTrack:    set ("Remove Selected Track", "Project", songShown && selectedTrack() != nullptr); break;
@@ -1390,6 +1552,7 @@ public:
             case cmdGuide:          set ("User Guide", "Help"); break;
             case cmdReport:         set ("Report a Problem...", "Help"); break;
             case cmdUpdates:        set ("Check for Updates...", "Help"); break;
+            case cmdAutoUpdates:    set ("Check for Updates Once a Day", "Help"); info.setTicked (props().getBoolValue ("checkUpdates", true)); break;
             case cmdLogFolder:      set ("Open Log Folder", "Help"); break;
             case cmdAbout:          set ("About Encore: Basement", "Help"); break;
             default: break;
@@ -1408,10 +1571,12 @@ public:
             case cmdSave:           save(); status ("Saved"); return true;
             case cmdSaveAs:         saveAs(); return true;
             case cmdSaveVersion:    saveNewVersion(); return true;
+            case cmdVersions:       showVersions(); return true;
             case cmdSaveTemplate:   saveTemplate(); return true;
             case cmdRevert:         revert(); return true;
             case cmdImportAudio:    browseForImport(); return true;
             case cmdImportMidi:     importMidi(); return true;
+            case cmdImportLive:     importLiveRecording(); return true;
             case cmdExportMix:      exportMix(); return true;
             case cmdExportZip:      exportZip(); return true;
             case cmdPreferences:    showDialog ("Preferences", new PreferencesComponent (props()), this); return true;
@@ -1438,6 +1603,7 @@ public:
             case cmdSnapSixteenth:  setSnap (4); return true;
 
             case cmdAddTrack:       addTrack(); return true;
+            case cmdAddDrumTrack:   addDrumTrack(); return true;
             case cmdDuplicateTrack: duplicateTrack(); return true;
             case cmdRenameTrack:    renameTrack(); return true;
             case cmdRemoveTrack:    if (auto t = selectedTrack()) { edit->deleteTrack (t); selectionManager.deselectAll(); } return true;
@@ -1520,8 +1686,9 @@ public:
 
             case cmdShortcuts:      showShortcuts(); return true;
             case cmdGuide:          url ("https://github.com/jimmyrlondo/encore-basement#readme"); return true;
-            case cmdReport:         url ("https://github.com/jimmyrlondo/encore-basement/issues/new"); return true;
-            case cmdUpdates:        url ("https://github.com/jimmyrlondo/encore-basement/releases"); return true;
+            case cmdReport:         showReport(); return true;
+            case cmdUpdates:        checkForUpdates (true); return true;
+            case cmdAutoUpdates:    props().setValue ("checkUpdates", ! props().getBoolValue ("checkUpdates", true)); commandManager.commandStatusChanged(); return true;
             case cmdLogFolder:      juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory).getChildFile (basementProfile()).startAsProcess(); return true;
             case cmdAbout:          showAbout(); return true;
             default: return false;
@@ -1551,7 +1718,7 @@ private:
     juce::Label timeLabel { {}, "0:00.0" }, barLabel { {}, "Bar 1.1" }, tempoLabel { {}, "120" }, tempoCaption { {}, "BPM" }, statusLabel;
     LevelMeter masterMeter { LevelMeter::Orientation::horizontal };
     std::unique_ptr<MixerComponent> mixer;
-    std::unique_ptr<PianoRoll> pianoRoll;
+    std::unique_ptr<NoteEditor> pianoRoll;   // the piano roll or the drum grid
     DividerBar pianoDivider;
     int pianoRollH = 320;
     std::optional<int> dragStartHeight;
@@ -1902,19 +2069,26 @@ private:
     /** Song v2, v3... in the same folder (the earlier versions stay as they were) */
     void saveNewVersion()
     {
+        if (edit == nullptr) return;
         save();
-        auto base = songFile.getFileNameWithoutExtension();
-        int v = 2;
-        if (auto at = base.lastIndexOf (" v"); at > 0 && base.substring (at + 2).containsOnly ("0123456789"))
+        const auto next = versions::nextFile (songFile);
+        auto* w = new juce::AlertWindow ("Save New Version",
+                                         "This saves the song as " + next.getFileNameWithoutExtension() + " and keeps working there; the one you have now stays as it is.\n\n"
+                                         "What's different in this one? (optional, e.g. \"chorus louder\")", juce::MessageBoxIconType::NoIcon);
+        w->addTextEditor ("note", {});
+        w->addButton ("Save", 1, juce::KeyPress (juce::KeyPress::returnKey));
+        w->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+        juce::Component::SafePointer<MainComponent> safe (this);
+        w->enterModalState (true, juce::ModalCallbackFunction::create ([safe, w, next] (int r)
         {
-            v = base.substring (at + 2).getIntValue() + 1;
-            base = base.substring (0, at);
-        }
-        auto next = songFile.getSiblingFile (base + " v" + juce::String (v) + ".basement");
-        while (next.exists()) next = songFile.getSiblingFile (base + " v" + juce::String (++v) + ".basement");
-        if (! songFile.copyFileTo (next)) { status ("Couldn't save a new version"); return; }
-        loadSong (next);
-        status ("Saved " + next.getFileNameWithoutExtension() + ". The earlier version is still in the folder.");
+            if (r != 1 || safe == nullptr) return;
+            auto note = w->getTextEditorContents ("note").trim();
+            if (! safe->songFile.copyFileTo (next)) { safe->warn ("Couldn't save a new version"); return; }
+            if (note.isNotEmpty()) versions::setNote (next, note);
+            safe->loadSong (next);
+            safe->status ("Saved " + next.getFileNameWithoutExtension() + (note.isNotEmpty() ? " (" + note + ")" : juce::String())
+                          + ". The earlier version is still there: File > Versions.");
+        }), true);
     }
 
     /** The song's tracks, names, colours, effects, tempo and routing, without any audio */
@@ -1987,18 +2161,56 @@ private:
         return nullptr;
     }
 
-    void openPianoRoll (te::MidiClip& c)
+    void openPianoRoll (te::MidiClip& c, std::optional<bool> asDrums = {})
     {
-        if (pianoRoll && pianoRoll->getClip() == &c) { pianoRoll->grabKeyboardFocus(); return; }
-        pianoRoll = std::make_unique<PianoRoll> (c);
+        auto* track = dynamic_cast<te::AudioTrack*> (c.getTrack());
+        const bool drumsView = asDrums ? *asDrums : track != nullptr && drums::isDrumTrack (*track);
+        if (pianoRoll && pianoRoll->getClip() == &c && (dynamic_cast<DrumGrid*> (pianoRoll.get()) != nullptr) == drumsView) { pianoRoll->grabKeyboardFocus(); return; }
+        if (drumsView) pianoRoll = std::make_unique<DrumGrid> (c);
+        else pianoRoll = std::make_unique<PianoRoll> (c);
         pianoRoll->onClose = [this] { closePianoRoll(); };
+        te::SafeSelectable<te::MidiClip> safeClip (&c);
+        pianoRoll->onSwitchView = [this, safeClip, drumsView]
+        {
+            juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MainComponent> (this), safeClip, drumsView]
+            {
+                if (safe && safeClip != nullptr) safe->openPianoRoll (*safeClip.get(), ! drumsView);
+            });
+        };
         pianoRollH = props().getIntValue ("pianoRollHeight", 320);
         addAndMakeVisible (*pianoRoll);
         if (mixerShown) showMixer (false);
         resized();
         pianoRoll->grabKeyboardFocus();
         commandManager.commandStatusChanged();
-        statusSoft ("Piano roll: click to add a note, drag to move, drag a note's end to resize, double-click to delete");
+        statusSoft (drumsView ? "Drums: click a step for a hit, drag to paint, Shift+click for an accent, right-click for more"
+                              : "Piano roll: click to add a note, drag to move, drag a note's end to resize, double-click to delete");
+    }
+
+    /** Project > Add Drum Track: the Basement Kit on a Sampler, and a 4-bar pattern to fill in */
+    void addDrumTrack()
+    {
+        if (! edit) return;
+        auto plugin = edit->getPluginCache().createNewPlugin (te::SamplerPlugin::xmlTypeName, {});
+        auto* sampler = dynamic_cast<te::SamplerPlugin*> (plugin.get());
+        if (sampler == nullptr) return;
+        auto tracks = te::getAudioTracks (*edit);
+        auto t = edit->insertNewAudioTrack (te::TrackInsertPoint (nullptr, tracks.isEmpty() ? nullptr : tracks.getLast()), &selectionManager);
+        if (t == nullptr) return;
+        t->setName ("Drums");
+        t->setColour (theme::trackColour (tracks.size()));
+        t->state.setProperty ("basementRole", "drums", nullptr);
+        instruments::makeInstrumentTrack (*t, plugin, false);
+        drums::kit::load (*sampler, songFile.getParentDirectory());
+        // 4 bars from the bar the playhead is in
+        auto& ts = edit->tempoSequence;
+        const int beatsPerBar = juce::jmax (1, ts.getTimeSig (0)->numerator.get());
+        const double startBeat = std::floor (ts.toBeats (edit->getTransport().getPosition()).inBeats() / beatsPerBar) * beatsPerBar;
+        const auto start = ts.toTime (te::BeatPosition::fromBeats (startBeat));
+        const auto end = ts.toTime (te::BeatPosition::fromBeats (startBeat + 4.0 * beatsPerBar));
+        if (auto clip = t->insertMIDIClip ("Beat", te::TimeRange (start, end), nullptr))
+            openPianoRoll (*clip, true);
+        status ("Drum track ready: click steps in the drum grid, then play. Drag the clip's end to make it longer.");
     }
 
     void closePianoRoll()
@@ -2310,9 +2522,16 @@ private:
         save();
         const bool hasLoop = edit->getTransport().getLoopRange().getLength() > 0s;
         auto* c = new ExportComponent (songTitle(), songFile.getParentDirectory().getChildFile ("Exports"),
-                                       SongInfo::readFrom (*edit, songFile).sampleRate, hasLoop);
+                                       SongInfo::readFrom (*edit, songFile).sampleRate, hasLoop, props().getIntValue ("masterStyle", -1));
+        juce::Component::SafePointer<ExportComponent> dialog (c);
+        juce::Component::SafePointer<MainComponent> safe (this);
+        c->onListen = [safe, dialog] (ExportOptions o) { if (safe) safe->startMasterPreview (o, dialog); };
+        c->onStopListening = [safe] { if (safe) safe->stopMasterPreview(); };
+        c->onHearOriginal = [safe] (bool on) { if (safe) safe->previewPlayer.original = on; };
+        c->onSameLoudness = [safe] (bool on) { if (safe) safe->previewPlayer.sameLoudness = on; };
         c->onExport = [this] (ExportOptions o, bool stems, juce::File folder, juce::String base)
         {
+            if (! stems) props().setValue ("masterStyle", o.mastering.style);
             if (o.range) o.range = edit->getTransport().getLoopRange();
             folder.createDirectory();
             exportQueue.clear();
@@ -2370,6 +2589,125 @@ private:
     }
     std::shared_ptr<SongExport> currentExport;
     std::function<void (bool ok)> afterExports;   // instead of revealing the folder, when set
+
+    //==============================================================================
+    // Export > Master it > Listen: 30 s rendered twice (mastered, and as it is), played in sync
+    mastering::PreviewPlayer previewPlayer;
+    bool previewAttached = false;
+    int previewRound = 0;
+    std::shared_ptr<SongExport> previewMastered, previewOriginal;
+
+    void startMasterPreview (ExportOptions o, juce::Component::SafePointer<ExportComponent> dialog)
+    {
+        ExportOptions plain = o;
+        plain.mastering = {};
+        previewPair (songFile, o, songFile, plain,
+                     [dialog] (const juce::String& t) { if (dialog) dialog->setPreviewText (t); },
+                     [] (float diff)
+                     {
+                         return "Playing the mastered version (loops). It's " + juce::String (std::abs (diff), 1) + " dB "
+                                + (diff >= 0 ? "louder" : "quieter") + " than the original.";
+                     });
+    }
+
+    /** The same 30 s of two songs (or one song two ways) rendered, then played in sync:
+        the first one plays, previewPlayer.original switches to the second */
+    void previewPair (juce::File songA, ExportOptions a, juce::File songB, ExportOptions b,
+                      std::function<void (const juce::String&)> say, std::function<juce::String (float diffDb)> describe)
+    {
+        stopMasterPreview();
+        if (edit == nullptr) return;
+        auto* device = engine.getDeviceManager().deviceManager.getCurrentAudioDevice();
+        if (device == nullptr) { say ("There's no audio interface open to listen on (Studio > Audio Setup)."); return; }
+        edit->getTransport().stop (false, false);
+        const int round = ++previewRound;
+
+        // 30 s from the playhead, or from a third of the way in (often a chorus) when it's at the start
+        const double length = edit->getLength().inSeconds();
+        const double playhead = edit->getTransport().getPosition().inSeconds();
+        const double duration = juce::jmin (30.0, length);
+        const double from = juce::jlimit (0.0, juce::jmax (0.0, length - duration), playhead > 0.5 && playhead < length - 2.0 ? playhead : length / 3.0);
+        for (auto* o : { &a, &b })
+        {
+            o->range = te::TimeRange (te::TimePosition::fromSeconds (from), te::TimeDuration::fromSeconds (duration));
+            o->sampleRate = device->getCurrentSampleRate();
+            o->bitDepth = 32; o->flac = false; o->mp3Kbps = 0; o->tail = false; o->loudness = false; o->trackIndex = -1;
+        }
+
+        auto tmp = juce::File::getSpecialLocation (juce::File::tempDirectory);
+        auto fa = tmp.getChildFile ("basement-preview-a.wav"), fb = tmp.getChildFile ("basement-preview-b.wav");
+        say ("Getting 30 seconds ready (from " + juce::String ((int) from / 60) + ":" + juce::String ((int) from % 60).paddedLeft ('0', 2) + ")...");
+        auto results = std::make_shared<int> (0);
+        juce::Component::SafePointer<MainComponent> safe (this);
+        auto finished = [safe, round, fa, fb, say, describe, results, rate = a.sampleRate] (juce::File, juce::String err)
+        {
+            if (safe == nullptr || round != safe->previewRound) return;
+            if (err.isNotEmpty()) say ("The preview didn't render: " + err);
+            if (++*results < 2) return;
+            auto read = [] (const juce::File& f)
+            {
+                juce::AudioFormatManager formats; formats.registerBasicFormats();
+                juce::AudioBuffer<float> buf;
+                if (std::unique_ptr<juce::AudioFormatReader> r (formats.createReaderFor (f)); r != nullptr)
+                {
+                    buf.setSize (juce::jmax (2, (int) r->numChannels), (int) r->lengthInSamples);
+                    r->read (&buf, 0, buf.getNumSamples(), 0, true, true);
+                }
+                return buf;
+            };
+            auto x = read (fa), y = read (fb);
+            fa.deleteFile(); fb.deleteFile();
+            if (x.getNumSamples() == 0 || y.getNumSamples() == 0) { say ("The preview didn't render."); return; }
+            const int n = juce::jmin (x.getNumSamples(), y.getNumSamples());
+            x.setSize (x.getNumChannels(), n, true); y.setSize (y.getNumChannels(), n, true);
+            safe->previewPlayer.original = false;
+            safe->previewPlayer.load (std::move (x), std::move (y), rate);
+            auto& dm = safe->engine.getDeviceManager().deviceManager;
+            if (! safe->previewAttached) { dm.addAudioCallback (&safe->previewPlayer); safe->previewAttached = true; }
+            safe->previewPlayer.playing = true;
+            say (describe (safe->previewPlayer.loudnessDifferenceDb));
+        };
+        previewMastered = exportSong (engine, songA, fa, a, finished);
+        previewOriginal = exportSong (engine, songB, fb, b, finished);
+    }
+
+    //==============================================================================
+    // File > Versions
+    void showVersions()
+    {
+        if (edit == nullptr) return;
+        save();
+        auto* c = new versions::VersionsComponent (songFile);
+        juce::Component::SafePointer<versions::VersionsComponent> dialog (c);
+        juce::Component::SafePointer<MainComponent> safe (this);
+        c->onOpen = [safe] (juce::File f) { if (safe) { safe->stopMasterPreview(); safe->save(); safe->loadSong (f); } };
+        c->onSaveNew = [safe] { if (safe) safe->saveNewVersion(); };
+        c->onHearOther = [safe] (bool other) { if (safe) safe->previewPlayer.original = other; };
+        c->onStopComparing = [safe] { if (safe) safe->stopMasterPreview(); };
+        c->onCompare = [safe, dialog] (juce::File other)
+        {
+            if (safe == nullptr) return;
+            ExportOptions o;
+            const auto otherName = "v" + juce::String (versions::split (other.getFileNameWithoutExtension()).second);
+            safe->previewPair (safe->songFile, o, other, o,
+                               [dialog] (const juce::String& t) { if (dialog) dialog->comparisonReady (t); },
+                               [otherName] (float diff)
+                               {
+                                   return "Hearing the open version. Tick the box for " + otherName
+                                          + (std::abs (diff) < 0.5f ? juce::String (".") : " (it's " + juce::String (std::abs (diff), 1) + " dB "
+                                                                                            + (diff >= 0 ? "quieter" : "louder") + ").");
+                               });
+        };
+        showDialog ("Versions", c, this);
+    }
+
+    void stopMasterPreview()
+    {
+        ++previewRound;
+        previewPlayer.playing = false;
+        previewMastered = previewOriginal = nullptr;
+        if (previewAttached) { engine.getDeviceManager().deviceManager.removeAudioCallback (&previewPlayer); previewAttached = false; }
+    }
 
     /** File > Send to Encore */
     void sendToEncore()
@@ -2688,6 +3026,116 @@ private:
         return t.get();
     }
 
+    //==============================================================================
+    // File > Import > Live Recording: an Encore Live session or a multichannel WAV, a track per input
+    void importLiveRecording()
+    {
+        auto chooser = std::make_shared<juce::FileChooser> ("Import a live recording: an Encore Live session (session.json) or a multichannel WAV",
+                                                            juce::File (props().getValue ("importFolder")), "*.json;*.wav");
+        chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles, [this, chooser] (const juce::FileChooser&)
+        {
+            auto f = chooser->getResult();
+            if (! f.existsAsFile()) return;
+            props().setValue ("importFolder", f.getParentDirectory().getFullPathName());
+            auto session = liveimport::read (f);
+            if (session.problem.isNotEmpty()) { warn (session.problem); return; }
+            juce::String about;
+            about << session.title << (session.artist.isNotEmpty() ? " by " + session.artist : juce::String()) << "\n"
+                  << session.channels << (session.channels == 1 ? " input, " : " inputs, ") << liveimport::clock (session.seconds) << " long"
+                  << (session.songs.isEmpty() ? juce::String() : ", " + juce::String (session.songs.size()) + " songs marked") << ".";
+            auto* w = new juce::AlertWindow ("Import a Live Recording", about, juce::MessageBoxIconType::NoIcon);
+            juce::StringArray modes { "One song: the whole show" + juce::String (session.songs.isEmpty() ? "" : ", a marker at each song") };
+            if (! session.songs.isEmpty()) modes.add ("A Basement song for each song in the show (to mix them one by one)");
+            w->addComboBox ("mode", modes, "Make");
+            w->addComboBox ("silent", { "Leave out inputs with nothing on them", "Bring in every input" }, "Inputs");
+            w->addButton ("Import", 1, juce::KeyPress (juce::KeyPress::returnKey));
+            w->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+            juce::Component::SafePointer<MainComponent> safe (this);
+            w->enterModalState (true, juce::ModalCallbackFunction::create ([safe, w, session] (int r)
+            {
+                if (r != 1 || safe == nullptr) return;
+                const bool perSong = w->getComboBoxComponent ("mode")->getSelectedItemIndex() == 1;
+                const bool leaveOut = w->getComboBoxComponent ("silent")->getSelectedItemIndex() == 0;
+                safe->runLiveImport (session, perSong, leaveOut);
+            }), true);
+        });
+    }
+
+    void runLiveImport (liveimport::Session session, bool perSong, bool leaveOutSilent)
+    {
+        auto root = projectsFolder().getNonexistentChildFile (juce::File::createLegalFileName (session.title), {}, true);
+        root.createDirectory();
+        auto recordingFolder = root.getChildFile ("Recording");
+        auto progress = std::make_shared<std::atomic<float>> (0.0f);
+        liveImportProgress = progress;
+        warn ("Bringing in " + session.title + ": splitting the recording into a file per input... (the window stays usable)");
+        juce::Component::SafePointer<MainComponent> safe (this);
+        std::thread ([safe, session, perSong, leaveOutSilent, root, recordingFolder, progress]
+        {
+            juce::String problem;
+            auto inputs = liveimport::split (session, recordingFolder, leaveOutSilent, [progress] (float p) { *progress = p; }, problem);
+            juce::MessageManager::callAsync ([safe, session, perSong, root, inputs, problem]
+            {
+                if (safe == nullptr) return;
+                safe->liveImportProgress = nullptr;
+                if (problem.isNotEmpty() || inputs.isEmpty())
+                {
+                    safe->warn ("Couldn't bring in the recording: " + (problem.isNotEmpty() ? problem : juce::String ("every input was silent")));
+                    return;
+                }
+                safe->buildLiveSongs (session, inputs, root, perSong);
+            });
+        }).detach();
+    }
+
+    std::shared_ptr<std::atomic<float>> liveImportProgress;
+
+    void buildLiveSongs (const liveimport::Session& session, const juce::Array<liveimport::Input>& inputs, const juce::File& root, bool perSong)
+    {
+        struct Part { juce::String name; double from, to; };
+        juce::Array<Part> parts;
+        if (perSong)
+            for (auto& s : session.songs)   // a little room either side of each song
+                parts.add ({ s.title.isNotEmpty() ? s.title : "Song " + juce::String (parts.size() + 1),
+                             juce::jmax (0.0, s.start - 2.0), juce::jmin (session.seconds, s.end + 3.0) });
+        else parts.add ({ session.title, 0.0, session.seconds });
+
+        juce::Array<juce::File> made;
+        for (int i = 0; i < parts.size(); ++i)
+        {
+            const auto& part = parts.getReference (i);
+            SongPlan plan;
+            plan.info.title = part.name;
+            plan.info.artist = session.artist;
+            plan.info.album = perSong ? session.title : juce::String();
+            plan.info.notes = juce::String ("Live") + (session.venue.isNotEmpty() ? " at " + session.venue : juce::String())
+                              + (session.date.isNotEmpty() ? ", " + session.date : juce::String()) + ". Imported from " + session.recording.getFileName() + ".";
+            plan.folder = perSong ? root.getChildFile (juce::String (i + 1).paddedLeft ('0', 2) + " " + juce::File::createLegalFileName (part.name)) : root;
+            plan.info.sampleRate = session.sampleRate;
+            for (auto& in : inputs) plan.tracks.add ({ in.name, {}, liveimport::groupFor (in.name) });
+            auto e = songs::createFromPlan (engine, plan);
+            if (e == nullptr) continue;
+            auto tracks = te::getAudioTracks (*e);
+            int t = 0;
+            for (auto* track : tracks)
+            {
+                if (groups::isGroup (*track) || t >= inputs.size()) continue;
+                const auto& in = inputs.getReference (t++);
+                track->insertWaveClip (in.name, in.file,
+                                       { { 0_tp, te::TimeDuration::fromSeconds (part.to - part.from) }, te::TimeDuration::fromSeconds (part.from) }, false);
+            }
+            if (! perSong)
+                for (auto& s : session.songs)
+                    markers::add (*e, te::TimePosition::fromSeconds (s.start), s.title.isNotEmpty() ? s.title : "Song");
+            te::EditFileOperations (*e).save (true, true, false);
+            made.add (plan.songFile());
+        }
+        if (made.isEmpty()) { warn ("Couldn't make the songs for " + session.title); return; }
+        loadSong (made.getFirst());
+        status (perSong ? "Made " + juce::String (made.size()) + " songs from " + session.title + " (in " + root.getFullPathName() + "). This is the first; File > Open for the rest."
+                        : "Brought in " + session.title + ": " + juce::String (inputs.size()) + " tracks" + (session.songs.isEmpty() ? juce::String() : ", a marker at each song") + ".");
+    }
+
     /** A MIDI file onto the selected instrument track (or a new one with the built-in synth), at the start of the song */
     void importMidi()
     {
@@ -2783,6 +3231,99 @@ private:
         ed->setText (text);
         ed->setSize (560, 620);
         showDialog ("Keyboard Shortcuts", ed, this);
+    }
+
+    //==============================================================================
+    // Help > Check for Updates (and once a day by itself, unless that's switched off)
+    void checkForUpdates (bool asked)
+    {
+        if (asked) status ("Checking for a newer Basement...");
+        else
+        {
+            const auto last = juce::Time (props().getValue ("lastUpdateCheck", "0").getLargeIntValue());
+            if (! props().getBoolValue ("checkUpdates", true) || juce::Time::getCurrentTime() - last < juce::RelativeTime::hours (20)) return;
+        }
+        support::latestRelease ([safe = juce::Component::SafePointer<MainComponent> (this), asked] (support::Release r)
+        {
+            if (safe == nullptr) return;
+            auto& self = *safe;
+            const juce::String mine = ProjectInfo::versionString;
+            basementLog ("updates: " + (r.found ? "newest is " + r.version : r.problem) + ", this is " + mine);
+            if (! r.found) { if (asked) self.warn ("Couldn't check for updates: " + r.problem); return; }
+            self.props().setValue ("lastUpdateCheck", juce::String (juce::Time::getCurrentTime().toMilliseconds()));
+            if (! support::isNewer (r.version, mine))
+            {
+                if (asked) self.status ("You have the newest Basement (" + mine + ").");
+                return;
+            }
+            // asked about once per new version when it's automatic
+            if (! asked && self.props().getValue ("updateDismissed") == r.version) return;
+            const auto link = r.download.isNotEmpty() ? r.download : r.page;
+            auto notes = r.notes.trim();
+            if (notes.length() > 600) notes = notes.substring (0, 600).upToLastOccurrenceOf ("\n", false, false) + "\n...";
+            juce::AlertWindow::showAsync (juce::MessageBoxOptions()
+                                            .withIconType (juce::MessageBoxIconType::NoIcon)
+                                            .withTitle ("Basement " + r.version + " is out")
+                                            .withMessage ("You have " + mine + ". Download the new one, unzip it, and run it from its folder "
+                                                          "(your songs and settings carry over).\n\n" + notes)
+                                            .withButton ("Download", 1)
+                                            .withButton ("Not now", 0)
+                                            .withAssociatedComponent (safe.getComponent()),
+                                          [safe, link, version = r.version] (int button)
+                                          {
+                                              if (button == 1) juce::URL (link).launchInDefaultBrowser();
+                                              else if (safe != nullptr) safe->props().setValue ("updateDismissed", version);
+                                          });
+        });
+    }
+
+    /** What a problem report says about this computer and Basement's setup */
+    juce::String systemInfo()
+    {
+        juce::String s;
+        const juce::String nl = juce::newLine;
+        s << "Basement " << ProjectInfo::versionString << " (" << basementProfile() << ")" << nl
+          << "System: " << juce::SystemStats::getOperatingSystemName() << ", " << juce::SystemStats::getCpuModel()
+          << ", " << juce::SystemStats::getNumCpus() << " cores, " << juce::SystemStats::getMemorySizeInMegabytes() << " MB" << nl;
+        auto& dm = engine.getDeviceManager().deviceManager;
+        auto setup = dm.getAudioDeviceSetup();
+        s << "Audio: " << dm.getCurrentAudioDeviceType() << ", in '" << setup.inputDeviceName << "', out '" << setup.outputDeviceName << "'" << nl;
+        if (auto* d = dm.getCurrentAudioDevice())
+            s << "  " << d->getCurrentSampleRate() << " Hz, " << d->getCurrentBufferSizeSamples() << " samples, latency in "
+              << d->getInputLatencyInSamples() << " / out " << d->getOutputLatencyInSamples() << ", inputs "
+              << d->getActiveInputChannels().countNumberOfSetBits() << " of " << d->getInputChannelNames().size()
+              << " (" << d->getInputChannelNames().joinIntoString (", ") << ")" << nl;
+        else s << "  no device open" << nl;
+        s << "Audio types available:";
+        for (auto* t : dm.getAvailableDeviceTypes()) s << " " << t->getTypeName();
+        s << nl << "Plugins known: " << engine.getPluginManager().knownPluginList.getNumTypes() << nl;
+        if (edit != nullptr)
+            s << "Song: " << songFile.getFullPathName() << ", " << te::getAudioTracks (*edit).size() << " tracks, "
+              << juce::String (edit->getLength().inSeconds(), 1) << " s" << nl;
+        if (crashedLastSession) s << "The last session didn't close properly." << nl;
+        return s;
+    }
+
+    /** Help > Report a Problem */
+    void showReport()
+    {
+        auto* c = new support::ReportComponent (edit != nullptr && songFile.existsAsFile(), crashedLastSession);
+        c->onMake = [this] (juce::String what, bool includeSong)
+        {
+            if (includeSong && edit != nullptr) save();
+            basementLog ("report: made by the user");
+            auto zip = support::makeReport (what, systemInfo(), includeSong ? songFile : juce::File());
+            if (zip == juce::File()) { warn ("Couldn't make the report on your Desktop."); return; }
+            zip.revealToUser();
+            const juce::String body = "Basement " + juce::String (ProjectInfo::versionString) + " on " + juce::SystemStats::getOperatingSystemName()
+                                      + "\n\nWhat happened:\n\n\n(Drag " + zip.getFileName() + " from your Desktop in here.)";
+            juce::URL ("https://github.com/" + juce::String (support::repo()) + "/issues/new")
+                .withParameter ("title", "Problem: ")
+                .withParameter ("body", body)
+                .launchInDefaultBrowser();
+            status ("Made " + zip.getFileName() + " on your Desktop. Drag it into the GitHub issue that just opened.");
+        };
+        showDialog ("Report a Problem", c, this);
     }
 
     void showAbout()
@@ -2899,7 +3440,8 @@ private:
                                   : "Bar " + juce::String ((int) (beats / num) + 1) + "." + juce::String ((int) std::fmod (beats, (double) num) + 1),
                           juce::dontSendNotification);
         playButton.setButtonText (tr.isPlaying() ? "Stop" : "Play");
-        if (currentExport) status ("Exporting " + exportingWhat + "... " + (currentExport->encoding ? juce::String ("making the MP3")
+        if (liveImportProgress) status ("Bringing in the live recording: splitting it into a file per input... " + juce::String (juce::roundToInt (liveImportProgress->load() * 100)) + "%");
+        if (currentExport) status ("Exporting " + exportingWhat + "... " + (currentExport->finishing > 0 ? juce::String (currentExport->finishing == 1 ? "mastering" : "making the MP3")
                                                                                                     : juce::String (juce::roundToInt (currentExport->progress() * 100)) + "%"));
         recordButton.setToggleState (tr.isRecording(), juce::dontSendNotification);
         clickButton.setToggleState (edit->clickTrackEnabled.get(), juce::dontSendNotification);

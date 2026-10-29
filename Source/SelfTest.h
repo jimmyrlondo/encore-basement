@@ -193,6 +193,38 @@ namespace selftest
                         mr != nullptr && mr->numChannels == 2 && ml[0].getEnd() > 0.05f && ml[0].getEnd() > ml[1].getEnd() * 1.5f && tagged && cleaned,
                         err + (mr ? " " + String (mr->sampleRate) + " Hz, L " + String (ml[0].getEnd(), 3) + " R " + String (ml[1].getEnd(), 3) : String (" unreadable"))
                             + (tagged ? "" : ", no ID3") + (cleaned ? "" : ", temp WAV left"));
+
+                // mastered on export (Encore Master, Balanced, Streaming): near -14 LUFS, and the song itself untouched
+                auto masteredFile = songDir.getChildFile ("mastered mix.wav");
+                ExportOptions ma; ma.tail = false; ma.mastering.style = 0; ma.mastering.target = 0;
+                done = false; rendered = juce::File();
+                auto masterJob = exportSong (engine, songFile, masteredFile, ma, [&] (juce::File f, juce::String e) { rendered = f; err = e; done = true; });
+                for (int i = 0; i < 1200 && ! done; ++i) juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+                std::unique_ptr<AudioFormatReader> mar (rendered.existsAsFile() ? fm.createReaderFor (rendered) : nullptr);
+                double mlufs = -100.0;
+                if (mar)
+                {
+                    // the last 2 s, once the loudness has settled
+                    AudioBuffer<float> b ((int) mar->numChannels, (int) mar->sampleRate * 2);
+                    mar->read (&b, 0, b.getNumSamples(), mar->lengthInSamples - b.getNumSamples(), true, true);
+                    double sum = 0;
+                    for (int c = 0; c < b.getNumChannels(); ++c)
+                    {
+                        double ms = 0;
+                        for (int i = 0; i < b.getNumSamples(); ++i) ms += (double) b.getSample (c, i) * b.getSample (c, i);
+                        sum += ms / b.getNumSamples();
+                    }
+                    mlufs = -0.691 + 10.0 * std::log10 (juce::jmax (1.0e-12, sum));
+                }
+                int masterPluginsInSong = -1;
+                if (auto check = songs::open (engine, songFile, te::Edit::forExamining))
+                {
+                    masterPluginsInSong = 0;
+                    for (auto* p : check->getMasterPluginList().getPlugins()) if (mastering::isEncoreMaster (*p)) ++masterPluginsInSong;
+                }
+                expect ("mastered export (Encore Master) lands near -14 LUFS, song untouched",
+                        mar != nullptr && std::abs (mlufs + 14.0) < 2.0 && masterPluginsInSong == 0,
+                        err + " " + String (mlufs, 1) + " LUFS, Encore Masters in the song: " + String (masterPluginsInSong));
             }
 
             te::EditFileOperations (*edit).save (true, true, false);
@@ -343,6 +375,94 @@ namespace selftest
                 }
             expect ("Encore plugins saved with the song and load again", encoreOnTrack == 4 && loaded == 4,
                     String (loaded) + " of " + String (encoreOnTrack) + " loaded: " + ids.joinIntoString (", "));
+        }
+
+        // a live recording (Encore Live's session.json beside a 4-input WAV): names, song marks, one file per input, silent input left out
+        {
+            auto liveDir = dir.getChildFile ("Live Import");
+            liveDir.deleteRecursively();
+            liveDir.createDirectory();
+            auto rec = liveDir.getChildFile ("show.wav");
+            {
+                WavAudioFormat wav;
+                std::unique_ptr<OutputStream> os (rec.createOutputStream().release());
+                auto w = wav.createWriterFor (os, AudioFormatWriterOptions().withSampleRate (48000).withNumChannels (4).withBitsPerSample (32)
+                                                      .withSampleFormat (AudioFormatWriterOptions::SampleFormat::floatingPoint));
+                AudioBuffer<float> b (4, 48000 * 3);
+                b.clear();
+                Random r (1);
+                for (int i = 0; i < b.getNumSamples(); ++i)
+                {
+                    b.setSample (0, i, 0.3f * (float) std::sin (i * 0.03));
+                    b.setSample (1, i, 0.2f * (float) std::sin (i * 0.05));
+                    b.setSample (3, i, 0.1f * (r.nextFloat() * 2.0f - 1.0f));   // input 3 stays silent
+                }
+                if (w) w->writeFromAudioSampleBuffer (b, 0, b.getNumSamples());
+            }
+            liveDir.getChildFile ("session.json").replaceWithText (R"({ "kind": "encore-live-session", "version": 1,
+                "recording": { "file": "show.wav", "channelNames": [ "Kick", "Lead vox", "Spare", "Guitar" ] },
+                "show": { "title": "Selftest Live", "artist": "The Selftests", "venue": "The Basement", "date": "2026-10-28" },
+                "songs": [ { "title": "Opener", "start": 0.2, "end": 1.4 }, { "title": "Closer", "start": 1.6, "end": 2.9 } ] })");
+            auto session = liveimport::read (liveDir.getChildFile ("session.json"));
+            expect ("live session reads (4 inputs, names, 2 songs, 3 s)",
+                    session.problem.isEmpty() && session.channels == 4 && session.names[1] == "Lead vox" && session.songs.size() == 2
+                      && session.songs[1].title == "Closer" && std::abs (session.seconds - 3.0) < 0.01,
+                    session.problem + " " + String (session.channels) + " ch, " + String (session.songs.size()) + " songs");
+            String problem;
+            auto inputs = liveimport::split (session, liveDir.getChildFile ("Recording"), true, nullptr, problem);
+            std::unique_ptr<AudioFormatReader> first;
+            if (! inputs.isEmpty()) { AudioFormatManager lf; lf.registerBasicFormats(); first.reset (lf.createReaderFor (inputs[0].file)); }
+            expect ("live recording splits into a file per input (silent one left out)",
+                    problem.isEmpty() && inputs.size() == 3 && inputs[2].name == "Guitar" && first != nullptr && first->numChannels == 1
+                      && first->usesFloatingPointData && first->lengthInSamples == 48000 * 3,
+                    problem + " " + String (inputs.size()) + " inputs");
+            expect ("live inputs land in groups by name", liveimport::groupFor ("Kick") == "Drums" && liveimport::groupFor ("Lead vox") == "Vocals"
+                                                           && liveimport::groupFor ("Guitar") == "Guitars" && liveimport::groupFor ("Bass").isEmpty());
+        }
+
+        // a drum track: the Basement Kit (made in the song folder) plays a kick on beat 1 and a snare on beat 2
+        {
+            auto drumSong = dir.getChildFile ("Drum Song").getChildFile ("Drum Song.basement");
+            drumSong.getParentDirectory().deleteRecursively();
+            drumSong.getParentDirectory().createDirectory();
+            int sounds = -1;
+            {
+                auto e = songs::create (engine, drumSong);
+                e->ensureNumberOfAudioTracks (1);
+                auto t = te::getAudioTracks (*e)[0];
+                t->state.setProperty ("basementRole", "drums", nullptr);
+                auto plugin = e->getPluginCache().createNewPlugin (te::SamplerPlugin::xmlTypeName, {});
+                instruments::makeInstrumentTrack (*t, plugin, false);
+                if (auto* sampler = dynamic_cast<te::SamplerPlugin*> (plugin.get()))
+                {
+                    drums::kit::load (*sampler, drumSong.getParentDirectory());
+                    sounds = sampler->getNumSounds();
+                }
+                auto clip = t->insertMIDIClip ({ 0_tp, te::TimePosition::fromSeconds (2.0) }, nullptr);
+                clip->getSequence().addNote (36, te::BeatPosition::fromBeats (0.0), te::BeatDuration::fromBeats (0.25), 110, 0, nullptr);
+                clip->getSequence().addNote (38, te::BeatPosition::fromBeats (1.0), te::BeatDuration::fromBeats (0.25), 110, 0, nullptr);
+                te::EditFileOperations (*e).save (true, true, false);
+            }
+            const auto kitFiles = drumSong.getParentDirectory().getChildFile ("Drum kit").findChildFiles (File::findFiles, false, "*.wav").size();
+            expect ("drum track: the Basement Kit is made in the song folder and loaded", kitFiles == 10 && sounds == 10,
+                    String (kitFiles) + " files, " + String (sounds) + " sounds");
+
+            auto drumMix = drumSong.getSiblingFile ("drums.wav");
+            ExportOptions dro; dro.tail = false;
+            bool done = false; juce::File rendered; juce::String err;
+            auto drumJob = exportSong (engine, drumSong, drumMix, dro, [&] (juce::File f, juce::String e) { rendered = f; err = e; done = true; });
+            for (int i = 0; i < 600 && ! done; ++i) juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+            AudioFormatManager dfm; dfm.registerBasicFormats();
+            std::unique_ptr<AudioFormatReader> dr (rendered.existsAsFile() ? dfm.createReaderFor (rendered) : nullptr);
+            Range<float> kick[2], snare[2];
+            if (dr)
+            {
+                const auto quarter = (juce::int64) (dr->sampleRate * 0.25);
+                dr->readMaxLevels (0, (int) quarter, kick, 2);
+                dr->readMaxLevels (quarter * 2, (int) quarter, snare, 2);   // beat 2 at 120 bpm is 0.5 s
+            }
+            expect ("drum track plays: a kick on beat 1 and a snare on beat 2", dr != nullptr && kick[0].getEnd() > 0.1f && snare[0].getEnd() > 0.05f,
+                    err + (dr ? " kick " + String (kick[0].getEnd(), 3) + ", snare " + String (snare[0].getEnd(), 3) : String (" unreadable")));
         }
 
         // an instrument track: the built-in synth plays a MIDI clip into the mix, and a MIDI file imports
