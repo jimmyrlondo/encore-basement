@@ -1,12 +1,12 @@
-# Encore: Basement, an open-source DAW (AGPLv3).
+# Encore: Studio, an open-source DAW (AGPLv3).
 # Built on JUCE (AGPLv3) and Tracktion Engine (GPLv3), both git submodules.
 #
-#   git clone https://github.com/jimmyrlondo/encore-basement.git
+#   git clone https://github.com/jimmyrlondo/encore-studio.git
 #   git submodule update --init --depth 1 external/JUCE external/tracktion_engine
 #   cmake -B build -G "Visual Studio 17 2022" -A x64
 #   cmake --build build --config Release
 cmake_minimum_required(VERSION 3.22)
-project(EncoreBasement VERSION 0.4.0)
+project(EncoreStudio VERSION 0.4.0)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -17,27 +17,27 @@ endif()
 add_subdirectory(external/JUCE)
 add_subdirectory(external/tracktion_engine/modules ${CMAKE_BINARY_DIR}/tracktion)
 
-juce_add_gui_app(Basement
-    PRODUCT_NAME "Encore Basement"
+juce_add_gui_app(EncoreStudio
+    PRODUCT_NAME "Encore Studio"
     COMPANY_NAME "Encore"
-    BUNDLE_ID com.encoremusic.basement
+    BUNDLE_ID com.encoremusic.studio
     VERSION ${PROJECT_VERSION}
     MICROPHONE_PERMISSION_ENABLED TRUE
-    MICROPHONE_PERMISSION_TEXT "Basement records from your audio inputs."
+    MICROPHONE_PERMISSION_TEXT "Encore Studio records from your audio inputs."
     ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/Assets/encore-icon.png"
     ICON_SMALL "${CMAKE_CURRENT_SOURCE_DIR}/Assets/encore-icon.png"
     NEEDS_CURL FALSE
     NEEDS_WEB_BROWSER FALSE)
 
 # the Encore icon, drawn in the app (SVG, so it's sharp at any size)
-juce_add_binary_data(BasementAssets SOURCES Assets/encore-icon.svg)
+juce_add_binary_data(StudioAssets SOURCES Assets/encore-icon.svg)
 
-juce_generate_juce_header(Basement)
+juce_generate_juce_header(EncoreStudio)
 
-target_sources(Basement PRIVATE Source/Main.cpp)
-target_include_directories(Basement PRIVATE Source)
+target_sources(EncoreStudio PRIVATE Source/Main.cpp)
+target_include_directories(EncoreStudio PRIVATE Source)
 
-# Encore's own plugins (Vox, Verb, Equalize, Master), built in: Basement hosts
+# Encore's own plugins (Vox, Verb, Equalize, Master), built in: Encore Studio hosts
 # their processors directly. The sources in encore/ come from the plugin repo
 # (tools/sync-encore-plugins.ps1); each plugin's files get its product name.
 foreach (entry "Vox|Encore Vox" "Verb|Encore Verb" "EQ|Encore Equalize" "Master|Encore Master")
@@ -46,13 +46,13 @@ foreach (entry "Vox|Encore Vox" "Verb|Encore Verb" "EQ|Encore Equalize" "Master|
     list (GET parts 1 product)
     file (GLOB plugin_sources CONFIGURE_DEPENDS encore/plugins/${dir}/Source/*.cpp)
     list (APPEND plugin_sources Source/encore/Make${dir}.cpp)
-    target_sources(Basement PRIVATE ${plugin_sources})
+    target_sources(EncoreStudio PRIVATE ${plugin_sources})
     set_source_files_properties(${plugin_sources} PROPERTIES COMPILE_DEFINITIONS "JucePlugin_Name=\"${product}\"")
 endforeach()
-target_include_directories(Basement PRIVATE encore/shared)
+target_include_directories(EncoreStudio PRIVATE encore/shared)
 
 # older VST2 plugins: FST, an open (GPLv3+) stand-in for the VST2 headers
-target_include_directories(Basement PRIVATE external/fst)
+target_include_directories(EncoreStudio PRIVATE external/fst)
 
 # MP3 export: LAME's encoder library (LGPL), built from source
 file (GLOB lame_sources CONFIGURE_DEPENDS external/lame/libmp3lame/*.c)
@@ -65,7 +65,7 @@ else()
     target_compile_options(lame PRIVATE -w)
 endif()
 
-target_compile_definitions(Basement PRIVATE
+target_compile_definitions(EncoreStudio PRIVATE
     $<$<PLATFORM_ID:Windows>:JUCE_ASIO=1>
     BASEMENT_BUILTIN=1
     JUCE_PLUGINHOST_VST3=1
@@ -80,8 +80,8 @@ target_compile_definitions(Basement PRIVATE
     JUCE_DISPLAY_SPLASH_SCREEN=0
     TRACKTION_ENABLE_TIMESTRETCH_SOUNDTOUCH=1)
 
-target_link_libraries(Basement PRIVATE
-    BasementAssets
+target_link_libraries(EncoreStudio PRIVATE
+    StudioAssets
     lame
     tracktion::tracktion_core
     tracktion::tracktion_engine
@@ -94,5 +94,5 @@ target_link_libraries(Basement PRIVATE
     juce::juce_recommended_lto_flags)
 
 if (MSVC)
-    target_compile_options(Basement PRIVATE /bigobj /MP)
+    target_compile_options(EncoreStudio PRIVATE /bigobj /MP)
 endif()

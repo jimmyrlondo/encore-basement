@@ -5,9 +5,9 @@
     |  |  |  |  \ '-'  \ `--.|  \  \  |  |  |  |' '-' '|  ||  |       Corporation
     `---' `--'   `--`--'`---'`--'`--' `---' `--' `---' `--''--'    www.tracktion.com
 
-    Modified for Encore: Basement (2026): Encore colours, clip dragging, a bar
+    Modified for Encore: Studio (2026): Encore colours, clip dragging, a bar
     ruler, wheel zoom/scroll, volume and pan on the track headers. Licensed
-    under the GPL v3 (or later) as part of Basement (AGPLv3).
+    under the GPL v3 (or later) as part of Studio (AGPLv3).
 */
 
 #pragma once
@@ -35,7 +35,7 @@ namespace IDs
 namespace te = tracktion;
 
 /** What the arrange view needs from the app around it */
-struct BasementHooks
+struct StudioHooks
 {
     static inline std::function<void()> findPlugins, showPluginManager, applyRecordOffset;
     static inline std::function<String()> pluginScanStatus;     // empty when no scan is running

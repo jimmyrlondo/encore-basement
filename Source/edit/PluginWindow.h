@@ -67,7 +67,7 @@ struct AudioProcessorEditorContentComp : public te::Plugin::EditorComponent
 };
 
 //==============================================================================
-/** Controls for plugins without their own window (Basement's built-in effects):
+/** Controls for plugins without their own window (Studio's built-in effects):
     a knob per parameter, an On switch, and a reset. Knobs follow automation. */
 struct GenericPluginEditor : public te::Plugin::EditorComponent,
                              private Timer
@@ -212,7 +212,7 @@ public:
 private:
     void moved() override;
     void userTriedToCloseWindow() override          { plugin.windowState->closeWindowExplicitly(); }
-    bool keyPressed (const KeyPress& k) override    { return BasementHooks::forwardKey != nullptr && BasementHooks::forwardKey (k); }
+    bool keyPressed (const KeyPress& k) override    { return StudioHooks::forwardKey != nullptr && StudioHooks::forwardKey (k); }
     void closeButtonPressed() override              { userTriedToCloseWindow(); }
     float getDesktopScaleFactor() const override    { return 1.0f; }
 

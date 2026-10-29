@@ -1,4 +1,4 @@
-// Encore: Basement
+// Encore: Studio
 // Copyright (C) 2026 Encore Studio. AGPLv3 (see LICENSE).
 //
 // What a song is beyond its audio: title, artist, album, genre, key, notes and
@@ -64,7 +64,7 @@ struct SongInfo
 };
 
 //==============================================================================
-/** The Hub's "Recent" list, kept in Basement's settings. Each entry is a small
+/** The Hub's "Recent" list, kept in Studio's settings. Each entry is a small
     summary written when a song is saved, so the list shows real details
     without opening every song. */
 namespace recent
@@ -163,7 +163,7 @@ namespace recent
 struct TrackPlan
 {
     juce::String name;
-    juce::String input; // a Basement input name ("Volt 476 1"...), or empty for none
+    juce::String input; // a Studio input name ("Volt 476 1"...), or empty for none
     juce::String group; // a group track this one plays into ("Drums"), or empty
 };
 
@@ -175,7 +175,7 @@ struct SongPlan
     juce::File templateFile;         // a saved template to start from, or none
     bool importAfterCreate = false;  // "Mix stems": ask for files right away
 
-    juce::File songFile() const { return folder.getChildFile (folder.getFileName() + ".basement"); }
+    juce::File songFile() const { return folder.getChildFile (folder.getFileName() + songfile::ext); }
 };
 
 /** Templates: the built-in starting points, plus any the user saved */
@@ -221,7 +221,7 @@ namespace templates
 
     inline juce::File folder()
     {
-        return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory).getChildFile (basementProfile()).getChildFile ("Templates");
+        return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory).getChildFile (studioProfile()).getChildFile ("Templates");
     }
 
     inline juce::Array<Template> all()
@@ -242,7 +242,7 @@ namespace templates
         t.add ({ "Live multitrack", "One track per input on your interface", {}, true });
         t.add ({ "Podcast", "Host and two guests, no click", { "Host", "Guest 1", "Guest 2" } });
         t.add ({ "Mix stems", "Bring in audio files, each on its own track", {}, false, false, true });
-        for (auto& f : folder().findChildFiles (juce::File::findFiles, false, "*.basement"))
+        for (auto& f : folder().findChildFiles (juce::File::findFiles, false, songfile::patterns))
         {
             Template u { f.getFileNameWithoutExtension(), "Your template", {} };
             u.file = f;

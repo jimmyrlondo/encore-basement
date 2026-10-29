@@ -1,11 +1,11 @@
-// Encore: Basement
+// Encore: Studio
 // Copyright (C) 2026 Encore Studio. AGPLv3 (see LICENSE).
 //
 // Finds your plugins in the background. Every launch checks the plugin folders
 // (the standard ones plus any you add in Preferences) and only looks inside
 // plugins that are new or changed, so after the first time it takes a moment.
 // Each plugin is opened in a separate helper process, so a plugin that
-// crashes while being checked can't take Basement down with it; it just gets
+// crashes while being checked can't take Studio down with it; it just gets
 // skipped (and listed as skipped in Plugin Manager). One that stops to show a
 // window (an activation prompt, say) is set aside within seconds, and one
 // that never answers after a minute, so the rest still get found.
@@ -13,10 +13,10 @@
 
 #if JUCE_WINDOWS
  #include <process.h>
- inline int basementPid() { return _getpid(); }
+ inline int studioPid() { return _getpid(); }
 
- // three user32 calls, declared here rather than pulling all of <windows.h> into Basement
- namespace basementwin
+ // three user32 calls, declared here rather than pulling all of <windows.h> into Studio
+ namespace studiowin
  {
      extern "C" __declspec(dllimport) int __stdcall EnumWindows (int (__stdcall*) (void*, std::intptr_t), std::intptr_t);
      extern "C" __declspec(dllimport) int __stdcall IsWindowVisible (void*);
@@ -40,13 +40,13 @@
  }
 #else
  #include <unistd.h>
- inline int basementPid() { return (int) getpid(); }
+ inline int studioPid() { return (int) getpid(); }
 #endif
 
 class PluginFinder : private juce::Thread
 {
 public:
-    PluginFinder (te::Engine& e) : Thread ("Basement plugin finder"), engine (e) {}
+    PluginFinder (te::Engine& e) : Thread ("Encore Studio plugin finder"), engine (e) {}
     ~PluginFinder() override
     {
         *alive = false;
@@ -71,7 +71,7 @@ public:
     bool isRunning() const { return isThreadRunning(); }
     juce::String status() const { const juce::ScopedLock sl (lock); return current; }
 
-    /** Every folder Basement looks in, for the Preferences page */
+    /** Every folder Studio looks in, for the Preferences page */
     static juce::StringArray defaultFolders (te::Engine& e)
     {
         juce::StringArray out;
@@ -119,7 +119,7 @@ private:
         if (watchdog.joinable()) watchdog.join();
     }
 
-    /** Its own thread, so it still works when a plugin's window has frozen Basement's: a plugin that
+    /** Its own thread, so it still works when a plugin's window has frozen Studio's: a plugin that
         stops the search to show a window (an activation prompt, say) is set aside after a few seconds,
         and one that just never answers after a minute */
     void watch()
@@ -147,7 +147,7 @@ private:
             lines.removeEmptyStrings();
             if (lines.isEmpty()) continue;
             const auto file = lines[lines.size() - 1];
-            basementLog ("plugin skipped (" + why + "): " + file);
+            studioLog ("plugin skipped (" + why + "): " + file);
             engine.getPluginManager().knownPluginList.addToBlacklist (file);
             setAside = true;
             // the search is waiting on the stuck helper, so it's the only one running right now
@@ -178,16 +178,16 @@ private:
 
     struct Helper { juce::String pid; bool hasWindow = false; };
 
-    /** Basement's own plugin-checking helpers (its child processes), and whether each has a window up,
+    /** Studio's own plugin-checking helpers (its child processes), and whether each has a window up,
         itself or through something a plugin started (copy protection like PACE shows its activation
         window from a process of its own) */
     static std::vector<Helper> helperProcesses()
     {
-        const auto pid = juce::String (basementPid());
+        const auto pid = juce::String (studioPid());
        #if JUCE_WINDOWS
         auto out = run ({ "powershell", "-NoProfile", "-NonInteractive", "-Command",
                           "$all = Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, Name; "
-                          "$all | Where-Object { $_.ParentProcessId -eq " + pid + " -and $_.Name -like '*Basement*' } | ForEach-Object { "
+                          "$all | Where-Object { $_.ParentProcessId -eq " + pid + " -and $_.Name -like '*Encore Studio*' } | ForEach-Object { "
                           "$tree = @($_.ProcessId); $i = 0; "
                           "while ($i -lt $tree.Count) { $p = $tree[$i]; $all | Where-Object { $_.ParentProcessId -eq $p } | ForEach-Object { $tree += $_.ProcessId }; $i++ }; "
                           "$tree -join ' ' }" }, true);
@@ -204,7 +204,7 @@ private:
             const auto id = ids[0];
            #if JUCE_WINDOWS
             bool window = false;
-            for (auto& p : ids) window = window || basementwin::hasVisibleWindow ((unsigned long) p.getLargeIntValue());
+            for (auto& p : ids) window = window || studiowin::hasVisibleWindow ((unsigned long) p.getLargeIntValue());
             helpers.push_back ({ id, window });
            #else
             helpers.push_back ({ id, false });   // no window check on Mac yet: the minute limit still applies
@@ -254,12 +254,12 @@ private:
                     // VST2 folders are full of helper .dlls that aren't plugins: note them so later searches skip them
                     // (Plugin Manager can clear the list)
                     if (format->getName() == "VST") list.addToBlacklist (failed);
-                    basementLog ("plugin skipped (didn't load" + juce::String (format->getName() == "VST" ? ", won't check again" : "") + "): " + failed);
+                    studioLog ("plugin skipped (didn't load" + juce::String (format->getName() == "VST" ? ", won't check again" : "") + "): " + failed);
                 }
             }
         }
         const int found = list.getNumTypes() - before;
-        basementLog ("plugin search done in " + juce::String ((juce::Time::getMillisecondCounter() - t0) / 1000.0, 1) + " s: "
+        studioLog ("plugin search done in " + juce::String ((juce::Time::getMillisecondCounter() - t0) / 1000.0, 1) + " s: "
                      + juce::String (list.getNumTypes()) + " plugins known, " + juce::String (found) + " new");
         { const juce::ScopedLock sl (lock); current = {}; }
         juce::MessageManager::callAsync ([this, found, a = alive] { if (*a && onFinished) onFinished (found); });

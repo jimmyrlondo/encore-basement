@@ -52,7 +52,7 @@ namespace mp3
         setText (gf.get(), "TPE1", tags.artist);
         setText (gf.get(), "TALB", tags.album);
         setText (gf.get(), "TCON", tags.genre);
-        setText (gf.get(), "TSSE", "Encore: Basement (LAME 3.100)");
+        setText (gf.get(), "TSSE", "Encore: Studio (LAME 3.100)");
         if (lame_init_params (gf.get()) < 0) return "the MP3 encoder didn't accept the settings";
 
         dest.deleteFile();

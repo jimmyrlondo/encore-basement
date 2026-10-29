@@ -1,11 +1,11 @@
 #pragma once
 
-// Help menu support: checking GitHub for a newer Basement, and a problem
-// report (a zip of the log, settings and what Basement saw) to attach to an issue.
+// Help menu support: checking GitHub for a newer Studio, and a problem
+// report (a zip of the log, settings and what Studio saw) to attach to an issue.
 
 namespace support
 {
-    inline const char* repo() { return "jimmyrlondo/encore-basement"; }
+    inline const char* repo() { return "jimmyrlondo/encore-studio"; }
 
     //==============================================================================
     /** "v0.4.1" or "0.4.1" as numbers, for comparing */
@@ -34,7 +34,7 @@ namespace support
         juce::String problem;   // couldn't check (offline...)
     };
 
-    /** The newest published release on GitHub (prereleases count: that's what Basement ships as for now).
+    /** The newest published release on GitHub (prereleases count: that's what Studio ships as for now).
         Runs the request on a background thread; answers on the message thread. */
     inline void latestRelease (std::function<void (Release)> answer)
     {
@@ -44,7 +44,7 @@ namespace support
             juce::URL url ("https://api.github.com/repos/" + juce::String (repo()) + "/releases?per_page=10");
             int status = 0;
             auto in = url.createInputStream (juce::URL::InputStreamOptions (juce::URL::ParameterHandling::inAddress)
-                                                .withExtraHeaders ("User-Agent: Encore-Basement\r\nAccept: application/vnd.github+json")
+                                                .withExtraHeaders ("User-Agent: Encore-Studio\r\nAccept: application/vnd.github+json")
                                                 .withConnectionTimeoutMs (8000)
                                                 .withStatusCode (&status));
             if (in == nullptr || status != 200)
@@ -81,33 +81,33 @@ namespace support
     }
 
     //==============================================================================
-    /** Where Basement keeps its settings and log for this profile */
+    /** Where Studio keeps its settings and log for this profile */
     inline juce::File settingsFolder()
     {
-        return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory).getChildFile (basementProfile());
+        return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory).getChildFile (studioProfile());
     }
 
-    /** Builds "Basement problem report <date>.zip" on the Desktop: what happened (in their words),
-        the computer and audio setup, Basement.log, the settings, and optionally the open song's
+    /** Builds "Encore Studio problem report <date>.zip" on the Desktop: what happened (in their words),
+        the computer and audio setup, Encore Studio.log, the settings, and optionally the open song's
         arrangement file (no audio). Returns the zip, or an empty File. */
     inline juce::File makeReport (const juce::String& whatHappened, const juce::String& systemInfo, const juce::File& songFile)
     {
         const auto now = juce::Time::getCurrentTime();
         auto zip = juce::File::getSpecialLocation (juce::File::userDesktopDirectory)
-                       .getNonexistentChildFile ("Basement problem report " + now.formatted ("%Y-%m-%d %H%M"), ".zip", false);
+                       .getNonexistentChildFile ("Encore Studio problem report " + now.formatted ("%Y-%m-%d %H%M"), ".zip", false);
         juce::ZipFile::Builder b;
         juce::String readme;
-        readme << "Encore: Basement problem report" << juce::newLine
+        readme << "Encore: Studio problem report" << juce::newLine
                << "Made " << now.toString (true, true) << juce::newLine << juce::newLine
                << "What happened:" << juce::newLine << (whatHappened.isNotEmpty() ? whatHappened : juce::String ("(not filled in)")) << juce::newLine << juce::newLine
                << systemInfo;
-        auto tmp = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("basement-report-" + juce::String (juce::Random::getSystemRandom().nextInt64()));
+        auto tmp = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("studio-report-" + juce::String (juce::Random::getSystemRandom().nextInt64()));
         tmp.createDirectory();
         auto report = tmp.getChildFile ("report.txt");
         report.replaceWithText (readme);
         b.addFile (report, 9, "report.txt");
         auto folder = settingsFolder();
-        if (folder.getChildFile ("Basement.log").existsAsFile()) b.addFile (folder.getChildFile ("Basement.log"), 9, "Basement.log");
+        if (folder.getChildFile ("Encore Studio.log").existsAsFile()) b.addFile (folder.getChildFile ("Encore Studio.log"), 9, "Encore Studio.log");
         for (auto& f : folder.findChildFiles (juce::File::findFiles, false, "*.settings;*.xml"))
             if (f.getSize() < 2000000) b.addFile (f, 9, "settings/" + f.getFileName());
         if (songFile.existsAsFile()) b.addFile (songFile, 9, "song/" + songFile.getFileName());
@@ -130,8 +130,8 @@ namespace support
         ReportComponent (bool hasSong, bool crashedLastTime)
         {
             hubui::styleLabel (intro, 14.0f, theme::paper);
-            intro.setText (juce::String (crashedLastTime ? "Basement didn't close properly last time. Sorry about that.\n" : "")
-                             + "Tell us what happened. Basement makes a zip on your Desktop with this, its log and your audio setup "
+            intro.setText (juce::String (crashedLastTime ? "Encore Studio didn't close properly last time. Sorry about that.\n" : "")
+                             + "Tell us what happened. Encore Studio makes a zip on your Desktop with this, its log and your audio setup "
                                "(no recordings), then opens a new GitHub issue to attach it to.",
                            juce::dontSendNotification);
             intro.setJustificationType (juce::Justification::topLeft);

@@ -1,7 +1,7 @@
-// Encore: Basement
+// Encore: Studio
 // Copyright (C) 2026 Encore Studio. AGPLv3 (see LICENSE).
 //
-// "Encore Basement.exe --plugintest <report file> [folder]" loads every VST3
+// "Encore Studio.exe --plugintest <report file> [folder]" loads every VST3
 // and VST2 in a folder (default: the system plugin folders) the way the Effects button
 // does: scan it, put it on a track, wait for it to load, open its editor.
 // Writes a line per plugin with what happened and how long each step took,
@@ -17,7 +17,7 @@ namespace selftest
         auto line = [&] (const String& s) { report << s << newLine; outFile.replaceWithText (report); };
 
         auto* ui = new HeadlessUIBehaviour();
-        te::Engine engine { "Encore Basement Plugintest", std::unique_ptr<te::UIBehaviour> (ui), std::make_unique<BasementBehaviour>() };
+        te::Engine engine { "Encore Studio Plugintest", std::unique_ptr<te::UIBehaviour> (ui), std::make_unique<StudioBehaviour>() };
         registerEncorePlugins (engine);
         auto& pm = engine.getPluginManager();
         Array<AudioPluginFormat*> formats;
@@ -25,7 +25,7 @@ namespace selftest
             if (f->getName() == "VST3" || f->getName() == "VST") formats.add (f);
         if (formats.size() < 2) { line ("FAIL VST3 and VST2 aren't both registered (" + String (formats.size()) + ")"); return 1; }
 
-        auto edit = songs::create (engine, File::getSpecialLocation (File::tempDirectory).getChildFile ("basement-plugintest.basement"));
+        auto edit = songs::create (engine, File::getSpecialLocation (File::tempDirectory).getChildFile ("studio-plugintest.encore"));
         edit->ensureNumberOfAudioTracks (1);
         auto track = te::getAudioTracks (*edit)[0];
 

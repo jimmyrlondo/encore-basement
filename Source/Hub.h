@@ -1,4 +1,4 @@
-// Encore: Basement
+// Encore: Studio
 // Copyright (C) 2026 Encore Studio. AGPLv3 (see LICENSE).
 //
 // The Hub: the first thing you see. Jump back into a recent song, or set up a
@@ -586,6 +586,8 @@ public:
     {
         SongInfo blank;
         blank.title = {};
+        if (auto* a = account::get().artist()) { blank.artist = a->name; blank.genre = a->genre; }
+        changeWhere.setVisible (! account::get().signedIn());
         if (auto* d = engine.getDeviceManager().deviceManager.getCurrentAudioDevice()) blank.sampleRate = d->getCurrentSampleRate();
         fields.set (blank);
         buildTemplates();
@@ -871,7 +873,7 @@ private:
         else setup.inputDeviceName = setup.outputDeviceName = c.name;
         setup.useDefaultInputChannels = true;
         auto err = dm.setAudioDeviceSetup (setup, true);
-        basementLog ("hub: record from " + c.name + " (" + c.type + ")" + (err.isEmpty() ? "" : " error: " + err));
+        studioLog ("hub: record from " + c.name + " (" + c.type + ")" + (err.isEmpty() ? "" : " error: " + err));
         if (err.isNotEmpty()) juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Couldn't open " + c.name, err);
         // a fresh interface: give the tracks its inputs (the template's way, if it has one)
         reapplyInputs();
@@ -894,21 +896,34 @@ private:
     }
 
     //==============================================================================
-    juce::File projectsFolder()
+    juce::File projectsFolder() { return library::songsFolderOr (props().getValue ("projectsFolder")); }
+
+public:
+    /** Another artist was picked: their name and genre go in, the rest of the form stays */
+    void accountChanged()
     {
-        auto f = juce::File (props().getValue ("projectsFolder"));
-        return f != juce::File() ? f : juce::File::getSpecialLocation (juce::File::userMusicDirectory).getChildFile ("Encore Basement");
+        if (auto* a = account::get().artist())
+        {
+            auto i = fields.get();
+            i.title = fields.title.getText();
+            i.artist = a->name;
+            if (a->genre.isNotEmpty()) i.genre = a->genre;
+            fields.set (i);
+        }
+        changeWhere.setVisible (! account::get().signedIn());
+        updateSummary();
     }
+private:
 
     void chooseWhere()
     {
-        auto chooser = std::make_shared<juce::FileChooser> ("Where should Basement keep your songs? (Pick a roomy drive)", projectsFolder());
+        auto chooser = std::make_shared<juce::FileChooser> ("Where should Encore Studio keep your songs? (Pick a roomy drive)", projectsFolder());
         chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories,
                               [this, chooser] (const juce::FileChooser&)
                               {
                                   auto dir = chooser->getResult();
                                   if (dir == juce::File()) return;
-                                  if (dir.getFileName() != "Encore Basement" && ! dir.getChildFile ("Encore Basement").exists()) dir = dir.getChildFile ("Encore Basement");
+                                  if (dir.getFileName() != "Encore Studio" && ! dir.getChildFile ("Encore Studio").exists()) dir = dir.getChildFile ("Encore Studio");
                                   props().setValue ("projectsFolder", dir.getFullPathName());
                                   updateSummary();
                               });
@@ -951,7 +966,12 @@ private:
     void createSong()
     {
         auto p = plan();
-        props().setValue ("projectsFolder", projectsFolder().getFullPathName());
+        auto& acc = account::get();
+        if (auto* a = acc.artist())
+        {
+            if (p.info.album.isNotEmpty()) library::releaseFolder (library::artistFolder (acc.library, *a), p.info.album, p.info.title).createDirectory();
+        }
+        else props().setValue ("projectsFolder", projectsFolder().getFullPathName());
         if (onCreate) onCreate (p);
     }
 };
@@ -964,6 +984,7 @@ public:
     std::function<void (juce::File)> onOpen;
     std::function<void()> onOpenOther, onBack, onAudioSetup;
     std::function<void (SongPlan)> onCreate;
+    std::function<void()> onSignIn, onAccountMenu, onAddArtist, onAccountChanged;
 
     HubComponent (te::Engine& e, juce::PropertiesFile& p) : engine (e), props (p), newPanel (e)
     {
@@ -999,10 +1020,19 @@ public:
             l.setColour (juce::HyperlinkButton::textColourId, theme::text2);
             addAndMakeVisible (l);
         };
+        hubui::styleCombo (artistBox);
+        artistBox.setTooltip ("Who new songs are for: they go in this artist's folder, with their name filled in");
+        artistBox.onChange = [this] { pickArtist(); };
+        accountButton.onClick = [this] { if (onAccountMenu) onAccountMenu(); };
+        signInButton.onClick = [this] { if (onSignIn) onSignIn(); };
+        signInButton.setColour (juce::TextButton::buttonColourId, theme::strong);
+        for (auto* c : std::initializer_list<juce::Component*> { &artistBox, &accountButton, &signInButton }) addChildComponent (c);
+        refreshAccount();
+
         link (studioLink, "https://encoremusic.studio");
-        link (guideLink, "https://github.com/jimmyrlondo/encore-basement#readme");
-        link (issueLink, "https://github.com/jimmyrlondo/encore-basement/issues/new");
-        link (updatesLink, "https://github.com/jimmyrlondo/encore-basement/releases");
+        link (guideLink, "https://github.com/jimmyrlondo/encore-studio#readme");
+        link (issueLink, "https://github.com/jimmyrlondo/encore-studio/issues/new");
+        link (updatesLink, "https://github.com/jimmyrlondo/encore-studio/releases");
 
         engine.getDeviceManager().addChangeListener (this);
     }
@@ -1031,6 +1061,22 @@ public:
 
     int recentCount() const { return recentPanel.count(); }
 
+    /** Shows who's signed in (and their artists) after the profile changes */
+    void refreshAccount()
+    {
+        auto& p = account::get();
+        artistBox.clear (juce::dontSendNotification);
+        for (int i = 0; i < p.artists.size(); ++i) artistBox.addItem (p.artists[i].name, i + 1);
+        artistBox.addSeparator();
+        artistBox.addItem ("Add an artist...", addArtistId);
+        artistBox.setSelectedId (p.current + 1, juce::dontSendNotification);
+        artistBox.setVisible (p.signedIn());
+        accountButton.setVisible (p.signedIn());
+        signInButton.setVisible (! p.signedIn());
+        newPanel.accountChanged();
+        repaint();
+    }
+
     void paint (juce::Graphics& g) override
     {
         g.fillAll (theme::base);
@@ -1050,11 +1096,14 @@ public:
         g.drawText ("ENCORE:", mark.removeFromTop (26), juce::Justification::bottomLeft);
         g.setColour (theme::paper);
         g.setFont (hubui::font (30.0f, true));
-        g.drawText ("BASEMENT", mark.withTrimmedLeft (-2), juce::Justification::topLeft);
+        g.drawText ("STUDIO", mark.withTrimmedLeft (-2), juce::Justification::topLeft);
         r.removeFromTop (6);
         g.setColour (theme::text2);
         g.setFont (hubui::font (14.0f));
         g.drawFittedText ("Record, edit and mix your songs. Free and open source.", r.removeFromTop (40), juce::Justification::topLeft, 2);
+        r.removeFromTop (14);
+        auto& acc = account::get();
+        hubui::drawHeading (g, acc.isLabel() ? acc.label + ": making music as" : juce::String ("Making music as"), r.removeFromTop (16));
 
         // audio card
         auto card = audioCard();
@@ -1103,6 +1152,13 @@ public:
     {
         auto r = leftArea().reduced (28, 30);
         r.removeFromTop (64 + 6 + 40 + 14);
+        {
+            auto acc = r.removeFromTop (accountH).withTrimmedTop (22).removeFromTop (34);
+            signInButton.setBounds (acc);
+            accountButton.setBounds (acc.removeFromRight (84));
+            acc.removeFromRight (8);
+            artistBox.setBounds (acc);
+        }
         newButton.setBounds (r.removeFromTop (42));
         r.removeFromTop (10);
         openButton.setBounds (r.removeFromTop (38));
@@ -1132,16 +1188,35 @@ private:
     NewSongPanel newPanel;
     int tab = 0;
     juce::TextButton newButton { "New song" }, openButton { "Open a song..." }, audioButton { "Audio setup" }, backButton;
-    juce::HyperlinkButton studioLink { "Encore Studio", {} }, guideLink { "User guide", {} }, issueLink { "Report a problem", {} }, updatesLink { "What's new / updates", {} };
+    juce::ComboBox artistBox;
+    juce::TextButton accountButton { "Account" }, signInButton { "Set up your profile" };
+    static constexpr int accountH = 70, addArtistId = 9000;
+    juce::HyperlinkButton studioLink { "Encore", {} }, guideLink { "User guide", {} }, issueLink { "Report a problem", {} }, updatesLink { "What's new / updates", {} };
 
     juce::Rectangle<int> leftArea() const { return getLocalBounds().removeFromLeft (juce::jlimit (300, 380, getWidth() * 3 / 10)); }
     juce::Rectangle<int> audioCard() const
     {
         auto r = leftArea().reduced (28, 30);
-        r.removeFromTop (64 + 6 + 40 + 14 + 42 + 10 + 38 + 28);
+        r.removeFromTop (64 + 6 + 40 + 14 + accountH + 42 + 10 + 38 + 28);
         return r.removeFromTop (160);
     }
     juce::Rectangle<int> linksArea() const { return audioCard().translated (0, 160 + 28).withHeight (24 + 4 * 26); }
 
     void changeListenerCallback (juce::ChangeBroadcaster*) override { repaint(); }
+
+    void pickArtist()
+    {
+        const auto id = artistBox.getSelectedId();
+        if (id == addArtistId)
+        {
+            artistBox.setSelectedId (account::get().current + 1, juce::dontSendNotification);
+            if (onAddArtist) onAddArtist();
+            return;
+        }
+        if (id <= 0) return;
+        account::get().current = id - 1;
+        account::save();
+        refreshAccount();
+        if (onAccountChanged) onAccountChanged();
+    }
 };

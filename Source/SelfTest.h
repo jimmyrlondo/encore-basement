@@ -1,7 +1,7 @@
-// Encore: Basement
+// Encore: Studio
 // Copyright (C) 2026 Encore Studio. AGPLv3 (see LICENSE).
 //
-// "Encore Basement.exe --selftest <folder>" runs the core of the app without
+// "Encore Studio.exe --selftest <folder>" runs the core of the app without
 // a window and exits 0 when everything works: make a song, import audio as
 // tracks, mix, pan and mute, export, check the export, save and reopen.
 // Writes only inside <folder>.
@@ -9,11 +9,11 @@
 
 namespace selftest
 {
-    /** "--devices <file>": what audio devices and inputs Basement sees, before and after splitting pairs */
+    /** "--devices <file>": what audio devices and inputs Studio sees, before and after splitting pairs */
     inline int devices (const juce::File& outFile)
     {
         juce::String o;
-        te::Engine engine { "Encore Basement" };
+        te::Engine engine { "Encore Studio" };
         auto& dm = engine.getDeviceManager();
         auto dump = [&] (const juce::String& when)
         {
@@ -73,9 +73,9 @@ namespace selftest
         auto a = makeTone ("tone a.wav", 220, 4), b = makeTone ("tone b.wav", 330, 4);
         expect ("test tones written", a.getSize() > 1000 && b.getSize() > 1000);
 
-        auto* behaviour = new BasementBehaviour (true);   // no audio device: renders don't need one, and it leaves the interface to whatever else is using it
+        auto* behaviour = new StudioBehaviour (true);   // no audio device: renders don't need one, and it leaves the interface to whatever else is using it
         auto* ui = new HeadlessUIBehaviour();
-        te::Engine engine { "Encore Basement Selftest", std::unique_ptr<te::UIBehaviour> (ui), std::unique_ptr<te::EngineBehaviour> (behaviour) };
+        te::Engine engine { "Encore Studio Selftest", std::unique_ptr<te::UIBehaviour> (ui), std::unique_ptr<te::EngineBehaviour> (behaviour) };
         registerEncorePlugins (engine);
         // plugin formats: VST3 and VST2 (through FST) are both compiled in
         {
@@ -83,7 +83,7 @@ namespace selftest
             for (auto* f : engine.getPluginManager().pluginFormatManager.getFormats()) names.add (f->getName());
             expect ("VST3 and VST2 hosting", names.contains ("VST3") && names.contains ("VST"), names.joinIntoString (", "));
         }
-        auto songFile = songDir.getChildFile ("Self Test.basement");
+        auto songFile = songDir.getChildFile ("Self Test.encore");
         behaviour->songFolder = [songFile] { return songFile.getParentDirectory(); };
 
         {
@@ -246,7 +246,7 @@ namespace selftest
             plan.folder.deleteRecursively();
             plan.info.title = "Planned Song";
             plan.info.artist = "The Selftests";
-            plan.info.album = "Basement Tapes";
+            plan.info.album = "Encore Studio Tapes";
             plan.info.genre = "Polka";
             plan.info.key = "A minor";
             plan.info.notes = "line one\nline two";
@@ -262,7 +262,7 @@ namespace selftest
             if (auto e = songs::open (engine, plan.songFile()))
             {
                 auto info = SongInfo::readFrom (*e, plan.songFile());
-                expect ("song details saved", info.title == "Planned Song" && info.artist == "The Selftests" && info.album == "Basement Tapes"
+                expect ("song details saved", info.title == "Planned Song" && info.artist == "The Selftests" && info.album == "Encore Studio Tapes"
                                                && info.genre == "Polka" && info.key == "A minor" && info.notes == "line one\nline two",
                         info.title + " / " + info.artist + " / " + info.key);
                 expect ("tempo, time signature and format saved", std::abs (info.bpm - 92) < 0.01 && info.sigNum == 6 && info.sigDen == 8
@@ -328,7 +328,7 @@ namespace selftest
 
         // the built-in Encore plugins: each loads on a track, passes audio, and keeps its settings
         {
-            auto songFile2 = dir.getChildFile ("Encore Plugins").getChildFile ("Encore Plugins.basement");
+            auto songFile2 = dir.getChildFile ("Encore Plugins").getChildFile ("Encore Plugins.encore");
             songFile2.getParentDirectory().deleteRecursively();
             songFile2.getParentDirectory().createDirectory();
             auto e = songs::create (engine, songFile2);
@@ -401,7 +401,7 @@ namespace selftest
             }
             liveDir.getChildFile ("session.json").replaceWithText (R"({ "kind": "encore-live-session", "version": 1,
                 "recording": { "file": "show.wav", "channelNames": [ "Kick", "Lead vox", "Spare", "Guitar" ] },
-                "show": { "title": "Selftest Live", "artist": "The Selftests", "venue": "The Basement", "date": "2026-10-28" },
+                "show": { "title": "Selftest Live", "artist": "The Selftests", "venue": "The Encore Studio", "date": "2026-10-28" },
                 "songs": [ { "title": "Opener", "start": 0.2, "end": 1.4 }, { "title": "Closer", "start": 1.6, "end": 2.9 } ] })");
             auto session = liveimport::read (liveDir.getChildFile ("session.json"));
             expect ("live session reads (4 inputs, names, 2 songs, 3 s)",
@@ -420,9 +420,41 @@ namespace selftest
                                                            && liveimport::groupFor ("Guitar") == "Guitars" && liveimport::groupFor ("Bass").isEmpty());
         }
 
-        // a drum track: the Basement Kit (made in the song folder) plays a kick on beat 1 and a snare on beat 2
+        // the account: a label's profile survives saving, each artist gets Songs/Releases/Masters/Live,
+        // a song in an artist's folder knows whose it is, and remastering keeps the earlier master
         {
-            auto drumSong = dir.getChildFile ("Drum Song").getChildFile ("Drum Song.basement");
+            account::Profile p;
+            p.name = "Jimmy"; p.label = "Sick & Sad"; p.current = 1;
+            p.artists.add ({ "The Openers", "Rock" });
+            p.artists.add ({ "Polka/Kings", "Polka" });
+            auto lib = dir.getChildFile ("Library");
+            lib.deleteRecursively();
+            p.library = lib;
+            auto back = account::Profile::fromVar (JSON::parse (JSON::toString (p.toVar())));
+            expect ("account profile saves and loads", back.isLabel() && back.artists.size() == 2 && back.artist() != nullptr
+                                                         && back.artist()->name == "Polka/Kings" && back.artists[0].genre == "Rock" && back.library == lib);
+            auto artist = library::ensure (lib, *back.artist());
+            bool folders = true;
+            for (auto sub : { "Songs", "Releases", "Masters", "Live" }) folders = folders && artist.getChildFile (sub).isDirectory();
+            expect ("artist folder has Songs, Releases, Masters and Live", folders && artist.getChildFile ("artist.json").existsAsFile()
+                                                                             && artist.getFileName() == library::folderName ("Polka/Kings"), artist.getFullPathName());
+            auto song = artist.getChildFile ("Songs").getChildFile ("Beer Barrel").getChildFile (String ("Beer Barrel") + songfile::ext);
+            song.create();
+            expect ("a song knows which artist it belongs to", library::artistFolderOf (song) == artist && library::artistFolderOf (a) == File());
+            auto mix = dir.getChildFile ("mix for masters.wav");
+            a.copyFileTo (mix);
+            auto first = library::keepMaster (artist, mix, "Live at the Hall", "Beer Barrel");
+            auto second = library::keepMaster (artist, mix, "Live at the Hall", "Beer Barrel");
+            auto earlier = artist.getChildFile ("Masters").getChildFile ("Live at the Hall").getChildFile ("Earlier masters");
+            expect ("masters are kept, and a redo keeps the earlier one", first.existsAsFile() && second == first
+                                                                            && earlier.findChildFiles (File::findFiles, false, "*.wav").size() == 1, first.getFullPathName());
+            expect ("a single's release folder is its own name", library::releaseFolder (artist, {}, "Beer Barrel").getFileName() == "Beer Barrel"
+                                                                   && library::releaseFolder (artist, "Live at the Hall", "Beer Barrel").getFileName() == "Live at the Hall");
+        }
+
+        // a drum track: the Studio Kit (made in the song folder) plays a kick on beat 1 and a snare on beat 2
+        {
+            auto drumSong = dir.getChildFile ("Drum Song").getChildFile ("Drum Song.encore");
             drumSong.getParentDirectory().deleteRecursively();
             drumSong.getParentDirectory().createDirectory();
             int sounds = -1;
@@ -444,7 +476,7 @@ namespace selftest
                 te::EditFileOperations (*e).save (true, true, false);
             }
             const auto kitFiles = drumSong.getParentDirectory().getChildFile ("Drum kit").findChildFiles (File::findFiles, false, "*.wav").size();
-            expect ("drum track: the Basement Kit is made in the song folder and loaded", kitFiles == 10 && sounds == 10,
+            expect ("drum track: the Encore Studio Kit is made in the song folder and loaded", kitFiles == 10 && sounds == 10,
                     String (kitFiles) + " files, " + String (sounds) + " sounds");
 
             auto drumMix = drumSong.getSiblingFile ("drums.wav");
@@ -467,7 +499,7 @@ namespace selftest
 
         // an instrument track: the built-in synth plays a MIDI clip into the mix, and a MIDI file imports
         {
-            auto synthSong = dir.getChildFile ("Synth Song").getChildFile ("Synth Song.basement");
+            auto synthSong = dir.getChildFile ("Synth Song").getChildFile ("Synth Song.encore");
             synthSong.getParentDirectory().deleteRecursively();
             synthSong.getParentDirectory().createDirectory();
             {
@@ -541,7 +573,7 @@ namespace selftest
         // group tracks: two tones play into a group; the group's fader controls them both,
         // a group stem has them, and a member's stem still has its own sound
         {
-            auto groupSong = dir.getChildFile ("Group Song").getChildFile ("Group Song.basement");
+            auto groupSong = dir.getChildFile ("Group Song").getChildFile ("Group Song.encore");
             groupSong.getParentDirectory().deleteRecursively();
             groupSong.getParentDirectory().createDirectory();
             {

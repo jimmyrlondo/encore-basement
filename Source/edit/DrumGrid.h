@@ -1,4 +1,4 @@
-// Encore: Basement
+// Encore: Studio
 // Copyright (C) 2026 Encore Studio. AGPLv3 (see LICENSE).
 //
 // The drum grid: a step editor for a drum track's MIDI clip, in the same pane
@@ -10,7 +10,7 @@
 //   right-click           velocity, and clearing or filling a whole row
 //   click a drum's name   plays it
 //
-// Drum tracks play the Basement Kit: drum sounds Basement makes itself the first
+// Drum tracks play the Studio Kit: drum sounds Studio makes itself the first
 // time (no samples to download), copied into the song folder so the song is
 // complete on its own. Rows follow General MIDI, so any MIDI drum part or drum
 // plugin lines up too.
@@ -43,7 +43,7 @@ namespace drums
     inline bool isDrumTrack (te::AudioTrack& t) { return t.state.getProperty ("basementRole").toString() == "drums"; }
 
     //==============================================================================
-    // The Basement Kit, synthesised: short, punchy, mix-ready one-shots.
+    // The Studio Kit, synthesised: short, punchy, mix-ready one-shots.
     namespace kit
     {
         constexpr double fs = 48000.0;

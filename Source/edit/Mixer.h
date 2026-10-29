@@ -1,4 +1,4 @@
-// Encore: Basement
+// Encore: Studio
 // Copyright (C) 2026 Encore Studio. AGPLv3 (see LICENSE).
 //
 // The mixer (Window > Mixer, F3): a channel strip per track, with its effects,

@@ -1,4 +1,4 @@
-// Encore: Basement
+// Encore: Studio
 // Copyright (C) 2026 Encore Studio.
 //
 // This program is free software: you can redistribute it and/or modify it under
@@ -32,16 +32,16 @@ using namespace tracktion::literals;
 #include "SelfTest.h"
 #include "PluginTest.h"
 
-class BasementApplication : public juce::JUCEApplication
+class StudioApplication : public juce::JUCEApplication
 {
 public:
-    const juce::String getApplicationName() override    { return "Encore Basement"; }
+    const juce::String getApplicationName() override    { return "Encore Studio"; }
     const juce::String getApplicationVersion() override { return ProjectInfo::versionString; }
     bool moreThanOneInstanceAllowed() override          { return true; }
 
     void initialise (const juce::String& args) override
     {
-        // Basement launched as its own plugin-scanning helper: no window, just scan
+        // Studio launched as its own plugin-scanning helper: no window, just scan
         if (te::PluginManager::startChildProcessPluginScan (args))
             return;
 
@@ -67,14 +67,15 @@ public:
             return;
         }
         if (args.contains ("--profile"))
-            basementProfile() = args.fromFirstOccurrenceOf ("--profile", false, false).trim().unquoted();
+            studioProfile() = args.fromFirstOccurrenceOf ("--profile", false, false).trim().unquoted();
+        carryOverOldSettings();
         juce::Logger::setCurrentLogger (&logger);
-        // a crash leaves its last words in Basement.log (for Help > Report a Problem next time)
-        juce::SystemStats::setApplicationCrashHandler ([] (void*) { basementLog (juce::String ("CRASH: ") + juce::NewLine::getDefault() + juce::SystemStats::getStackBacktrace()); });
+        // a crash leaves its last words in Encore Studio.log (for Help > Report a Problem next time)
+        juce::SystemStats::setApplicationCrashHandler ([] (void*) { studioLog (juce::String ("CRASH: ") + juce::NewLine::getDefault() + juce::SystemStats::getStackBacktrace()); });
         juce::LookAndFeel::setDefaultLookAndFeel (&lookAndFeel);
         const auto t0 = juce::Time::getMillisecondCounterHiRes();
         mainWindow = std::make_unique<MainWindow> (*this);
-        basementLog ("startup: window up in " + juce::String (juce::Time::getMillisecondCounterHiRes() - t0, 0) + " ms");
+        studioLog ("startup: window up in " + juce::String (juce::Time::getMillisecondCounterHiRes() - t0, 0) + " ms");
     }
 
     void shutdown() override
@@ -98,7 +99,7 @@ private:
     {
     public:
         explicit MainWindow (juce::JUCEApplication& a)
-            : DocumentWindow ("Encore: Basement", theme::base, DocumentWindow::allButtons), app (a)
+            : DocumentWindow ("Encore: Studio", theme::base, DocumentWindow::allButtons), app (a)
         {
             setUsingNativeTitleBar (true);
             setIcon (encoreIconImage (256)); // title bar and taskbar (the .exe itself carries it too)
@@ -120,9 +121,9 @@ private:
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainWindow)
     };
 
-    BasementLookAndFeel lookAndFeel;
-    BasementLogger logger;
+    StudioLookAndFeel lookAndFeel;
+    StudioLogger logger;
     std::unique_ptr<MainWindow> mainWindow;
 };
 
-START_JUCE_APPLICATION (BasementApplication)
+START_JUCE_APPLICATION (StudioApplication)

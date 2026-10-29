@@ -1,11 +1,11 @@
-// Encore: Basement
+// Encore: Studio
 // Copyright (C) 2026 Encore Studio. AGPLv3 (see LICENSE).
 //
 // The main window: a song (a Tracktion "Edit") with its tracks, the transport,
 // and the things you do to a song (record, import, add effects, export).
 // Every song lives in its own folder inside your projects folder:
 //
-//   <Projects>/<Song>/<Song>.basement   the song itself (XML)
+//   <Projects>/<Song>/<Song>.encore     the song itself (XML)
 //   <Projects>/<Song>/Recordings/       everything recorded into it
 //   <Projects>/<Song>/Audio/            copies of imported files
 //   <Projects>/<Song>/<Song> mix.wav    exports (wherever you choose)
@@ -18,10 +18,10 @@
 
 //==============================================================================
 /** Engine hooks: recordings go into the song's own folder */
-class BasementBehaviour : public te::EngineBehaviour
+class StudioBehaviour : public te::EngineBehaviour
 {
 public:
-    BasementBehaviour (bool openAudioLater = false) : deferDevices (openAudioLater) {}
+    StudioBehaviour (bool openAudioLater = false) : deferDevices (openAudioLater) {}
     std::function<juce::File()> songFolder;
 
     /** The app opens the audio interface itself once its window is on screen
@@ -29,7 +29,7 @@ public:
     bool autoInitialiseDeviceManager() override { return ! deferDevices; }
     const bool deferDevices;
 
-    /** Plugins are first opened in a helper copy of Basement, so one that crashes, hangs, or stops
+    /** Plugins are first opened in a helper copy of Studio, so one that crashes, hangs, or stops
         to ask for activation can't freeze or take down the app (Tracktion's default is in-process) */
     bool canScanPluginsOutOfProcess() override { return true; }
 
@@ -53,7 +53,7 @@ public:
     Tracktion stores a clip's file relative to the song file, written with
     getRelativePathFrom (songFile) (which treats the song file as a folder), but
     its default resolver reads it back with getSiblingFile (relative to the song's
-    folder): one ".." off, so clips go missing after a song is reopened. Basement
+    folder): one ".." off, so clips go missing after a song is reopened. Studio
     reads paths back the way they were written (and accepts the other way too). */
 namespace songs
 {
@@ -232,7 +232,7 @@ struct HeadlessUIBehaviour : public te::UIBehaviour
     juce::StringArray warnings;
 };
 
-class BasementUIBehaviour : public ExtendedUIBehaviour
+class StudioUIBehaviour : public ExtendedUIBehaviour
 {
 public:
     void runTaskWithProgressBar (te::ThreadPoolJobWithProgress& t) override
@@ -256,12 +256,14 @@ public:
 
     void showWarningMessage (const juce::String& message) override
     {
-        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Basement", message);
+        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Encore Studio", message);
     }
 };
 
 
+#include "Account.h"
 #include "Hub.h"
+#include "AccountUI.h"
 #include "Support.h"
 #include "Versions.h"
 
@@ -327,7 +329,7 @@ public:
         addAndMakeVisible (startWith);
         changeFolder.onClick = [this]
         {
-            auto chooser = std::make_shared<juce::FileChooser> ("Where should Basement keep your songs?", juce::File (props.getValue ("projectsFolder")));
+            auto chooser = std::make_shared<juce::FileChooser> ("Where should Encore Studio keep your songs?", juce::File (props.getValue ("projectsFolder")));
             chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories, [this, chooser] (const juce::FileChooser&)
             {
                 if (chooser->getResult() == juce::File()) return;
@@ -347,7 +349,7 @@ public:
                 folders.addIfNotAlreadyThere (chooser->getResult().getFullPathName());
                 props.setValue ("pluginFolders", folders.joinIntoString ("\n"));
                 update();
-                if (BasementHooks::findPlugins) BasementHooks::findPlugins();
+                if (StudioHooks::findPlugins) StudioHooks::findPlugins();
             });
         };
         clearPluginFolders.onClick = [this] { props.setValue ("pluginFolders", juce::String()); update(); };
@@ -358,8 +360,8 @@ public:
         offset.setTextValueSuffix (" ms");
         offset.setTextBoxStyle (juce::Slider::TextBoxRight, false, 70, 24);
         offset.setTooltip ("If recordings land a little late or early against what you played along to, move them by this much. "
-                           "Basement already allows for what your interface reports, so most people leave this at 0.");
-        offset.onValueChange = [this] { props.setValue ("recordOffsetMs", offset.getValue()); if (BasementHooks::applyRecordOffset) BasementHooks::applyRecordOffset(); };
+                           "Encore Studio already allows for what your interface reports, so most people leave this at 0.");
+        offset.onValueChange = [this] { props.setValue ("recordOffsetMs", offset.getValue()); if (StudioHooks::applyRecordOffset) StudioHooks::applyRecordOffset(); };
         addAndMakeVisible (offset);
         for (auto* b : { &changeFolder, &clearRecent, &addPluginFolder, &clearPluginFolders }) addAndMakeVisible (b);
         hubui::styleLabel (pluginsL);
@@ -393,7 +395,7 @@ private:
     juce::PropertiesFile& props;
     juce::ComboBox startWith;
     juce::TextButton changeFolder { "Change..." }, clearRecent { "Clear recent songs" }, addPluginFolder { "Add a plugin folder..." }, clearPluginFolders { "Clear added" };
-    juce::Label startL { {}, "When Basement opens" }, folderL { {}, "Songs folder" }, folderPath, recentL { {}, "Recent list" },
+    juce::Label startL { {}, "When Encore Studio opens" }, folderL { {}, "Songs folder" }, folderPath, recentL { {}, "Recent list" },
                 pluginsL { {}, "Plugin folders" }, pluginFolders, offsetL { {}, "Recording offset" };
     juce::Slider offset { juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight };
     void update()
@@ -741,7 +743,7 @@ private:
 /** File > Send to Encore: a release package for Encore Music (the mastered mix, stems if you
     want them, the cover art and the song's details in release.json), made in the song's
     folder, then Encore opens in the browser to upload it. Signing in and uploading straight
-    from Basement come once Encore's upload API exists (see docs/ENCORE-API.md). */
+    from Studio come once Encore's upload API exists (see docs/ENCORE-API.md). */
 class EncoreSendComponent : public juce::Component
 {
 public:
@@ -791,7 +793,7 @@ public:
 
         hubui::styleLabel (note, 12.0f, theme::muted);
         note.setText ("The package goes in the song's folder, under Encore. Then Encore opens in your browser: upload the files from there. "
-                      "Signing in from Basement and uploading in one click come next.", juce::dontSendNotification);
+                      "Signing in from Encore Studio and uploading in one click come next.", juce::dontSendNotification);
         addAndMakeVisible (note);
 
         send.setColour (juce::TextButton::buttonColourId, theme::brand);
@@ -907,7 +909,7 @@ public:
 
     MainComponent()
     {
-        basementLog ("startup: engine ready in " + juce::String (juce::Time::getMillisecondCounterHiRes() - constructionStarted, 0) + " ms");
+        studioLog ("startup: engine ready in " + juce::String (juce::Time::getMillisecondCounterHiRes() - constructionStarted, 0) + " ms");
         registerEncorePlugins (engine);
         behaviour->songFolder = [this] { return songFile.getParentDirectory(); };
 
@@ -922,6 +924,14 @@ public:
         hub->onBack = [this] { showHub (false); };
         hub->onAudioSetup = [this] { EngineHelpers::showAudioDeviceSettings (engine); };
         hub->onCreate = [this] (SongPlan p) { createSong (p); };
+        hub->onSignIn = [this] { showFirstScreen(); };
+        hub->onAddArtist = [this] { addArtist(); };
+        hub->onAccountChanged = [this] { accountChanged(); };
+        hub->onAccountMenu = [this]
+        {
+            accountMenu().showMenuAsync (juce::PopupMenu::Options().withMousePosition(),
+                                         [safe = juce::Component::SafePointer<MainComponent> (this)] (int r) { if (safe && r > 0) safe->accountItem (r); });
+        };
         addChildComponent (*hub);
 
         for (auto* b : { &homeButton, &playButton, &recordButton, &loopButton, &clickButton, &addTrackButton, &importButton, &exportButton })
@@ -984,10 +994,10 @@ public:
         importButton.onClick = [this] { invoke (cmdImportAudio); };
         exportButton.onClick = [this] { invoke (cmdExportMix); };
 
-        BasementHooks::commands = &commandManager;
-        BasementHooks::fillClipMenu = [this] (juce::PopupMenu& m, te::Clip& c) { fillClipMenu (m, c); };
-        BasementHooks::forwardKey = [this] (const juce::KeyPress& k) { return keyPressed (k, nullptr); };
-        BasementHooks::openPianoRoll = [this] (te::MidiClip& c) { openPianoRoll (c); };
+        StudioHooks::commands = &commandManager;
+        StudioHooks::fillClipMenu = [this] (juce::PopupMenu& m, te::Clip& c) { fillClipMenu (m, c); };
+        StudioHooks::forwardKey = [this] (const juce::KeyPress& k) { return keyPressed (k, nullptr); };
+        StudioHooks::openPianoRoll = [this] (te::MidiClip& c) { openPianoRoll (c); };
         addChildComponent (pianoDivider);
         pianoDivider.onDrag = [this] (int dy, bool finished)
         {
@@ -996,10 +1006,10 @@ public:
             if (finished) { props().setValue ("pianoRollHeight", pianoRollH); dragStartHeight.reset(); }
             resized();
         };
-        BasementHooks::findPlugins = [this] { startPluginSearch(); };
-        BasementHooks::applyRecordOffset = [this] { setupInputs(); };
-        BasementHooks::showPluginManager = [this] { showPluginList(); };
-        BasementHooks::pluginScanStatus = [this] { return pluginFinder.status(); };
+        StudioHooks::findPlugins = [this] { startPluginSearch(); };
+        StudioHooks::applyRecordOffset = [this] { setupInputs(); };
+        StudioHooks::showPluginManager = [this] { showPluginList(); };
+        StudioHooks::pluginScanStatus = [this] { return pluginFinder.status(); };
         pluginFinder.onProgress = [this] (juce::String s) { statusSoft (s); };
         pluginFinder.onFinished = [this] (int found)
         {
@@ -1007,7 +1017,7 @@ public:
                                   : juce::String());
             commandManager.commandStatusChanged();
         };
-        // a newer Basement? (once a day, a few seconds in)
+        // a newer Studio? (once a day, a few seconds in)
         juce::Timer::callAfterDelay (5000, [safe = juce::Component::SafePointer<MainComponent> (this)] { if (safe) safe->checkForUpdates (false); });
         // look for new plugins once things have settled (the window is up first)
         juce::Timer::callAfterDelay (2500, [safe = juce::Component::SafePointer<MainComponent> (this)] { if (safe) safe->startPluginSearch(); });
@@ -1028,7 +1038,7 @@ public:
         if (crashedLastSession)
             juce::Timer::callAfterDelay (3000, [safe = juce::Component::SafePointer<MainComponent> (this)]
             {
-                if (safe) safe->warn ("Basement didn't close properly last time. Help > Report a Problem sends us what happened.");
+                if (safe) safe->warn ("Encore Studio didn't close properly last time. Help > Report a Problem sends us what happened.");
             });
         auto last = juce::File (props().getValue ("lastSong"));
         if (last.existsAsFile() && recent::load (props()).isEmpty()) // songs made before the Hub existed
@@ -1039,6 +1049,7 @@ public:
             showHub (true);
             hub->showTab (hub->recentCount() > 0 ? 0 : 1);
         }
+        if (account::neverAsked()) showFirstScreen();   // the very first screen: who you're making music as
         // the window shows first; then the audio interface opens, then the last song (if that's the setting)
         juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MainComponent> (this), openLast, last]
         {
@@ -1049,7 +1060,7 @@ public:
                 wanted = xml->getStringAttribute ("audioInputDeviceName", xml->getStringAttribute ("audioOutputDeviceName"));
             safe->engine.getDeviceManager().initialise();
             auto* d = safe->engine.getDeviceManager().deviceManager.getCurrentAudioDevice();
-            basementLog ("startup: audio interface opened in " + juce::String (juce::Time::getMillisecondCounterHiRes() - t, 0) + " ms: "
+            studioLog ("startup: audio interface opened in " + juce::String (juce::Time::getMillisecondCounterHiRes() - t, 0) + " ms: "
                          + (d ? d->getName() : juce::String ("none")) + (wanted.isNotEmpty() ? " (saved: " + wanted + ")" : juce::String()));
             // the interface from last time didn't open (unplugged, or another app has it)
             auto& dm = safe->engine.getDeviceManager().deviceManager;
@@ -1061,7 +1072,7 @@ public:
                 {
                     dm.setCurrentAudioDeviceType ("Windows Audio", true);
                     d = dm.getCurrentAudioDevice();
-                    basementLog ("startup: " + wanted + " didn't open, so not using a generic ASIO driver; now on " + (d ? d->getName() : juce::String ("none")));
+                    studioLog ("startup: " + wanted + " didn't open, so not using a generic ASIO driver; now on " + (d ? d->getName() : juce::String ("none")));
                 }
                 safe->warn ("Couldn't open " + wanted + " (unplugged, or another app like Cubase is using it?). Using "
                               + (d ? d->getName() : juce::String ("no interface")) + " for now. Studio > Audio Setup to change.");
@@ -1077,14 +1088,14 @@ public:
         stopTimer();
         stopMasterPreview();
         if (autosaveWriter.joinable()) autosaveWriter.join();
-        BasementHooks::findPlugins = nullptr;
-        BasementHooks::applyRecordOffset = nullptr;
-        BasementHooks::showPluginManager = nullptr;
-        BasementHooks::pluginScanStatus = nullptr;
-        BasementHooks::commands = nullptr;
-        BasementHooks::fillClipMenu = nullptr;
-        BasementHooks::forwardKey = nullptr;
-        BasementHooks::openPianoRoll = nullptr;
+        StudioHooks::findPlugins = nullptr;
+        StudioHooks::applyRecordOffset = nullptr;
+        StudioHooks::showPluginManager = nullptr;
+        StudioHooks::pluginScanStatus = nullptr;
+        StudioHooks::commands = nullptr;
+        StudioHooks::fillClipMenu = nullptr;
+        StudioHooks::forwardKey = nullptr;
+        StudioHooks::openPianoRoll = nullptr;
         pianoRoll = nullptr;
         setApplicationCommandManagerToWatch (nullptr);
         engine.getDeviceManager().removeChangeListener (this);
@@ -1122,13 +1133,14 @@ public:
         g.drawText ("ENCORE:", mark.withTrimmedBottom (mark.getHeight() / 2 - 2), juce::Justification::bottomLeft);
         g.setColour (theme::paper);
         g.setFont (juce::FontOptions (20.0f, juce::Font::bold));
-        g.drawText ("BASEMENT", mark.withTrimmedTop (mark.getHeight() / 2 - 2), juce::Justification::topLeft);
+        g.drawText ("STUDIO", mark.withTrimmedTop (mark.getHeight() / 2 - 2), juce::Justification::topLeft);
     }
 
     void resized() override
     {
         auto r = getLocalBounds();
         menuBar.setBounds (r.removeFromTop (menuH));
+        if (firstScreen) firstScreen->setBounds (r);
         {
             auto bar = r.removeFromBottom (statusH).reduced (12, 0);
             deviceLabel.setBounds (bar.removeFromRight (juce::jmin (520, bar.getWidth() / 2)));
@@ -1213,14 +1225,14 @@ public:
 
     void updateTitle()
     {
-        if (onTitleChange) onTitleChange (edit ? "Encore: Basement - " + songTitle() : juce::String ("Encore: Basement"));
+        if (onTitleChange) onTitleChange (edit ? "Encore: Studio - " + songTitle() : juce::String ("Encore: Studio"));
     }
 
     //==============================================================================
     // Menus
     juce::StringArray getMenuBarNames() override
     {
-        return { "File", "Edit", "Project", "Audio", "MIDI", "Score", "Media", "Transport", "Studio", "Window", "Help" };
+        return { "File", "Edit", "Project", "Audio", "MIDI", "Score", "Media", "Transport", "Studio", "Window", "Account", "Help" };
     }
 
     juce::PopupMenu getMenuForIndex (int index, const juce::String&) override
@@ -1325,8 +1337,7 @@ public:
             }
             case 8: // Studio
                 add (cmdAudioSetup); add (cmdPlugins); add (cmdFindPlugins); add (cmdReassignInputs); m.addSeparator();
-                m.addItem (comingSoonId, "Sign in to Encore (coming soon)", false);
-                m.addSeparator(); add (cmdPreferences);
+                add (cmdPreferences);
                 break;
             case 9: // Window
                 add (cmdHub); add (cmdMixer); add (cmdTuner); m.addSeparator();
@@ -1349,7 +1360,10 @@ public:
                 }
                 later ({ "Clip Editor" });
                 break;
-            case 10: // Help
+            case 10: // Account
+                m = accountMenu();
+                break;
+            case 11: // Help
                 add (cmdShortcuts); add (cmdGuide); m.addSeparator();
                 add (cmdReport); add (cmdUpdates); add (cmdAutoUpdates); add (cmdLogFolder); m.addSeparator();
                 add (cmdAbout);
@@ -1406,6 +1420,7 @@ public:
     {
         if (id >= recentBaseId && id < recentBaseId + recentFiles.size())
             if (recentFiles[id - recentBaseId].existsAsFile()) loadSong (recentFiles[id - recentBaseId]);
+        if (id >= accountBaseId && id <= accountLastId) accountItem (id);
     }
 
     //==============================================================================
@@ -1554,7 +1569,7 @@ public:
             case cmdUpdates:        set ("Check for Updates...", "Help"); break;
             case cmdAutoUpdates:    set ("Check for Updates Once a Day", "Help"); info.setTicked (props().getBoolValue ("checkUpdates", true)); break;
             case cmdLogFolder:      set ("Open Log Folder", "Help"); break;
-            case cmdAbout:          set ("About Encore: Basement", "Help"); break;
+            case cmdAbout:          set ("About Encore: Studio", "Help"); break;
             default: break;
         }
     }
@@ -1685,11 +1700,11 @@ public:
             case cmdGroupSelected:  addGroup (selectedTracks()); return true;
 
             case cmdShortcuts:      showShortcuts(); return true;
-            case cmdGuide:          url ("https://github.com/jimmyrlondo/encore-basement#readme"); return true;
+            case cmdGuide:          url ("https://github.com/jimmyrlondo/encore-studio#readme"); return true;
             case cmdReport:         showReport(); return true;
             case cmdUpdates:        checkForUpdates (true); return true;
             case cmdAutoUpdates:    props().setValue ("checkUpdates", ! props().getBoolValue ("checkUpdates", true)); commandManager.commandStatusChanged(); return true;
-            case cmdLogFolder:      juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory).getChildFile (basementProfile()).startAsProcess(); return true;
+            case cmdLogFolder:      juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory).getChildFile (studioProfile()).startAsProcess(); return true;
             case cmdAbout:          showAbout(); return true;
             default: return false;
         }
@@ -1699,8 +1714,8 @@ private:
     //==============================================================================
     static constexpr int menuH = 26, toolbarH = 56, recentBaseId = 0x5000, comingSoonId = 0x5fff;
     double constructionStarted = juce::Time::getMillisecondCounterHiRes();
-    BasementBehaviour* behaviour = new BasementBehaviour (true); // owned by the engine
-    te::Engine engine { basementProfile(), std::make_unique<BasementUIBehaviour>(), std::unique_ptr<te::EngineBehaviour> (behaviour) };
+    StudioBehaviour* behaviour = new StudioBehaviour (true); // owned by the engine
+    te::Engine engine { studioProfile(), std::make_unique<StudioUIBehaviour>(), std::unique_ptr<te::EngineBehaviour> (behaviour) };
     te::SelectionManager selectionManager { engine };
     std::unique_ptr<te::Edit> edit;
     std::unique_ptr<EditComponent> editComponent;
@@ -1781,13 +1796,13 @@ private:
                     pairs.add (wip);
         for (auto* wip : pairs)
         {
-            basementLog ("splitting " + wip->getName() + " into mono inputs");
+            studioLog ("splitting " + wip->getName() + " into mono inputs");
             dm.setDeviceNumChannels (*wip, 1);
         }
         juce::StringArray names;
         for (int i = 0; i < dm.getNumWaveInDevices(); i++)
             if (auto wip = dm.getWaveInDevice (i)) names.add (wip->getName() + (wip->isStereoPair() ? " (stereo)" : ""));
-        basementLog ("inputs: " + names.joinIntoString (", "));
+        studioLog ("inputs: " + names.joinIntoString (", "));
 
         for (int i = 0; i < dm.getNumWaveInDevices(); i++)
             if (auto wip = dm.getWaveInDevice (i))
@@ -1820,7 +1835,7 @@ private:
         juce::AudioIODeviceType* asio = nullptr;
         juce::StringArray typeNames;
         for (auto* t : dm.getAvailableDeviceTypes()) { typeNames.add (t->getTypeName()); if (t->getTypeName() == "ASIO") asio = t; }
-        if (asio == nullptr) { basementLog ("ASIO check: no ASIO support (types: " + typeNames.joinIntoString (", ") + ")"); return; }
+        if (asio == nullptr) { studioLog ("ASIO check: no ASIO support (types: " + typeNames.joinIntoString (", ") + ")"); return; }
         asio->scanForDevices();
 
         auto setup = dm.getAudioDeviceSetup();
@@ -1831,7 +1846,7 @@ private:
             for (auto& w : juce::StringArray::fromTokens (n.toLowerCase().retainCharacters ("abcdefghijklmnopqrstuvwxyz0123456789 "), " ", {}))
                 if (w.length() >= 3 && ! generic.contains (w) && ! w.containsOnly ("0123456789")) words.addIfNotAlreadyThere (w);
 
-        basementLog ("ASIO check: using " + dm.getCurrentAudioDeviceType() + " (" + setup.inputDeviceName + " / " + setup.outputDeviceName + "), looking for "
+        studioLog ("ASIO check: using " + dm.getCurrentAudioDeviceType() + " (" + setup.inputDeviceName + " / " + setup.outputDeviceName + "), looking for "
                      + words.joinIntoString ("/") + " among ASIO drivers: " + asio->getDeviceNames().joinIntoString (", "));
         for (auto& name : asio->getDeviceNames())
         {
@@ -1852,11 +1867,11 @@ private:
             auto err = dm.initialise (512, 512, &want, false);
             if (err.isEmpty() && dm.getCurrentAudioDevice() != nullptr && dm.getCurrentAudioDevice()->getName() == name)
             {
-                basementLog ("switched to the interface's ASIO driver: " + name);
+                studioLog ("switched to the interface's ASIO driver: " + name);
                 status ("Now using " + name + "'s own driver (ASIO) for low latency. Studio > Audio Setup to change.");
                 return;
             }
-            basementLog ("ASIO driver " + name + " didn't open (" + err + "), staying on " + beforeType);
+            studioLog ("ASIO driver " + name + " didn't open (" + err + "), staying on " + beforeType);
             props().setValue ("asioChecked", false); // try again next time (another app may have had it)
             if (before != nullptr) dm.initialise (512, 512, before.get(), true);
             else { dm.setCurrentAudioDeviceType (beforeType, true); dm.setAudioDeviceSetup (setup, true); }
@@ -1913,7 +1928,7 @@ private:
                 if (instance->getInputDevice().getDeviceType() == te::InputDevice::waveDevice && instance->getTargets().isEmpty()) { pick = instance; break; }
         if (pick == nullptr) return false;
         auto res = pick->setTarget (t.itemID, false, &edit->getUndoManager(), 0);
-        basementLog (t.getName() + " <- " + pick->getInputDevice().getName() + (res ? " ok" : " FAILED: " + juce::String (res.error())));
+        studioLog (t.getName() + " <- " + pick->getInputDevice().getName() + (res ? " ok" : " FAILED: " + juce::String (res.error())));
         // remember the input, unless this is a stand-in for one that isn't here right now
         if (res && (wanted.isEmpty() || wanted == pick->getInputDevice().getName()))
             t.state.setProperty ("basementInput", pick->getInputDevice().getName(), nullptr);
@@ -1922,10 +1937,99 @@ private:
 
     //==============================================================================
     // Songs
-    juce::File projectsFolder()
+    juce::File projectsFolder() { return library::songsFolderOr (props().getValue ("projectsFolder")); }
+
+    //==============================================================================
+    // Account: who you're making music as (Account menu, the Hub's artist picker, the first screen)
+    std::unique_ptr<AccountComponent> firstScreen;
+    static constexpr int accountBaseId = 0x5100, accountAddId = 0x51f0, accountFolderId = 0x51f1, accountEditId = 0x51f2,
+                         accountSignInId = 0x51f3, accountSignOutId = 0x51f4, accountLastId = 0x51f4;
+
+    void showFirstScreen()
     {
-        auto f = juce::File (props().getValue ("projectsFolder"));
-        return f != juce::File() ? f : juce::File::getSpecialLocation (juce::File::userMusicDirectory).getChildFile ("Encore Basement");
+        firstScreen = std::make_unique<AccountComponent> (true);
+        firstScreen->onDone = [safe = juce::Component::SafePointer<MainComponent> (this)] (bool)
+        {
+            juce::MessageManager::callAsync ([safe] { if (safe) { safe->firstScreen = nullptr; safe->accountChanged(); } });
+        };
+        addAndMakeVisible (*firstScreen);
+        resized();
+    }
+
+    void editProfile()
+    {
+        auto* c = new AccountComponent (false);
+        c->onDone = [safe = juce::Component::SafePointer<MainComponent> (this)] (bool) { if (safe) safe->accountChanged(); };
+        showDialog ("Your profile", c, this);
+    }
+
+    void addArtist()
+    {
+        if (! account::get().signedIn()) { showFirstScreen(); return; }
+        askForText ("Add an artist", "The artist or band's name (they get their own folder for songs, releases and masters):", {}, [this] (juce::String name)
+        {
+            name = name.trim();
+            if (name.isEmpty()) return;
+            auto& p = account::get();
+            int at = -1;
+            for (int i = 0; i < p.artists.size(); ++i) if (p.artists[i].name.equalsIgnoreCase (name)) at = i;
+            if (at < 0) { p.artists.add ({ name, {} }); at = p.artists.size() - 1; }
+            p.current = at;
+            library::ensure (p.library, p.artists[at]);
+            account::save();
+            accountChanged();
+            status ("New songs are for " + name + " now");
+        });
+    }
+
+    juce::PopupMenu accountMenu()
+    {
+        juce::PopupMenu m;
+        auto& p = account::get();
+        if (! p.signedIn())
+        {
+            m.addItem (accountSignInId, "Set Up Your Profile...");
+            m.addItem (comingSoonId, "Sign in with Encore (coming soon)", false);
+            return m;
+        }
+        m.addSectionHeader (p.isLabel() ? p.label : (p.name.isNotEmpty() ? p.name : p.who()));
+        for (int i = 0; i < p.artists.size(); ++i) m.addItem (accountBaseId + i, p.artists[i].name, true, i == p.current);
+        m.addItem (accountAddId, "Add an Artist...");
+        m.addSeparator();
+        m.addItem (accountFolderId, "Show " + p.artist()->name + "'s Folder");
+        m.addItem (accountEditId, "Edit Profile...");
+        m.addItem (comingSoonId, "Sign in with Encore (coming soon)", false);
+        m.addSeparator();
+        m.addItem (accountSignOutId, "Sign Out");
+        return m;
+    }
+
+    void accountItem (int id)
+    {
+        auto& p = account::get();
+        if (id >= accountBaseId && id < accountBaseId + p.artists.size())
+        {
+            p.current = id - accountBaseId;
+            account::save();
+            accountChanged();
+            status ("New songs are for " + p.artist()->name + " now");
+        }
+        else if (id == accountAddId) addArtist();
+        else if (id == accountEditId) editProfile();
+        else if (id == accountSignInId) showFirstScreen();
+        else if (id == accountFolderId) { if (auto* a = p.artist()) library::ensure (p.library, *a).startAsProcess(); }
+        else if (id == accountSignOutId)
+        {
+            account::signOut();
+            accountChanged();
+            status ("Signed out. Your songs and folders are all still where they were.");
+        }
+    }
+
+    void accountChanged()
+    {
+        hub->refreshAccount();
+        menuItemsChanged();
     }
 
     void createSong (SongPlan plan)
@@ -1938,7 +2042,7 @@ private:
 
     void openSong()
     {
-        auto chooser = std::make_shared<juce::FileChooser> ("Open a song", projectsFolder(), "*.basement;*.tracktionedit");
+        auto chooser = std::make_shared<juce::FileChooser> ("Open a song", projectsFolder(), juce::String (songfile::patterns) + ";*.tracktionedit");
         chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
                               [this, chooser] (const juce::FileChooser&)
                               {
@@ -1986,7 +2090,7 @@ private:
                 auto setup = dm.getAudioDeviceSetup();
                 setup.sampleRate = info.sampleRate;
                 dm.setAudioDeviceSetup (setup, true);
-                basementLog ("switched the interface to " + juce::String (info.sampleRate) + " Hz for " + info.title);
+                studioLog ("switched the interface to " + juce::String (info.sampleRate) + " Hz for " + info.title);
             }
         setupInputs();
 
@@ -2055,7 +2159,7 @@ private:
             auto to = projectsFolder().getNonexistentChildFile (juce::File::createLegalFileName (name), {}, true);
             if (! from.copyDirectoryTo (to)) { status ("Couldn't copy the song folder"); return; }
             auto copied = to.getChildFile (songFile.getFileName());
-            auto renamed = to.getChildFile (to.getFileName() + ".basement");
+            auto renamed = to.getChildFile (to.getFileName() + songFile.getFileExtension());
             copied.moveFileTo (renamed);
             loadSong (renamed);
             auto info = SongInfo::readFrom (*edit, songFile);
@@ -2098,7 +2202,7 @@ private:
         {
             save();
             templates::folder().createDirectory();
-            auto file = templates::folder().getChildFile (juce::File::createLegalFileName (name) + ".basement");
+            auto file = templates::folder().getChildFile (juce::File::createLegalFileName (name) + songfile::ext);
             songFile.copyFileTo (file);
             if (auto t = songs::open (engine, file))
             {
@@ -2187,7 +2291,7 @@ private:
                               : "Piano roll: click to add a note, drag to move, drag a note's end to resize, double-click to delete");
     }
 
-    /** Project > Add Drum Track: the Basement Kit on a Sampler, and a 4-bar pattern to fill in */
+    /** Project > Add Drum Track: the Studio Kit on a Sampler, and a 4-bar pattern to fill in */
     void addDrumTrack()
     {
         if (! edit) return;
@@ -2549,7 +2653,7 @@ private:
                     exportQueue.add ({ job, folder.getChildFile (base + " - " + juce::File::createLegalFileName (tracks[i]->getName()) + ext), tracks[i]->getName() });
                 }
             }
-            else exportQueue.add ({ o, folder.getChildFile (base + ext), "the mix" });
+            else exportQueue.add ({ o, folder.getChildFile (base + ext), "the mix", ! o.range }); // a whole-song mix is kept in Masters
             exportTotal = exportQueue.size();
             exportFolder = folder;
             exportFailures.clear();
@@ -2558,7 +2662,7 @@ private:
         showDialog ("Export", c, this);
     }
 
-    struct ExportJob { ExportOptions options; juce::File dest; juce::String what; };
+    struct ExportJob { ExportOptions options; juce::File dest; juce::String what; bool master = false; };
     juce::Array<ExportJob> exportQueue;
     int exportTotal = 0;
     juce::File exportFolder;
@@ -2583,12 +2687,23 @@ private:
         {
             currentExport = nullptr;
             if (! out.existsAsFile()) exportFailures.add (job.what + ": " + err);
+            else if (job.master) keepMaster (out);
             runNextExport();
         });
         if (currentExport == nullptr && exportQueue.isEmpty()) exportButton.setEnabled (true);
     }
     std::shared_ptr<SongExport> currentExport;
-    std::function<void (bool ok)> afterExports;   // instead of revealing the folder, when set
+    std::function<void (bool ok)> afterExports;
+
+    /** A finished master of a song in an artist's folder also goes in <Artist>/Masters, so they always have it */
+    void keepMaster (const juce::File& master)
+    {
+        auto artist = library::artistFolderOf (songFile);
+        if (artist == juce::File() || ! edit) return;
+        auto info = SongInfo::readFrom (*edit, songFile);
+        auto kept = library::keepMaster (artist, master, info.album, info.title.isNotEmpty() ? info.title : songTitle());
+        studioLog ("master kept: " + kept.getFullPathName());
+    }   // instead of revealing the folder, when set
 
     //==============================================================================
     // Export > Master it > Listen: 30 s rendered twice (mastered, and as it is), played in sync
@@ -2635,7 +2750,7 @@ private:
         }
 
         auto tmp = juce::File::getSpecialLocation (juce::File::tempDirectory);
-        auto fa = tmp.getChildFile ("basement-preview-a.wav"), fb = tmp.getChildFile ("basement-preview-b.wav");
+        auto fa = tmp.getChildFile ("studio-preview-a.wav"), fb = tmp.getChildFile ("studio-preview-b.wav");
         say ("Getting 30 seconds ready (from " + juce::String ((int) from / 60) + ":" + juce::String ((int) from % 60).paddedLeft ('0', 2) + ")...");
         auto results = std::make_shared<int> (0);
         juce::Component::SafePointer<MainComponent> safe (this);
@@ -2719,8 +2834,13 @@ private:
         c->onSend = [this, info] (EncoreSendComponent::Choice choice)
         {
             const auto title = info.title.isNotEmpty() ? info.title : songTitle();
-            auto dir = songFile.getParentDirectory().getChildFile ("Encore").getChildFile (juce::File::createLegalFileName (title));
-            dir.deleteRecursively();
+            // in the artist's Releases folder (Releases/<Album>/<Song>, or Releases/<Single>), else beside the song
+            auto artist = library::artistFolderOf (songFile);
+            auto dir = artist == juce::File() ? songFile.getParentDirectory().getChildFile ("Encore").getChildFile (juce::File::createLegalFileName (title))
+                                              : library::releaseFolder (artist, info.album, title);
+            if (artist != juce::File() && info.album.isNotEmpty()) dir = dir.getChildFile (library::folderName (title));
+            dir.getChildFile ("stems").deleteRecursively();   // only what the last package made: anything else in the folder stays
+            dir.getChildFile ("release.json").deleteFile();
             dir.createDirectory();
 
             ExportOptions mix;
@@ -2730,7 +2850,7 @@ private:
             mix.masterEffects = choice.masterEffects;
             exportQueue.clear();
             const auto base = juce::File::createLegalFileName (title);
-            exportQueue.add ({ mix, dir.getChildFile (base + ".wav"), "the master" });
+            exportQueue.add ({ mix, dir.getChildFile (base + ".wav"), "the master", true });
             juce::StringArray stemFiles;
             if (choice.stems)
             {
@@ -2766,7 +2886,7 @@ private:
             for (auto& f : stemFiles) st.add (f);
             rel->setProperty ("stems", st);
             if (choice.cover.existsAsFile()) rel->setProperty ("cover", "cover" + choice.cover.getFileExtension().toLowerCase());
-            rel->setProperty ("madeWith", "Encore: Basement " + juce::String (ProjectInfo::versionString));
+            rel->setProperty ("madeWith", "Encore: Studio " + juce::String (ProjectInfo::versionString));
             rel->setProperty ("madeAt", juce::Time::getCurrentTime().toISO8601 (true));
             dir.getChildFile ("release.json").replaceWithText (juce::JSON::toString (juce::var (rel)));
 
@@ -3045,7 +3165,7 @@ private:
                   << (session.songs.isEmpty() ? juce::String() : ", " + juce::String (session.songs.size()) + " songs marked") << ".";
             auto* w = new juce::AlertWindow ("Import a Live Recording", about, juce::MessageBoxIconType::NoIcon);
             juce::StringArray modes { "One song: the whole show" + juce::String (session.songs.isEmpty() ? "" : ", a marker at each song") };
-            if (! session.songs.isEmpty()) modes.add ("A Basement song for each song in the show (to mix them one by one)");
+            if (! session.songs.isEmpty()) modes.add ("A Encore Studio song for each song in the show (to mix them one by one)");
             w->addComboBox ("mode", modes, "Make");
             w->addComboBox ("silent", { "Leave out inputs with nothing on them", "Bring in every input" }, "Inputs");
             w->addButton ("Import", 1, juce::KeyPress (juce::KeyPress::returnKey));
@@ -3063,7 +3183,8 @@ private:
 
     void runLiveImport (liveimport::Session session, bool perSong, bool leaveOutSilent)
     {
-        auto root = projectsFolder().getNonexistentChildFile (juce::File::createLegalFileName (session.title), {}, true);
+        auto shows = library::liveFolder();
+        auto root = (shows != juce::File() ? shows : projectsFolder()).getNonexistentChildFile (juce::File::createLegalFileName (session.title), {}, true);
         root.createDirectory();
         auto recordingFolder = root.getChildFile ("Recording");
         auto progress = std::make_shared<std::atomic<float>> (0.0f);
@@ -3237,7 +3358,7 @@ private:
     // Help > Check for Updates (and once a day by itself, unless that's switched off)
     void checkForUpdates (bool asked)
     {
-        if (asked) status ("Checking for a newer Basement...");
+        if (asked) status ("Checking for a newer Encore Studio...");
         else
         {
             const auto last = juce::Time (props().getValue ("lastUpdateCheck", "0").getLargeIntValue());
@@ -3248,12 +3369,12 @@ private:
             if (safe == nullptr) return;
             auto& self = *safe;
             const juce::String mine = ProjectInfo::versionString;
-            basementLog ("updates: " + (r.found ? "newest is " + r.version : r.problem) + ", this is " + mine);
+            studioLog ("updates: " + (r.found ? "newest is " + r.version : r.problem) + ", this is " + mine);
             if (! r.found) { if (asked) self.warn ("Couldn't check for updates: " + r.problem); return; }
             self.props().setValue ("lastUpdateCheck", juce::String (juce::Time::getCurrentTime().toMilliseconds()));
             if (! support::isNewer (r.version, mine))
             {
-                if (asked) self.status ("You have the newest Basement (" + mine + ").");
+                if (asked) self.status ("You have the newest Encore Studio (" + mine + ").");
                 return;
             }
             // asked about once per new version when it's automatic
@@ -3263,7 +3384,7 @@ private:
             if (notes.length() > 600) notes = notes.substring (0, 600).upToLastOccurrenceOf ("\n", false, false) + "\n...";
             juce::AlertWindow::showAsync (juce::MessageBoxOptions()
                                             .withIconType (juce::MessageBoxIconType::NoIcon)
-                                            .withTitle ("Basement " + r.version + " is out")
+                                            .withTitle ("Encore Studio " + r.version + " is out")
                                             .withMessage ("You have " + mine + ". Download the new one, unzip it, and run it from its folder "
                                                           "(your songs and settings carry over).\n\n" + notes)
                                             .withButton ("Download", 1)
@@ -3277,12 +3398,12 @@ private:
         });
     }
 
-    /** What a problem report says about this computer and Basement's setup */
+    /** What a problem report says about this computer and Studio's setup */
     juce::String systemInfo()
     {
         juce::String s;
         const juce::String nl = juce::newLine;
-        s << "Basement " << ProjectInfo::versionString << " (" << basementProfile() << ")" << nl
+        s << "Encore Studio " << ProjectInfo::versionString << " (" << studioProfile() << ")" << nl
           << "System: " << juce::SystemStats::getOperatingSystemName() << ", " << juce::SystemStats::getCpuModel()
           << ", " << juce::SystemStats::getNumCpus() << " cores, " << juce::SystemStats::getMemorySizeInMegabytes() << " MB" << nl;
         auto& dm = engine.getDeviceManager().deviceManager;
@@ -3311,11 +3432,11 @@ private:
         c->onMake = [this] (juce::String what, bool includeSong)
         {
             if (includeSong && edit != nullptr) save();
-            basementLog ("report: made by the user");
+            studioLog ("report: made by the user");
             auto zip = support::makeReport (what, systemInfo(), includeSong ? songFile : juce::File());
             if (zip == juce::File()) { warn ("Couldn't make the report on your Desktop."); return; }
             zip.revealToUser();
-            const juce::String body = "Basement " + juce::String (ProjectInfo::versionString) + " on " + juce::SystemStats::getOperatingSystemName()
+            const juce::String body = "Encore Studio " + juce::String (ProjectInfo::versionString) + " on " + juce::SystemStats::getOperatingSystemName()
                                       + "\n\nWhat happened:\n\n\n(Drag " + zip.getFileName() + " from your Desktop in here.)";
             juce::URL ("https://github.com/" + juce::String (support::repo()) + "/issues/new")
                 .withParameter ("title", "Problem: ")
@@ -3328,11 +3449,11 @@ private:
 
     void showAbout()
     {
-        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::NoIcon, "Encore: Basement " + juce::String (ProjectInfo::versionString),
+        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::NoIcon, "Encore: Studio " + juce::String (ProjectInfo::versionString),
             "A free, open-source DAW from Encore Studio.\n\n"
             "Copyright (C) 2026 Encore Studio. Free software under the GNU AGPLv3.\n"
             "Built on Tracktion Engine (GPLv3) and JUCE (AGPLv3).\n\n"
-            "github.com/jimmyrlondo/encore-basement");
+            "github.com/jimmyrlondo/encore-studio");
     }
 
     //==============================================================================
@@ -3356,7 +3477,7 @@ private:
 
     //==============================================================================
     // Autosave: every two minutes, a copy of the song (only if it changed) next to
-    // it in .autosave, never over the song itself. If Basement didn't close
+    // it in .autosave, never over the song itself. If Studio didn't close
     // properly last time, opening the song offers the newer copy back.
     juce::File autosaveFile() const
     {
@@ -3382,8 +3503,8 @@ private:
         autosaveWriter = std::thread ([this, f, xml]
         {
             f.getParentDirectory().createDirectory();
-            if (xml->writeTo (f)) basementLog ("autosaved " + f.getFullPathName());
-            else basementLog ("autosave failed: " + f.getFullPathName());
+            if (xml->writeTo (f)) studioLog ("autosaved " + f.getFullPathName());
+            else studioLog ("autosave failed: " + f.getFullPathName());
             autosaveWriting = false;
         });
     }
@@ -3396,13 +3517,13 @@ private:
         if (! f.existsAsFile() || f.getLastModificationTime() <= songFile.getLastModificationTime()) return;
         auto when = f.getLastModificationTime().formatted ("%b %d, %H:%M");
         juce::AlertWindow::showOkCancelBox (juce::MessageBoxIconType::QuestionIcon, "Recover unsaved changes?",
-            "Basement didn't close properly last time. There's an automatic copy of \"" + songTitle() + "\" from " + when
+            "Encore Studio didn't close properly last time. There's an automatic copy of \"" + songTitle() + "\" from " + when
             + " that's newer than the last save.\n\nOpen the recovered copy? (The last saved version is kept as \"before recovery\".)",
             "Recover", "Keep the last save", this, juce::ModalCallbackFunction::create ([this, f] (int r)
         {
             if (r != 1 || ! f.existsAsFile()) return;
             auto song = songFile;
-            song.copyFileTo (song.getSiblingFile (song.getFileNameWithoutExtension() + " before recovery.basement"));
+            song.copyFileTo (song.getSiblingFile (song.getFileNameWithoutExtension() + " before recovery" + song.getFileExtension()));
             f.copyFileTo (song);
             loadSong (song, false);
             status ("Recovered the automatic copy");

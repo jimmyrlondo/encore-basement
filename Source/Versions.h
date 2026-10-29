@@ -1,6 +1,6 @@
 #pragma once
 
-// Song versions: "Song.basement", "Song v2.basement", "Song v3.basement"...
+// Song versions: "Song.encore", "Song v2.encore", "Song v3.encore"...
 // side by side in the song's folder (File > Save New Version makes the next),
 // each with an optional note ("chorus louder") kept in versions.xml there.
 // File > Versions lists them to open one, change its note, or hear it
@@ -11,7 +11,7 @@ namespace versions
     struct Version
     {
         juce::File file;
-        int number = 1;            // the plain "Song.basement" is version 1
+        int number = 1;            // the plain "Song.encore" is version 1
         juce::String note;
         juce::Time modified;
     };
@@ -51,7 +51,7 @@ namespace versions
     {
         juce::Array<Version> out;
         const auto base = split (songFile.getFileNameWithoutExtension()).first;
-        for (auto& f : songFile.getParentDirectory().findChildFiles (juce::File::findFiles, false, "*.basement"))
+        for (auto& f : songFile.getParentDirectory().findChildFiles (juce::File::findFiles, false, songfile::patterns))
         {
             auto [b, n] = split (f.getFileNameWithoutExtension());
             if (b != base) continue;
@@ -61,14 +61,14 @@ namespace versions
         return out;
     }
 
-    /** The next "Song vN.basement" that doesn't exist yet */
+    /** The next "Song vN.encore" that doesn't exist yet */
     inline juce::File nextFile (const juce::File& songFile)
     {
         int top = 1;
         for (auto& v : list (songFile)) top = juce::jmax (top, v.number);
         const auto base = split (songFile.getFileNameWithoutExtension()).first;
-        auto next = songFile.getSiblingFile (base + " v" + juce::String (top + 1) + ".basement");
-        while (next.exists()) next = songFile.getSiblingFile (base + " v" + juce::String (++top + 1) + ".basement");
+        auto next = songFile.getSiblingFile (base + " v" + juce::String (top + 1) + songFile.getFileExtension());
+        while (next.exists()) next = songFile.getSiblingFile (base + " v" + juce::String (++top + 1) + songFile.getFileExtension());
         return next;
     }
 

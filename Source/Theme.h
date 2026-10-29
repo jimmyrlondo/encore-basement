@@ -1,9 +1,9 @@
-// Encore: Basement
+// Encore: Studio
 // Copyright (C) 2026 Encore Studio. AGPLv3 (see LICENSE).
 //
 // Encore's look on the desktop: the same warm near-black surfaces, paper text
 // and accent colours as encoremusic.studio (design-tokens.css), so moving
-// between the website and Basement feels like one product.
+// between the website and Studio feels like one product.
 #pragma once
 
 #include "BinaryData.h"
@@ -34,25 +34,43 @@ namespace theme
 }
 
 //==============================================================================
-/** Basement.log next to the settings: what happened with devices and songs,
+/** Encore Studio.log next to the settings: what happened with devices and songs,
     for bug reports. Kept short (trimmed when it passes 200 KB). */
-/** The settings profile ("Encore Basement"; "--profile <name>" picks another,
+/** The settings profile ("Encore Studio"; "--profile <name>" picks another,
     so testing never touches your real settings) */
-inline juce::String& basementProfile() { static juce::String p { "Encore Basement" }; return p; }
+inline juce::String& studioProfile() { static juce::String p { "Encore Studio" }; return p; }
 
-inline void basementLog (const juce::String& line)
+/** Song files: "Song.encore" (songs from before the rename are "Song.basement" and still open as they are) */
+namespace songfile
+{
+    inline const char* ext = ".encore";
+    inline const char* patterns = "*.encore;*.basement";
+    inline bool isSong (const juce::File& f) { return f.hasFileExtension ("encore;basement"); }
+}
+
+/** Settings from before the rename (%APPDATA%/Encore Basement) carry over the first time */
+inline void carryOverOldSettings()
+{
+    auto appData = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory);
+    auto now = appData.getChildFile (studioProfile());
+    auto old = appData.getChildFile (studioProfile().replace ("Encore Studio", "Encore Basement"));
+    if (old != now && old.isDirectory() && ! now.exists() && old.copyDirectoryTo (now))
+        if (now.getChildFile ("Basement.log").existsAsFile()) now.getChildFile ("Basement.log").moveFileTo (now.getChildFile ("Encore Studio.log"));
+}
+
+inline void studioLog (const juce::String& line)
 {
     static juce::CriticalSection lock;   // lines come from several threads (plugin search, autosave, the engine)
     const juce::ScopedLock sl (lock);
-    auto f = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory).getChildFile (basementProfile()).getChildFile ("Basement.log");
+    auto f = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory).getChildFile (studioProfile()).getChildFile ("Encore Studio.log");
     if (f.getSize() > 200000) f.deleteFile();
     f.appendText (juce::Time::getCurrentTime().toString (true, true, true, true) + "  " + line + juce::newLine);
 }
 
-/** Tracktion's and JUCE's own log lines go to Basement.log too */
-struct BasementLogger : public juce::Logger
+/** Tracktion's and JUCE's own log lines go to Encore Studio.log too */
+struct StudioLogger : public juce::Logger
 {
-    void logMessage (const juce::String& m) override { basementLog ("engine: " + m.trim()); }
+    void logMessage (const juce::String& m) override { studioLog ("engine: " + m.trim()); }
 };
 
 /** The Encore icon (Assets/encore-icon.svg), drawn into r keeping its shape */
@@ -76,10 +94,10 @@ inline juce::Image encoreIconImage (int size)
     return img;
 }
 
-class BasementLookAndFeel : public juce::LookAndFeel_V4
+class StudioLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
-    BasementLookAndFeel()
+    StudioLookAndFeel()
         : LookAndFeel_V4 (LookAndFeel_V4::ColourScheme (theme::base, theme::surface, theme::raised, theme::strong,
                                                         theme::paper, theme::raised, theme::paper, theme::brand, theme::paper))
     {

@@ -1,7 +1,7 @@
-// Encore: Basement
+// Encore: Studio
 // Copyright (C) 2026 Encore Studio. AGPLv3 (see LICENSE).
 //
-// Encore's own plugins (Vox, Verb, Equalize, Master) built into Basement.
+// Encore's own plugins (Vox, Verb, Equalize, Master) built into Studio.
 // They're offered as their own plugin format, "Encore", so the engine treats
 // them exactly like any other plugin (parameters, automation, saved state)
 // while they load instantly: there's nothing to scan and no file to find.

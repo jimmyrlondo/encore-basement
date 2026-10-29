@@ -5,9 +5,9 @@
     |  |  |  |  \ '-'  \ `--.|  \  \  |  |  |  |' '-' '|  ||  |       Corporation
     `---' `--'   `--`--'`---'`--'`--' `---' `--' `---' `--''--'    www.tracktion.com
 
-    Modified for Encore: Basement (2026): Encore colours, clip dragging, a bar
+    Modified for Encore: Studio (2026): Encore colours, clip dragging, a bar
     ruler, wheel zoom/scroll, volume and pan on the track headers. Licensed
-    under the GPL v3 (or later) as part of Basement (AGPLv3).
+    under the GPL v3 (or later) as part of Studio (AGPLv3).
 */
 
 #pragma once
@@ -351,10 +351,10 @@ inline void showEffectsMenu (te::Track::Ptr track, te::SelectionManager* sm, Com
     builtIn ("Low / High-Pass Filter", te::LowPassPlugin::xmlTypeName);
 
     m.addSeparator();
-    auto scanning = BasementHooks::pluginScanStatus ? BasementHooks::pluginScanStatus() : String();
+    auto scanning = StudioHooks::pluginScanStatus ? StudioHooks::pluginScanStatus() : String();
     if (scanning.isNotEmpty()) m.addItem (scanning, false, false, nullptr);
-    else m.addItem ("Find new plugins", [] { if (BasementHooks::findPlugins) BasementHooks::findPlugins(); });
-    m.addItem ("Plugin Manager...", [] { if (BasementHooks::showPluginManager) BasementHooks::showPluginManager(); });
+    else m.addItem ("Find new plugins", [] { if (StudioHooks::findPlugins) StudioHooks::findPlugins(); });
+    m.addItem ("Plugin Manager...", [] { if (StudioHooks::showPluginManager) StudioHooks::showPluginManager(); });
     m.showMenuAsync (PopupMenu::Options().withTargetComponent (target));
 }
 
@@ -428,7 +428,7 @@ void ClipComponent::mouseDown (const MouseEvent& e)
     {
         if (! sm.isSelected (clip.get())) sm.selectOnly (clip.get());
         PopupMenu m;
-        if (BasementHooks::fillClipMenu) BasementHooks::fillClipMenu (m, *clip);
+        if (StudioHooks::fillClipMenu) StudioHooks::fillClipMenu (m, *clip);
         m.showMenuAsync (PopupMenu::Options());
         return;
     }
@@ -709,7 +709,7 @@ MidiClipComponent::MidiClipComponent (EditViewState& evs, te::Clip::Ptr c)
 
 void MidiClipComponent::mouseDoubleClick (const MouseEvent&)
 {
-    if (auto mc = getMidiClip()) if (BasementHooks::openPianoRoll) BasementHooks::openPianoRoll (*mc);
+    if (auto mc = getMidiClip()) if (StudioHooks::openPianoRoll) StudioHooks::openPianoRoll (*mc);
 }
 
 void MidiClipComponent::paint (Graphics& g)
@@ -1328,11 +1328,11 @@ void PluginComponent::clicked (const ModifierKeys& modifiers)
     else
     {
         auto* ext = dynamic_cast<te::ExternalPlugin*> (plugin.get());
-        basementLog ("open plugin " + plugin->getName() + ": modal=" + String (ModalComponentManager::getInstance()->getNumModalComponents())
+        studioLog ("open plugin " + plugin->getName() + ": modal=" + String (ModalComponentManager::getInstance()->getNumModalComponents())
                      + " instance=" + String ((int) (ext == nullptr || ext->getAudioPluginInstance() != nullptr))
                      + (ext ? " error=" + ext->getLoadError() : String()));
         plugin->showWindowExplicitly();
-        basementLog ("  window showing=" + String ((int) plugin->windowState->isWindowShowing()));
+        studioLog ("  window showing=" + String ((int) plugin->windowState->isWindowShowing()));
     }
 }
 

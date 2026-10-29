@@ -1,26 +1,26 @@
-# Encore: Basement
+# Encore: Studio
 
 A free, open-source DAW for bands and home studios, from [Encore](https://encoremusic.studio).
 Record, edit and mix on your own computer, with Encore's own plugins built in,
 and (soon) send finished songs straight to your Encore account.
 
-Basement is built on [Tracktion Engine](https://github.com/Tracktion/tracktion_engine)
+Encore Studio is built on [Tracktion Engine](https://github.com/Tracktion/tracktion_engine)
 and [JUCE](https://juce.com).
 
 ## Download
 
-From [Releases](https://github.com/jimmyrlondo/encore-basement/releases):
+From [Releases](https://github.com/jimmyrlondo/encore-studio/releases):
 
-- **Windows**: `Encore-Basement-windows.zip`. Unzip it anywhere and run
-  `Encore Basement.exe`; nothing to install. It isn't code-signed yet, so
+- **Windows**: `Encore-Studio-windows.zip`. Unzip it anywhere and run
+  `Encore Studio.exe`; nothing to install. It isn't code-signed yet, so
   SmartScreen warns the first time: click **More info**, then **Run anyway**.
-- **Mac** (Apple Silicon and Intel): `Encore-Basement-macos.zip`. Unzip it and
-  move `Encore Basement.app` to Applications. It isn't notarized yet, so the
+- **Mac** (Apple Silicon and Intel): `Encore-Studio-macos.zip`. Unzip it and
+  move `Encore Studio.app` to Applications. It isn't notarized yet, so the
   first time right-click it, choose **Open**, then **Open** again.
 
 ## What it does
 
-- **Hub**: Basement opens on a start page. Pick up a recent song or set up a
+- **Hub**: Encore Studio opens on a start page. Pick up a recent song or set up a
   new one: start from a template (Blank, Singer-songwriter, Full band, Live
   multitrack, Podcast, Mix stems, or your own), fill in title, artist, album,
   genre, tempo, time signature, key and notes, choose the interface you record
@@ -31,7 +31,7 @@ From [Releases](https://github.com/jimmyrlondo/encore-basement/releases):
   (with a clip light), a headphones button lets you hear yourself, the take's
   waveform draws as you play, and a metronome with a count-in you can see.
   Loop a section and record over it, or punch in on just that part.
-- **Your interface's own driver**: on Windows, Basement uses the interface's
+- **Your interface's own driver**: on Windows, Encore Studio uses the interface's
   ASIO driver when it has one (low latency, no Windows audio settings in the
   way) and switches to it by itself the first time.
 - **Edit**: snap to the grid (bar, beat, 1/8, 1/16 or off; hold Shift to
@@ -49,7 +49,7 @@ From [Releases](https://github.com/jimmyrlondo/encore-basement/releases):
   (press A). Effects on any track:
   - **Encore's plugins, built in**: Encore Vox (a whole vocal chain with tune
     and harmony), Verb, Equalize and Master. Nothing to install.
-  - **Your plugins**: Basement finds your VST3 and VST2 plugins by itself (in the
+  - **Your plugins**: Encore Studio finds your VST3 and VST2 plugins by itself (in the
     background, each checked in a separate helper process so a broken plugin
     can't crash it, and one that stops to show a window, like an activation
     prompt, is set aside) and lists them by maker. When a plugin is installed as
@@ -70,9 +70,9 @@ From [Releases](https://github.com/jimmyrlondo/encore-basement/releases):
   for streaming. Or zip the whole song folder.
 - **Send to Encore** (File > Export): a release package for Encore Music: the
   master, stems if you want them, cover art and the song's details. Signing
-  in and uploading straight from Basement come once Encore's API is ready
+  in and uploading straight from Encore Studio come once Encore's API is ready
   (docs/ENCORE-API.md).
-- **Safe**: songs save as one folder each, Basement keeps an automatic copy
+- **Safe**: songs save as one folder each, Encore Studio keeps an automatic copy
   every two minutes, and offers it back if it ever closes unexpectedly.
 - **Tuner** (T): a chromatic tuner on any input, 30 Hz to 1.5 kHz (bass
   low B to the top of a guitar), with an adjustable A4.
@@ -98,18 +98,18 @@ Needs CMake and a C++20 compiler: Visual Studio 2022 (or its Build Tools) with
 the C++ workload on Windows, Xcode on a Mac.
 
 ```
-git clone https://github.com/jimmyrlondo/encore-basement.git
-cd encore-basement
+git clone https://github.com/jimmyrlondo/encore-studio.git
+cd encore-studio
 git submodule update --init --depth 1 external/JUCE external/tracktion_engine
 cmake -B build                       # Windows: add -A x64; Mac: add -G Xcode
 cmake --build build --config Release
 ```
 
 (Don't use `--recurse-submodules`: Tracktion Engine has its own copy of JUCE as
-a submodule with an SSH address; Basement uses `external/JUCE`, pinned to the
+a submodule with an SSH address; Encore Studio uses `external/JUCE`, pinned to the
 same commit, instead.)
 
-The app ends up in `build/Basement_artefacts/Release/`. Checks you can run:
+The app ends up in `build/EncoreStudio_artefacts/Release/`. Checks you can run:
 
 - `--selftest <folder>`: makes songs, imports, mixes, exports, reopens, and
   runs each built-in Encore plugin, without a window (exit code 0 = all good,
@@ -125,14 +125,14 @@ The Encore plugins' code is in `encore/` (copied from the plugin repo with
 
 ## License
 
-Basement is free software under the GNU Affero General Public License v3 (see
+Encore Studio is free software under the GNU Affero General Public License v3 (see
 `LICENSE`). It uses JUCE under the AGPLv3 and Tracktion Engine under the GPLv3. VST2 plugins are hosted through
 [FST](https://git.iem.at/zmoelnig/FST) (GPLv3 or later, in `external/fst`),
 an independent reimplementation of the VST2 interface. MP3 export uses
 [LAME](https://lame.sourceforge.io) 3.100 (LGPL, in `external/lame`).
 The arrange view in `Source/edit/` started from Tracktion Engine's example
 code (GPLv3) and is marked where it was changed. The Encore plugins in
-`encore/` are part of Basement under the same license.
+`encore/` are part of Encore Studio under the same license.
 
 Copyright (C) 2026 Encore Studio. The Encore name and logo (including
 `Assets/encore-icon.*`) belong to Encore Studio; forks are welcome under the
