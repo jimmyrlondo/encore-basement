@@ -326,6 +326,46 @@ namespace tempos
 }
 
 //==============================================================================
+/** Audio that follows the song's tempo: a loop made at another tempo plays in time, and a
+    following clip speeds up or slows down with every tempo change (SoundTouch keeps the pitch). */
+namespace stretch
+{
+    /** A tempo written in a file's name ("Beat 92bpm", "loop_120_BPM", "Drums - 140 bpm"), else 0 */
+    inline double tempoInName (const String& name)
+    {
+        const auto n = name.toLowerCase();
+        for (int at = n.indexOf ("bpm"); at >= 0; at = n.indexOf (at + 3, "bpm"))
+        {
+            int end = at;
+            while (end > 0 && (n[end - 1] == ' ' || n[end - 1] == '_' || n[end - 1] == '-')) --end;
+            int start = end;
+            while (start > 0 && (CharacterFunctions::isDigit (n[start - 1]) || n[start - 1] == '.')) --start;
+            const double bpm = n.substring (start, end).getDoubleValue();
+            if (bpm >= 40 && bpm <= 300) return bpm;
+        }
+        return 0;
+    }
+
+    /** The clip plays as audio at sourceBpm, kept in time with the song from now on */
+    inline void follow (te::WaveAudioClip& c, double sourceBpm)
+    {
+        if (c.getAutoTempo()) c.setAutoTempo (false);
+        const double sourceSeconds = c.getPosition().getLength().inSeconds() * c.getSpeedRatio();   // how much of the audio the clip plays
+        auto info = c.getAudioFile().getInfo();
+        auto li = c.getLoopInfo();
+        li.setBpm (sourceBpm, info);
+        c.setLoopInfo (li);
+        c.setTimeStretchMode (te::TimeStretcher::soundtouchBetter);
+        c.setAutoTempo (true);
+        // that much audio is sourceSeconds * bpm / 60 beats: the clip lasts that many of the song's beats
+        auto& ts = c.edit.tempoSequence;
+        const auto start = c.getPosition().getStart();
+        const auto end = ts.toTime (ts.toBeats (start) + te::BeatDuration::fromBeats (sourceSeconds * sourceBpm / 60.0));
+        c.setLength (end - start, true);
+    }
+}
+
+//==============================================================================
 void drawMidiClip (juce::Graphics&, te::MidiClip&, juce::Rectangle<int>, te::TimeRange);
 
 //==============================================================================

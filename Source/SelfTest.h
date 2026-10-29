@@ -473,6 +473,23 @@ namespace selftest
                                                                    && library::releaseFolder (artist, "Live at the Hall", "Beer Barrel").getFileName() == "Live at the Hall");
         }
 
+        // audio that follows the tempo: a 4 s loop at 90 BPM in a 120 BPM song plays in 3 s, and in 6 s when the song goes to 60
+        {
+            expect ("a tempo in a file name is read", stretch::tempoInName ("Beat 92bpm") == 92 && stretch::tempoInName ("loop_120_BPM") == 120
+                                                         && stretch::tempoInName ("Drums - 140 bpm take 2") == 140 && stretch::tempoInName ("Take 3") == 0);
+            auto e = songs::create (engine, dir.getChildFile ("Stretch Song").getChildFile (String ("Stretch Song") + songfile::ext));
+            e->tempoSequence.getTempo (0)->setBpm (120.0);
+            e->ensureNumberOfAudioTracks (1);
+            te::AudioFile af (engine, a);
+            auto clip = te::getAudioTracks (*e)[0]->insertWaveClip ("loop", a, { { 0_tp, te::TimeDuration::fromSeconds (af.getLength()) }, {} }, false);
+            stretch::follow (*clip, 90.0);
+            const double at120 = clip->getPosition().getLength().inSeconds();
+            e->tempoSequence.getTempo (0)->setBpm (60.0);
+            const double at60 = clip->getPosition().getLength().inSeconds();
+            expect ("a following clip plays in time with the song's tempo", std::abs (at120 - 3.0) < 0.05 && std::abs (at60 - 6.0) < 0.05,
+                    String (at120, 2) + " s at 120, " + String (at60, 2) + " s at 60");
+        }
+
         // the kits: every one makes all ten drums, and they sound different (the 808 kick booms longer)
         {
             bool all = true;

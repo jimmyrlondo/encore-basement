@@ -2463,8 +2463,14 @@ private:
             }
             if (track == nullptr) continue;
             track->setName (src.getFileNameWithoutExtension());
-            track->insertWaveClip (src.getFileNameWithoutExtension(), file,
-                                   { { 0_tp, te::TimeDuration::fromSeconds (af.getLength()) }, {} }, false);
+            auto clip = track->insertWaveClip (src.getFileNameWithoutExtension(), file,
+                                               { { 0_tp, te::TimeDuration::fromSeconds (af.getLength()) }, {} }, false);
+            // a loop with its tempo in the name ("Beat 92bpm.wav") plays in time with the song
+            if (const double bpm = stretch::tempoInName (src.getFileNameWithoutExtension()); bpm > 0 && clip != nullptr)
+            {
+                stretch::follow (*clip, bpm);
+                status (src.getFileNameWithoutExtension() + " is at " + juce::String (bpm, 0) + " BPM: it follows the song's tempo (right-click it to change that)");
+            }
             ++added;
         }
         if (added) status ("Added " + juce::String (added) + (added == 1 ? " track" : " tracks"));
@@ -3114,10 +3120,49 @@ private:
         }
         if (auto w = dynamic_cast<te::WaveAudioClip*> (&clip))
         {
+            te::Clip::Ptr keep = w;
+            if (w->getAutoTempo())
+                m.addItem ("Stop Following the Song's Tempo", [keep]
+                {
+                    if (auto* c = dynamic_cast<te::WaveAudioClip*> (keep.get())) { c->edit.getUndoManager().beginNewTransaction ("Tempo"); c->setAutoTempo (false); }
+                });
+            else
+                m.addItem ("Follow the Song's Tempo...", [this, keep] { askToFollowTempo (keep); });
+        }
+        if (auto w = dynamic_cast<te::WaveAudioClip*> (&clip))
+        {
             auto f = w->getAudioFile().getFile();
             m.addSeparator();
             m.addItem ("Show File in Folder", f.existsAsFile(), false, [f] { f.revealToUser(); });
         }
+    }
+
+    /** Asks what tempo a clip's audio is at (from its name, a guess, or the song's), then makes it follow the song */
+    void askToFollowTempo (te::Clip::Ptr keep)
+    {
+        auto* c = dynamic_cast<te::WaveAudioClip*> (keep.get());
+        if (c == nullptr) return;
+        const auto file = c->getAudioFile().getFile();
+        double guess = stretch::tempoInName (file.getFileNameWithoutExtension());
+        juce::String where = "from its file name";
+        if (guess <= 0 && file.isAChildOf (songFile.getParentDirectory().getChildFile ("Recordings")))
+        {
+            guess = edit->tempoSequence.getBpmAt (c->getPosition().getStart());
+            where = "recorded in this song";
+        }
+        if (guess <= 0) { guess = edit->tempoSequence.getBpmAt (c->getPosition().getStart()); where = "the song's tempo"; }
+        askForText ("Follow the Song's Tempo",
+                    "What tempo is this audio at? (" + juce::String (guess, 1) + " is " + where + ")\n"
+                    "It then plays in time with the song and follows any tempo change. The pitch stays the same.",
+                    juce::String (guess, 1), [this, keep] (juce::String text)
+        {
+            const double bpm = text.getDoubleValue();
+            auto* clip = dynamic_cast<te::WaveAudioClip*> (keep.get());
+            if (clip == nullptr || bpm < 20 || bpm > 400) return;
+            edit->getUndoManager().beginNewTransaction ("Follow tempo");
+            stretch::follow (*clip, bpm);
+            status (clip->getName() + " follows the song's tempo now (played as " + juce::String (bpm, 1) + " BPM audio)");
+        });
     }
 
     /** A tuner window on the selected track's input (or the first one) */
