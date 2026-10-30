@@ -26,9 +26,8 @@ still open as they are.
 - The tuner: 87 instruments and 229 tunings (guitar and bass to mandolin,
   banjo, bouzouki, oud, lute, viols, koto, timpani, kalimba and transposing
   horns, which get their band and orchestra tuning notes and what to adjust),
-  which string
-  you're playing, a needle or strobe, any reference pitch and historical
-  temperaments. Paired strings (12-string, mandolin, lute, bouzouki, charango,
+  which string you're playing, a needle or strobe, any reference pitch and
+  historical temperaments. Paired strings (12-string, mandolin, lute, bouzouki, charango,
   tres, tiple...) show every string, octave strings included. The same tuner
   is on the web beside Master and Live.
 - Metronome sounds (8) and how beat 1 sounds: higher, louder, a cowbell or the
