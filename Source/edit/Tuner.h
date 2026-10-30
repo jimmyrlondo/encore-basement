@@ -327,7 +327,7 @@ public:
 
         g.setColour (colour);
         g.setFont (FontOptions (17.0f, Font::bold));
-        g.drawText (! have ? (strings.empty() ? "Play a note" : "Play a string") : inTune ? "In tune"
+        g.drawText (! have ? (strings.empty() || String (instrument->part) != "string" ? "Play a note" : "Play a string") : inTune ? "In tune"
                         : (reading.cents < 0 ? "Flat " : "Sharp ") + String (std::abs (reading.cents), 0) + " cents" + whichString(),
                     r.removeFromTop (26), Justification::centred);
         g.setColour (theme::muted);
@@ -358,12 +358,16 @@ public:
         }
     }
 
-    /** "  (string 6)", or for paired strings "  (course 6)" and, when the pair has two pitches, which one */
+    /** "  (string 6)", or for paired strings "  (course 6)" and, when the pair has two pitches, which one.
+        Tines and drums count from the left; a wind's single tuning note isn't named */
     String whichString() const
     {
-        if (reading.string < 0 || reading.string >= (int) pills.size()) return {};
+        if (reading.string < 0 || reading.string >= (int) pills.size() || instrument == nullptr) return {};
         auto& p = pills[(size_t) reading.string];
         const int courses = pills.back().course + 1;
+        const String part (instrument->part);
+        if (part.isEmpty()) return {};
+        if (part != "string") return "  (" + part + " " + String (p.course + 1) + ")";
         if (! hasCourses) return "  (string " + String (courses - p.course) + ")";
         int low = 999, high = -1;
         for (auto& q : pills) if (q.course == p.course) { low = jmin (low, q.note); high = jmax (high, q.note); }

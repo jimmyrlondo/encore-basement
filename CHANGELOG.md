@@ -23,8 +23,10 @@ still open as they are.
   right-click a track, its lane or its plug-ins for what you can do there.
 - The Effects column is now Plug-ins, with names you can read and a bypass dot.
 - Selected text shows up (it was the same colour as the field).
-- The tuner: 85 instruments and 184 tunings (guitar and bass to mandolin,
-  banjo, bouzouki, oud, lute, viols, koto and transposing horns), which string
+- The tuner: 87 instruments and 229 tunings (guitar and bass to mandolin,
+  banjo, bouzouki, oud, lute, viols, koto, timpani, kalimba and transposing
+  horns, which get their band and orchestra tuning notes and what to adjust),
+  which string
   you're playing, a needle or strobe, any reference pitch and historical
   temperaments. Paired strings (12-string, mandolin, lute, bouzouki, charango,
   tres, tiple...) show every string, octave strings included. The same tuner

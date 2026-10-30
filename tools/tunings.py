@@ -18,6 +18,21 @@ import json, os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
+# Winds and brass: the notes a band (concert Bb) and an orchestra (concert A) tune to,
+# then long tones on any note. how: a word for the usual adjustment, or the advice itself
+HOW = {
+    "headjoint": "Sharp: pull the headjoint out a little. Flat: push it in. Then check a low and a high note too.",
+    "barrel": "Sharp: pull the barrel out a little (and the middle joint, if the low notes are sharp too). Flat: push it in.",
+    "mouthpiece": "Sharp: pull the mouthpiece out a little on the neck cork. Flat: push it further on.",
+    "slide": "Sharp: pull the main tuning slide out. Flat: push it in.",
+}
+KALIMBA = "Tines left to right as you hold it. Sharp: tap the tine in a little (shorter). Flat: tap it out (longer). Use a small hammer"
+
+def W(bb, a, how):
+    how = HOW.get(how, how)
+    return [T("Band tuning note (concert Bb)", bb, how), T("Orchestra tuning note (concert A)", a, how),
+            T("Any note (long tones)", "", "Hold each note steady: you'll learn which ones run sharp or flat on your instrument")]
+
 def T(name, notes, note=""):
     courses = [c.split("+") for c in notes.split()]
     return {"name": name, "notes": [n for c in courses for n in c], "courses": [len(c) for c in courses], "note": note}
@@ -269,30 +284,49 @@ CATALOG = [
         ("Koto (13-string)", [T("Hirajoshi", "D3 G3 A3 Bb3 D4 Eb4 G4 A4 Bb4 D5 Eb5 G5 A5")]),
     ]),
     ("Winds and brass", [
-        ("Flute", [T("Concert pitch", "", "Shows the note you read")]),
-        ("Piccolo", [T("Concert pitch (sounds an octave up)", "", "Shows the note you read")]),
-        ("Oboe", [T("Concert pitch", "")]),
-        ("English horn (F)", [T("In F", "")]),
-        ("Clarinet (Bb)", [T("In Bb", "")]),
-        ("Clarinet (A)", [T("In A", "")]),
-        ("Bass clarinet (Bb)", [T("In Bb", "")]),
-        ("Bassoon", [T("Concert pitch", "")]),
-        ("Soprano saxophone (Bb)", [T("In Bb", "")]),
-        ("Alto saxophone (Eb)", [T("In Eb", "")]),
-        ("Tenor saxophone (Bb)", [T("In Bb", "")]),
-        ("Baritone saxophone (Eb)", [T("In Eb", "")]),
-        ("Trumpet / cornet (Bb)", [T("In Bb", "")]),
-        ("Flugelhorn (Bb)", [T("In Bb", "")]),
-        ("French horn (F)", [T("In F", "")]),
-        ("Mellophone (F)", [T("In F", "")]),
-        ("Trombone", [T("Concert pitch", "")]),
-        ("Euphonium / baritone horn", [T("Concert pitch (bass clef)", "")]),
-        ("Tuba", [T("Concert pitch", "")]),
+        ("Flute", W("Bb4", "A4", "headjoint")),
+        ("Piccolo", W("Bb5", "A5", "headjoint")),
+        ("Oboe", W("Bb4", "A4", "Mostly the reed: push it further in to go sharper, ease it out a little to go flatter. Your embouchure does the rest.")),
+        ("English horn (F)", W("Bb4", "A4", "Mostly the bocal and reed: push in to go sharper, ease out to go flatter.")),
+        ("Clarinet (Bb)", W("Bb4", "A4", "barrel")),
+        ("Clarinet (A)", W("Bb4", "A4", "barrel")),
+        ("Bass clarinet (Bb)", W("Bb3", "A3", "Sharp: pull the neck out a little. Flat: push it in.")),
+        ("Bassoon", W("Bb3", "A3", "Mostly the bocal and reed: a longer bocal (a higher number) plays flatter, a shorter one sharper. Your embouchure does the fine work.")),
+        ("Soprano saxophone (Bb)", W("Bb4", "A4", "mouthpiece")),
+        ("Alto saxophone (Eb)", W("Bb4", "A4", "mouthpiece")),
+        ("Tenor saxophone (Bb)", W("Bb3", "A3", "mouthpiece")),
+        ("Baritone saxophone (Eb)", W("Bb2", "A2", "mouthpiece")),
+        ("Trumpet / cornet (Bb)", W("Bb4", "A4", "slide")),
+        ("Flugelhorn (Bb)", W("Bb4", "A4", "slide")),
+        ("French horn (F)", W("Bb3", "A3", "Sharp: pull the main tuning slide out. Flat: push it in. On a double horn, tune the F and Bb sides with their own slides.")),
+        ("Mellophone (F)", W("Bb4", "A4", "slide")),
+        ("Trombone", W("Bb3", "A3", "Sharp: pull the tuning slide (at the back) out. Flat: push it in. Concert Bb is first position.")),
+        ("Euphonium / baritone horn", W("Bb3", "A3", "slide")),
+        ("Tuba", W("Bb2", "A2", "slide")),
+    ]),
+    ("Percussion", [
+        ("Timpani", [
+            T("Pair: G and C", "G2 C3", "29\" and 26\" drums. Tap where you'd play, a hand's width in from the edge, and set each drum with its pedal"),
+            T("Pair: A and D", "A2 D3", "29\" and 26\" drums"),
+            T("Pair: F and Bb", "F2 Bb2", "29\" and 26\" drums"),
+            T("Any note", "", "Usual ranges: 32\" D2 to A2, 29\" F2 to C3, 26\" Bb2 to F3, 23\" D3 to A3"),
+        ]),
+        ("Kalimba", [
+            T("17-key in C", "D6 B5 G5 E5 C5 A4 F4 D4 C4 E4 G4 B4 D5 F5 A5 C6 E6", KALIMBA),
+            T("10-key in C", "E5 C5 A4 F4 D4 C4 E4 G4 B4 D5", KALIMBA),
+            T("Any note", "", KALIMBA),
+        ]),
     ]),
     ("Anything else", [
         ("Chromatic (any instrument)", [T("Any note", "", "Voice, piano, harp, drums, handpan, didgeridoo, bagpipes...")]),
     ]),
 ]
+
+# What the tuner calls the things it numbers: strings count from the high side (string 1 is the
+# highest), anything else counts from the left as you see it; "" names nothing (one tuning note)
+PART = {"Timpani": "drum", "Kalimba": "tine"}
+def part(name, family):
+    return "" if family == "Winds and brass" else PART.get(name, "string")
 
 # written = concert + this many semitones
 TRANSPOSE = {
@@ -353,7 +387,7 @@ def write_cpp():
             ts = ", ".join("{ %s, { %s }, { %s }, %s }" % (cpp_str(t["name"]), ", ".join(str(midi(n)) for n in t["notes"]),
                                                         ", ".join(str(c) for c in t["courses"]) if max(t["courses"], default=1) > 1 else "",
                                                         cpp_str(t["note"])) for t in tunings)
-            lines.append("                { %s, %d, { %s } }," % (cpp_str(name), TRANSPOSE.get(name, 0), ts))
+            lines.append("                { %s, %d, %s, { %s } }," % (cpp_str(name), TRANSPOSE.get(name, 0), cpp_str(part(name, family)), ts))
         lines.append("            } },")
     temps = ",\n".join("            { %s, { %s } }" % (cpp_str(n), ", ".join("%.1ff" % v for v in offs)) for n, offs in TEMPERAMENTS)
     refs = ", ".join("{ %s, %d }" % (cpp_str(n), v) for n, v in REFERENCES)
@@ -363,7 +397,7 @@ def write_cpp():
 
 def write_json():
     data = {
-        "families": [{"name": f, "instruments": [{"name": n, "transpose": TRANSPOSE.get(n, 0),
+        "families": [{"name": f, "instruments": [{"name": n, "transpose": TRANSPOSE.get(n, 0), "part": part(n, f),
                                                    "tunings": [{"name": t["name"], "notes": t["notes"], "midi": [midi(x) for x in t["notes"]],
                                                                "courses": t["courses"], "note": t["note"]} for t in ts]}
                                                   for n, ts in insts]} for f, insts in CATALOG],

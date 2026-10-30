@@ -6,6 +6,7 @@
     {
      "name": "Guitar (6-string)",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard",
@@ -681,6 +682,7 @@
     {
      "name": "Guitar (12-string)",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard",
@@ -967,6 +969,7 @@
     {
      "name": "Guitar (7-string)",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard",
@@ -1097,6 +1100,7 @@
     {
      "name": "Guitar (8-string)",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard",
@@ -1171,6 +1175,7 @@
     {
      "name": "Baritone guitar",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "B standard",
@@ -1233,6 +1238,7 @@
     {
      "name": "Tenor guitar",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard (fifths)",
@@ -1283,6 +1289,7 @@
     {
      "name": "Guitalele",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard",
@@ -1317,6 +1324,7 @@
     {
      "name": "Requinto guitar",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard",
@@ -1351,6 +1359,7 @@
     {
      "name": "Resonator / Dobro",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Open G (high bass)",
@@ -1413,6 +1422,7 @@
     {
      "name": "Lap steel",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "C6",
@@ -1531,6 +1541,7 @@
     {
      "name": "Pedal steel (10-string)",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "E9",
@@ -1622,6 +1633,7 @@
     {
      "name": "Bass (4-string)",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard",
@@ -1826,6 +1838,7 @@
     {
      "name": "Bass (5-string)",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard (low B)",
@@ -1907,6 +1920,7 @@
     {
      "name": "Bass (6-string)",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard",
@@ -1941,6 +1955,7 @@
     {
      "name": "Upright / double bass",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Orchestral (fourths)",
@@ -2038,6 +2053,7 @@
     {
      "name": "Acoustic bass guitar",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard",
@@ -2066,6 +2082,7 @@
     {
      "name": "Guitarron (Mexican)",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard",
@@ -2100,6 +2117,7 @@
     {
      "name": "Bajo sexto",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard",
@@ -2186,6 +2204,7 @@
     {
      "name": "Bajo quinto",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard",
@@ -2232,6 +2251,7 @@
     {
      "name": "Ukulele (soprano, concert, tenor)",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard (high G)",
@@ -2326,6 +2346,7 @@
     {
      "name": "Baritone ukulele",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard",
@@ -2354,6 +2375,7 @@
     {
      "name": "Bass ukulele",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard",
@@ -2382,6 +2404,7 @@
     {
      "name": "Banjolele",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard",
@@ -2415,6 +2438,7 @@
     {
      "name": "Mandolin",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard",
@@ -2541,6 +2565,7 @@
     {
      "name": "Mandola",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard",
@@ -2577,6 +2602,7 @@
     {
      "name": "Octave mandolin",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard",
@@ -2643,6 +2669,7 @@
     {
      "name": "Mandocello",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard",
@@ -2684,6 +2711,7 @@
     {
      "name": "Banjo (5-string)",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Open G",
@@ -2890,6 +2918,7 @@
     {
      "name": "Tenor banjo",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard (fifths)",
@@ -2940,6 +2969,7 @@
     {
      "name": "Plectrum banjo",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard",
@@ -2968,6 +2998,7 @@
     {
      "name": "Banjo (6-string)",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard (guitar)",
@@ -3007,6 +3038,7 @@
     {
      "name": "Violin / fiddle",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard",
@@ -3167,6 +3199,7 @@
     {
      "name": "Viola",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard",
@@ -3195,6 +3228,7 @@
     {
      "name": "Cello",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard",
@@ -3245,6 +3279,7 @@
     {
      "name": "Hardanger fiddle",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard (ADAE)",
@@ -3288,6 +3323,7 @@
     {
      "name": "Nyckelharpa",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard",
@@ -3321,6 +3357,7 @@
     {
      "name": "Renaissance lute (6-course)",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "In G",
@@ -3403,6 +3440,7 @@
     {
      "name": "Renaissance lute (8-course)",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "In G",
@@ -3457,6 +3495,7 @@
     {
      "name": "Baroque lute (13-course)",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "D minor",
@@ -3534,6 +3573,7 @@
     {
      "name": "Viola da gamba",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Bass viol",
@@ -3683,6 +3723,7 @@
     {
      "name": "Vihuela (Spanish)",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard",
@@ -3727,6 +3768,7 @@
     {
      "name": "Baroque guitar (5-course)",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Re-entrant (Spanish)",
@@ -3832,6 +3874,7 @@
     {
      "name": "Hurdy-gurdy",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "G/C",
@@ -3867,6 +3910,7 @@
     {
      "name": "Bouzouki (Irish)",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "GDAD (octave low pairs)",
@@ -3993,6 +4037,7 @@
     {
      "name": "Bouzouki (Greek)",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Tetrachordo (4-course)",
@@ -4054,6 +4099,7 @@
     {
      "name": "Oud",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Arabic",
@@ -4136,6 +4182,7 @@
     {
      "name": "Appalachian dulcimer",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "DAd (Ionian)",
@@ -4239,6 +4286,7 @@
     {
      "name": "Balalaika (prima)",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard",
@@ -4264,6 +4312,7 @@
     {
      "name": "Domra",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "3-string",
@@ -4311,6 +4360,7 @@
     {
      "name": "Charango",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard",
@@ -4352,6 +4402,7 @@
     {
      "name": "Cavaquinho",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard (DGBD)",
@@ -4380,6 +4431,7 @@
     {
      "name": "Cuatro (Venezuelan)",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard",
@@ -4408,6 +4460,7 @@
     {
      "name": "Cuatro (Puerto Rican)",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard",
@@ -4449,6 +4502,7 @@
     {
      "name": "Tres (Cuban)",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard (C)",
@@ -4530,6 +4584,7 @@
     {
      "name": "Tres (Puerto Rican)",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard",
@@ -4567,6 +4622,7 @@
     {
      "name": "Vihuela (Mexican)",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard",
@@ -4598,6 +4654,7 @@
     {
      "name": "Tiple (Colombian)",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Modern",
@@ -4680,6 +4737,7 @@
     {
      "name": "Bandurria",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard",
@@ -4726,6 +4784,7 @@
     {
      "name": "Laud (Spanish)",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard",
@@ -4772,6 +4831,7 @@
     {
      "name": "Kantele (5-string)",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Minor",
@@ -4828,6 +4888,7 @@
     {
      "name": "Pipa",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard",
@@ -4856,6 +4917,7 @@
     {
      "name": "Zhongruan",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard",
@@ -4884,6 +4946,7 @@
     {
      "name": "Erhu",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Standard",
@@ -4906,6 +4969,7 @@
     {
      "name": "Shamisen",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Honchoshi",
@@ -4969,6 +5033,7 @@
     {
      "name": "Koto (13-string)",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Hirajoshi",
@@ -5029,247 +5094,942 @@
     {
      "name": "Flute",
      "transpose": 0,
+     "part": "",
      "tunings": [
       {
-       "name": "Concert pitch",
+       "name": "Band tuning note (concert Bb)",
+       "notes": [
+        "Bb4"
+       ],
+       "midi": [
+        70
+       ],
+       "courses": [
+        1
+       ],
+       "note": "Sharp: pull the headjoint out a little. Flat: push it in. Then check a low and a high note too."
+      },
+      {
+       "name": "Orchestra tuning note (concert A)",
+       "notes": [
+        "A4"
+       ],
+       "midi": [
+        69
+       ],
+       "courses": [
+        1
+       ],
+       "note": "Sharp: pull the headjoint out a little. Flat: push it in. Then check a low and a high note too."
+      },
+      {
+       "name": "Any note (long tones)",
        "notes": [],
        "midi": [],
        "courses": [],
-       "note": "Shows the note you read"
+       "note": "Hold each note steady: you'll learn which ones run sharp or flat on your instrument"
       }
      ]
     },
     {
      "name": "Piccolo",
      "transpose": -12,
+     "part": "",
      "tunings": [
       {
-       "name": "Concert pitch (sounds an octave up)",
+       "name": "Band tuning note (concert Bb)",
+       "notes": [
+        "Bb5"
+       ],
+       "midi": [
+        82
+       ],
+       "courses": [
+        1
+       ],
+       "note": "Sharp: pull the headjoint out a little. Flat: push it in. Then check a low and a high note too."
+      },
+      {
+       "name": "Orchestra tuning note (concert A)",
+       "notes": [
+        "A5"
+       ],
+       "midi": [
+        81
+       ],
+       "courses": [
+        1
+       ],
+       "note": "Sharp: pull the headjoint out a little. Flat: push it in. Then check a low and a high note too."
+      },
+      {
+       "name": "Any note (long tones)",
        "notes": [],
        "midi": [],
        "courses": [],
-       "note": "Shows the note you read"
+       "note": "Hold each note steady: you'll learn which ones run sharp or flat on your instrument"
       }
      ]
     },
     {
      "name": "Oboe",
      "transpose": 0,
+     "part": "",
      "tunings": [
       {
-       "name": "Concert pitch",
+       "name": "Band tuning note (concert Bb)",
+       "notes": [
+        "Bb4"
+       ],
+       "midi": [
+        70
+       ],
+       "courses": [
+        1
+       ],
+       "note": "Mostly the reed: push it further in to go sharper, ease it out a little to go flatter. Your embouchure does the rest."
+      },
+      {
+       "name": "Orchestra tuning note (concert A)",
+       "notes": [
+        "A4"
+       ],
+       "midi": [
+        69
+       ],
+       "courses": [
+        1
+       ],
+       "note": "Mostly the reed: push it further in to go sharper, ease it out a little to go flatter. Your embouchure does the rest."
+      },
+      {
+       "name": "Any note (long tones)",
        "notes": [],
        "midi": [],
        "courses": [],
-       "note": ""
+       "note": "Hold each note steady: you'll learn which ones run sharp or flat on your instrument"
       }
      ]
     },
     {
      "name": "English horn (F)",
      "transpose": 7,
+     "part": "",
      "tunings": [
       {
-       "name": "In F",
+       "name": "Band tuning note (concert Bb)",
+       "notes": [
+        "Bb4"
+       ],
+       "midi": [
+        70
+       ],
+       "courses": [
+        1
+       ],
+       "note": "Mostly the bocal and reed: push in to go sharper, ease out to go flatter."
+      },
+      {
+       "name": "Orchestra tuning note (concert A)",
+       "notes": [
+        "A4"
+       ],
+       "midi": [
+        69
+       ],
+       "courses": [
+        1
+       ],
+       "note": "Mostly the bocal and reed: push in to go sharper, ease out to go flatter."
+      },
+      {
+       "name": "Any note (long tones)",
        "notes": [],
        "midi": [],
        "courses": [],
-       "note": ""
+       "note": "Hold each note steady: you'll learn which ones run sharp or flat on your instrument"
       }
      ]
     },
     {
      "name": "Clarinet (Bb)",
      "transpose": 2,
+     "part": "",
      "tunings": [
       {
-       "name": "In Bb",
+       "name": "Band tuning note (concert Bb)",
+       "notes": [
+        "Bb4"
+       ],
+       "midi": [
+        70
+       ],
+       "courses": [
+        1
+       ],
+       "note": "Sharp: pull the barrel out a little (and the middle joint, if the low notes are sharp too). Flat: push it in."
+      },
+      {
+       "name": "Orchestra tuning note (concert A)",
+       "notes": [
+        "A4"
+       ],
+       "midi": [
+        69
+       ],
+       "courses": [
+        1
+       ],
+       "note": "Sharp: pull the barrel out a little (and the middle joint, if the low notes are sharp too). Flat: push it in."
+      },
+      {
+       "name": "Any note (long tones)",
        "notes": [],
        "midi": [],
        "courses": [],
-       "note": ""
+       "note": "Hold each note steady: you'll learn which ones run sharp or flat on your instrument"
       }
      ]
     },
     {
      "name": "Clarinet (A)",
      "transpose": 3,
+     "part": "",
      "tunings": [
       {
-       "name": "In A",
+       "name": "Band tuning note (concert Bb)",
+       "notes": [
+        "Bb4"
+       ],
+       "midi": [
+        70
+       ],
+       "courses": [
+        1
+       ],
+       "note": "Sharp: pull the barrel out a little (and the middle joint, if the low notes are sharp too). Flat: push it in."
+      },
+      {
+       "name": "Orchestra tuning note (concert A)",
+       "notes": [
+        "A4"
+       ],
+       "midi": [
+        69
+       ],
+       "courses": [
+        1
+       ],
+       "note": "Sharp: pull the barrel out a little (and the middle joint, if the low notes are sharp too). Flat: push it in."
+      },
+      {
+       "name": "Any note (long tones)",
        "notes": [],
        "midi": [],
        "courses": [],
-       "note": ""
+       "note": "Hold each note steady: you'll learn which ones run sharp or flat on your instrument"
       }
      ]
     },
     {
      "name": "Bass clarinet (Bb)",
      "transpose": 14,
+     "part": "",
      "tunings": [
       {
-       "name": "In Bb",
+       "name": "Band tuning note (concert Bb)",
+       "notes": [
+        "Bb3"
+       ],
+       "midi": [
+        58
+       ],
+       "courses": [
+        1
+       ],
+       "note": "Sharp: pull the neck out a little. Flat: push it in."
+      },
+      {
+       "name": "Orchestra tuning note (concert A)",
+       "notes": [
+        "A3"
+       ],
+       "midi": [
+        57
+       ],
+       "courses": [
+        1
+       ],
+       "note": "Sharp: pull the neck out a little. Flat: push it in."
+      },
+      {
+       "name": "Any note (long tones)",
        "notes": [],
        "midi": [],
        "courses": [],
-       "note": ""
+       "note": "Hold each note steady: you'll learn which ones run sharp or flat on your instrument"
       }
      ]
     },
     {
      "name": "Bassoon",
      "transpose": 0,
+     "part": "",
      "tunings": [
       {
-       "name": "Concert pitch",
+       "name": "Band tuning note (concert Bb)",
+       "notes": [
+        "Bb3"
+       ],
+       "midi": [
+        58
+       ],
+       "courses": [
+        1
+       ],
+       "note": "Mostly the bocal and reed: a longer bocal (a higher number) plays flatter, a shorter one sharper. Your embouchure does the fine work."
+      },
+      {
+       "name": "Orchestra tuning note (concert A)",
+       "notes": [
+        "A3"
+       ],
+       "midi": [
+        57
+       ],
+       "courses": [
+        1
+       ],
+       "note": "Mostly the bocal and reed: a longer bocal (a higher number) plays flatter, a shorter one sharper. Your embouchure does the fine work."
+      },
+      {
+       "name": "Any note (long tones)",
        "notes": [],
        "midi": [],
        "courses": [],
-       "note": ""
+       "note": "Hold each note steady: you'll learn which ones run sharp or flat on your instrument"
       }
      ]
     },
     {
      "name": "Soprano saxophone (Bb)",
      "transpose": 2,
+     "part": "",
      "tunings": [
       {
-       "name": "In Bb",
+       "name": "Band tuning note (concert Bb)",
+       "notes": [
+        "Bb4"
+       ],
+       "midi": [
+        70
+       ],
+       "courses": [
+        1
+       ],
+       "note": "Sharp: pull the mouthpiece out a little on the neck cork. Flat: push it further on."
+      },
+      {
+       "name": "Orchestra tuning note (concert A)",
+       "notes": [
+        "A4"
+       ],
+       "midi": [
+        69
+       ],
+       "courses": [
+        1
+       ],
+       "note": "Sharp: pull the mouthpiece out a little on the neck cork. Flat: push it further on."
+      },
+      {
+       "name": "Any note (long tones)",
        "notes": [],
        "midi": [],
        "courses": [],
-       "note": ""
+       "note": "Hold each note steady: you'll learn which ones run sharp or flat on your instrument"
       }
      ]
     },
     {
      "name": "Alto saxophone (Eb)",
      "transpose": 9,
+     "part": "",
      "tunings": [
       {
-       "name": "In Eb",
+       "name": "Band tuning note (concert Bb)",
+       "notes": [
+        "Bb4"
+       ],
+       "midi": [
+        70
+       ],
+       "courses": [
+        1
+       ],
+       "note": "Sharp: pull the mouthpiece out a little on the neck cork. Flat: push it further on."
+      },
+      {
+       "name": "Orchestra tuning note (concert A)",
+       "notes": [
+        "A4"
+       ],
+       "midi": [
+        69
+       ],
+       "courses": [
+        1
+       ],
+       "note": "Sharp: pull the mouthpiece out a little on the neck cork. Flat: push it further on."
+      },
+      {
+       "name": "Any note (long tones)",
        "notes": [],
        "midi": [],
        "courses": [],
-       "note": ""
+       "note": "Hold each note steady: you'll learn which ones run sharp or flat on your instrument"
       }
      ]
     },
     {
      "name": "Tenor saxophone (Bb)",
      "transpose": 14,
+     "part": "",
      "tunings": [
       {
-       "name": "In Bb",
+       "name": "Band tuning note (concert Bb)",
+       "notes": [
+        "Bb3"
+       ],
+       "midi": [
+        58
+       ],
+       "courses": [
+        1
+       ],
+       "note": "Sharp: pull the mouthpiece out a little on the neck cork. Flat: push it further on."
+      },
+      {
+       "name": "Orchestra tuning note (concert A)",
+       "notes": [
+        "A3"
+       ],
+       "midi": [
+        57
+       ],
+       "courses": [
+        1
+       ],
+       "note": "Sharp: pull the mouthpiece out a little on the neck cork. Flat: push it further on."
+      },
+      {
+       "name": "Any note (long tones)",
        "notes": [],
        "midi": [],
        "courses": [],
-       "note": ""
+       "note": "Hold each note steady: you'll learn which ones run sharp or flat on your instrument"
       }
      ]
     },
     {
      "name": "Baritone saxophone (Eb)",
      "transpose": 21,
+     "part": "",
      "tunings": [
       {
-       "name": "In Eb",
+       "name": "Band tuning note (concert Bb)",
+       "notes": [
+        "Bb2"
+       ],
+       "midi": [
+        46
+       ],
+       "courses": [
+        1
+       ],
+       "note": "Sharp: pull the mouthpiece out a little on the neck cork. Flat: push it further on."
+      },
+      {
+       "name": "Orchestra tuning note (concert A)",
+       "notes": [
+        "A2"
+       ],
+       "midi": [
+        45
+       ],
+       "courses": [
+        1
+       ],
+       "note": "Sharp: pull the mouthpiece out a little on the neck cork. Flat: push it further on."
+      },
+      {
+       "name": "Any note (long tones)",
        "notes": [],
        "midi": [],
        "courses": [],
-       "note": ""
+       "note": "Hold each note steady: you'll learn which ones run sharp or flat on your instrument"
       }
      ]
     },
     {
      "name": "Trumpet / cornet (Bb)",
      "transpose": 2,
+     "part": "",
      "tunings": [
       {
-       "name": "In Bb",
+       "name": "Band tuning note (concert Bb)",
+       "notes": [
+        "Bb4"
+       ],
+       "midi": [
+        70
+       ],
+       "courses": [
+        1
+       ],
+       "note": "Sharp: pull the main tuning slide out. Flat: push it in."
+      },
+      {
+       "name": "Orchestra tuning note (concert A)",
+       "notes": [
+        "A4"
+       ],
+       "midi": [
+        69
+       ],
+       "courses": [
+        1
+       ],
+       "note": "Sharp: pull the main tuning slide out. Flat: push it in."
+      },
+      {
+       "name": "Any note (long tones)",
        "notes": [],
        "midi": [],
        "courses": [],
-       "note": ""
+       "note": "Hold each note steady: you'll learn which ones run sharp or flat on your instrument"
       }
      ]
     },
     {
      "name": "Flugelhorn (Bb)",
      "transpose": 2,
+     "part": "",
      "tunings": [
       {
-       "name": "In Bb",
+       "name": "Band tuning note (concert Bb)",
+       "notes": [
+        "Bb4"
+       ],
+       "midi": [
+        70
+       ],
+       "courses": [
+        1
+       ],
+       "note": "Sharp: pull the main tuning slide out. Flat: push it in."
+      },
+      {
+       "name": "Orchestra tuning note (concert A)",
+       "notes": [
+        "A4"
+       ],
+       "midi": [
+        69
+       ],
+       "courses": [
+        1
+       ],
+       "note": "Sharp: pull the main tuning slide out. Flat: push it in."
+      },
+      {
+       "name": "Any note (long tones)",
        "notes": [],
        "midi": [],
        "courses": [],
-       "note": ""
+       "note": "Hold each note steady: you'll learn which ones run sharp or flat on your instrument"
       }
      ]
     },
     {
      "name": "French horn (F)",
      "transpose": 7,
+     "part": "",
      "tunings": [
       {
-       "name": "In F",
+       "name": "Band tuning note (concert Bb)",
+       "notes": [
+        "Bb3"
+       ],
+       "midi": [
+        58
+       ],
+       "courses": [
+        1
+       ],
+       "note": "Sharp: pull the main tuning slide out. Flat: push it in. On a double horn, tune the F and Bb sides with their own slides."
+      },
+      {
+       "name": "Orchestra tuning note (concert A)",
+       "notes": [
+        "A3"
+       ],
+       "midi": [
+        57
+       ],
+       "courses": [
+        1
+       ],
+       "note": "Sharp: pull the main tuning slide out. Flat: push it in. On a double horn, tune the F and Bb sides with their own slides."
+      },
+      {
+       "name": "Any note (long tones)",
        "notes": [],
        "midi": [],
        "courses": [],
-       "note": ""
+       "note": "Hold each note steady: you'll learn which ones run sharp or flat on your instrument"
       }
      ]
     },
     {
      "name": "Mellophone (F)",
      "transpose": 7,
+     "part": "",
      "tunings": [
       {
-       "name": "In F",
+       "name": "Band tuning note (concert Bb)",
+       "notes": [
+        "Bb4"
+       ],
+       "midi": [
+        70
+       ],
+       "courses": [
+        1
+       ],
+       "note": "Sharp: pull the main tuning slide out. Flat: push it in."
+      },
+      {
+       "name": "Orchestra tuning note (concert A)",
+       "notes": [
+        "A4"
+       ],
+       "midi": [
+        69
+       ],
+       "courses": [
+        1
+       ],
+       "note": "Sharp: pull the main tuning slide out. Flat: push it in."
+      },
+      {
+       "name": "Any note (long tones)",
        "notes": [],
        "midi": [],
        "courses": [],
-       "note": ""
+       "note": "Hold each note steady: you'll learn which ones run sharp or flat on your instrument"
       }
      ]
     },
     {
      "name": "Trombone",
      "transpose": 0,
+     "part": "",
      "tunings": [
       {
-       "name": "Concert pitch",
+       "name": "Band tuning note (concert Bb)",
+       "notes": [
+        "Bb3"
+       ],
+       "midi": [
+        58
+       ],
+       "courses": [
+        1
+       ],
+       "note": "Sharp: pull the tuning slide (at the back) out. Flat: push it in. Concert Bb is first position."
+      },
+      {
+       "name": "Orchestra tuning note (concert A)",
+       "notes": [
+        "A3"
+       ],
+       "midi": [
+        57
+       ],
+       "courses": [
+        1
+       ],
+       "note": "Sharp: pull the tuning slide (at the back) out. Flat: push it in. Concert Bb is first position."
+      },
+      {
+       "name": "Any note (long tones)",
        "notes": [],
        "midi": [],
        "courses": [],
-       "note": ""
+       "note": "Hold each note steady: you'll learn which ones run sharp or flat on your instrument"
       }
      ]
     },
     {
      "name": "Euphonium / baritone horn",
      "transpose": 0,
+     "part": "",
      "tunings": [
       {
-       "name": "Concert pitch (bass clef)",
+       "name": "Band tuning note (concert Bb)",
+       "notes": [
+        "Bb3"
+       ],
+       "midi": [
+        58
+       ],
+       "courses": [
+        1
+       ],
+       "note": "Sharp: pull the main tuning slide out. Flat: push it in."
+      },
+      {
+       "name": "Orchestra tuning note (concert A)",
+       "notes": [
+        "A3"
+       ],
+       "midi": [
+        57
+       ],
+       "courses": [
+        1
+       ],
+       "note": "Sharp: pull the main tuning slide out. Flat: push it in."
+      },
+      {
+       "name": "Any note (long tones)",
        "notes": [],
        "midi": [],
        "courses": [],
-       "note": ""
+       "note": "Hold each note steady: you'll learn which ones run sharp or flat on your instrument"
       }
      ]
     },
     {
      "name": "Tuba",
      "transpose": 0,
+     "part": "",
      "tunings": [
       {
-       "name": "Concert pitch",
+       "name": "Band tuning note (concert Bb)",
+       "notes": [
+        "Bb2"
+       ],
+       "midi": [
+        46
+       ],
+       "courses": [
+        1
+       ],
+       "note": "Sharp: pull the main tuning slide out. Flat: push it in."
+      },
+      {
+       "name": "Orchestra tuning note (concert A)",
+       "notes": [
+        "A2"
+       ],
+       "midi": [
+        45
+       ],
+       "courses": [
+        1
+       ],
+       "note": "Sharp: pull the main tuning slide out. Flat: push it in."
+      },
+      {
+       "name": "Any note (long tones)",
        "notes": [],
        "midi": [],
        "courses": [],
-       "note": ""
+       "note": "Hold each note steady: you'll learn which ones run sharp or flat on your instrument"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Percussion",
+   "instruments": [
+    {
+     "name": "Timpani",
+     "transpose": 0,
+     "part": "drum",
+     "tunings": [
+      {
+       "name": "Pair: G and C",
+       "notes": [
+        "G2",
+        "C3"
+       ],
+       "midi": [
+        43,
+        48
+       ],
+       "courses": [
+        1,
+        1
+       ],
+       "note": "29\" and 26\" drums. Tap where you'd play, a hand's width in from the edge, and set each drum with its pedal"
+      },
+      {
+       "name": "Pair: A and D",
+       "notes": [
+        "A2",
+        "D3"
+       ],
+       "midi": [
+        45,
+        50
+       ],
+       "courses": [
+        1,
+        1
+       ],
+       "note": "29\" and 26\" drums"
+      },
+      {
+       "name": "Pair: F and Bb",
+       "notes": [
+        "F2",
+        "Bb2"
+       ],
+       "midi": [
+        41,
+        46
+       ],
+       "courses": [
+        1,
+        1
+       ],
+       "note": "29\" and 26\" drums"
+      },
+      {
+       "name": "Any note",
+       "notes": [],
+       "midi": [],
+       "courses": [],
+       "note": "Usual ranges: 32\" D2 to A2, 29\" F2 to C3, 26\" Bb2 to F3, 23\" D3 to A3"
+      }
+     ]
+    },
+    {
+     "name": "Kalimba",
+     "transpose": 0,
+     "part": "tine",
+     "tunings": [
+      {
+       "name": "17-key in C",
+       "notes": [
+        "D6",
+        "B5",
+        "G5",
+        "E5",
+        "C5",
+        "A4",
+        "F4",
+        "D4",
+        "C4",
+        "E4",
+        "G4",
+        "B4",
+        "D5",
+        "F5",
+        "A5",
+        "C6",
+        "E6"
+       ],
+       "midi": [
+        86,
+        83,
+        79,
+        76,
+        72,
+        69,
+        65,
+        62,
+        60,
+        64,
+        67,
+        71,
+        74,
+        77,
+        81,
+        84,
+        88
+       ],
+       "courses": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+       ],
+       "note": "Tines left to right as you hold it. Sharp: tap the tine in a little (shorter). Flat: tap it out (longer). Use a small hammer"
+      },
+      {
+       "name": "10-key in C",
+       "notes": [
+        "E5",
+        "C5",
+        "A4",
+        "F4",
+        "D4",
+        "C4",
+        "E4",
+        "G4",
+        "B4",
+        "D5"
+       ],
+       "midi": [
+        76,
+        72,
+        69,
+        65,
+        62,
+        60,
+        64,
+        67,
+        71,
+        74
+       ],
+       "courses": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+       ],
+       "note": "Tines left to right as you hold it. Sharp: tap the tine in a little (shorter). Flat: tap it out (longer). Use a small hammer"
+      },
+      {
+       "name": "Any note",
+       "notes": [],
+       "midi": [],
+       "courses": [],
+       "note": "Tines left to right as you hold it. Sharp: tap the tine in a little (shorter). Flat: tap it out (longer). Use a small hammer"
       }
      ]
     }
@@ -5281,6 +6041,7 @@
     {
      "name": "Chromatic (any instrument)",
      "transpose": 0,
+     "part": "string",
      "tunings": [
       {
        "name": "Any note",
