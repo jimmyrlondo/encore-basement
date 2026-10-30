@@ -485,6 +485,46 @@ namespace selftest
             props.setProperty (te::SettingID::clickTrackSampleBig, String());
             props.setProperty (te::SettingID::clickTrackSampleSmall, String());
         }
+        // the tuner: which string, how far off, horns read in their own key, temperaments, and pitch from a bass's low E to a fiddle's E string
+        {
+            int instruments = 0;
+            const tunings::Instrument* guitar = nullptr;
+            const tunings::Instrument* trumpet = nullptr;
+            const tunings::Instrument* bouzouki = nullptr;
+            for (auto& f : tunings::families())
+                for (auto& i : f.instruments)
+                {
+                    ++instruments;
+                    if (tunings::text (i.name) == "Guitar (6-string)") guitar = &i;
+                    if (tunings::text (i.name) == "Trumpet / cornet (Bb)") trumpet = &i;
+                    if (tunings::text (i.name) == "Bouzouki (Irish)") bouzouki = &i;
+                }
+            expect ("tuner: the instrument list", instruments >= 80 && guitar != nullptr && trumpet != nullptr && bouzouki != nullptr, String (instruments) + " instruments");
+            if (guitar != nullptr && trumpet != nullptr)
+            {
+                const std::array<float, 12> equal {};
+                auto a = TunerReading::of (110.0f, 440.0, guitar->tunings[0].strings, equal, 0);
+                auto sharp = TunerReading::of (112.0f, 440.0, guitar->tunings[0].strings, equal, 0);
+                expect ("tuner: finds the guitar string", a.string == 1 && std::abs (a.cents) < 0.5f && sharp.string == 1 && std::abs (sharp.cents - 31.2f) < 1.0f,
+                        String (sharp.cents, 1) + " cents");
+                auto horn = TunerReading::of (233.08f, 440.0, {}, equal, 0);
+                expect ("tuner: a Bb trumpet reads its own note", trumpet->transpose == 2 && TunerReading::name (horn.note + trumpet->transpose) == "C4");
+                const auto& meantone = tunings::temperaments()[3].cents;
+                auto e = TunerReading::of (329.63f, 440.0, {}, meantone, 0);
+                expect ("tuner: quarter-comma meantone wants a lower E", TunerReading::name (e.note) == "E4" && std::abs (e.cents - 13.7f) < 0.6f, String (e.cents, 1));
+            }
+            bool pitches = true;
+            String heard;
+            for (float f : { 41.2f, 98.0f, 659.26f, 1760.0f })
+            {
+                std::vector<float> x (4096);
+                for (size_t i = 0; i < x.size(); ++i) x[i] = 0.5f * std::sin (MathConstants<float>::twoPi * f * (float) i / 24000.0f) + 0.2f * std::sin (MathConstants<float>::twoPi * 2 * f * (float) i / 24000.0f);
+                const float got = TunerPitch::estimate (x.data(), (int) x.size(), 24000.0);
+                heard << String (got, 2) << " ";
+                pitches = pitches && std::abs (got / f - 1.0f) < 0.003f;
+            }
+            expect ("tuner: hears 41 Hz to 1.76 kHz", pitches, heard);
+        }
         expect ("inputs named the way people say them", inputLabel ("Input channel 3") == "Input 3" && inputLabel ("Volt 476") == "Volt 476");
 
         // the account: a label's profile survives saving, each artist gets Songs/Releases/Masters/Live,

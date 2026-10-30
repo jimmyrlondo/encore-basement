@@ -3519,7 +3519,7 @@ private:
             for (auto instance : edit->getAllInputDevices())
                 if (te::isOnTargetTrack (*instance, *t, 0)) inputName = instance->getInputDevice().getName();
         if (tunerWindow != nullptr && tunerWindow->isVisible()) { tunerWindow->setVisible (false); return; } // T again closes it
-        tunerWindow = std::make_unique<TunerWindow> (std::make_unique<TunerComponent> (engine, inputName));
+        tunerWindow = std::make_unique<TunerWindow> (std::make_unique<TunerComponent> (engine, props(), inputName));
         tunerWindow->centreAroundComponent (this, tunerWindow->getWidth(), tunerWindow->getHeight());
         tunerWindow->setVisible (true);
         darkTitleBar (*tunerWindow);

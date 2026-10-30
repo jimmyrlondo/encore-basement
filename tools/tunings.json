@@ -1,0 +1,3421 @@
+{
+ "families": [
+  {
+   "name": "Guitars",
+   "instruments": [
+    {
+     "name": "Guitar (6-string)",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard",
+       "notes": [
+        "E2",
+        "A2",
+        "D3",
+        "G3",
+        "B3",
+        "E4"
+       ],
+       "midi": [
+        40,
+        45,
+        50,
+        55,
+        59,
+        64
+       ],
+       "note": ""
+      },
+      {
+       "name": "Half step down (Eb)",
+       "notes": [
+        "Eb2",
+        "Ab2",
+        "Db3",
+        "Gb3",
+        "Bb3",
+        "Eb4"
+       ],
+       "midi": [
+        39,
+        44,
+        49,
+        54,
+        58,
+        63
+       ],
+       "note": ""
+      },
+      {
+       "name": "Whole step down (D)",
+       "notes": [
+        "D2",
+        "G2",
+        "C3",
+        "F3",
+        "A3",
+        "D4"
+       ],
+       "midi": [
+        38,
+        43,
+        48,
+        53,
+        57,
+        62
+       ],
+       "note": ""
+      },
+      {
+       "name": "C standard",
+       "notes": [
+        "C2",
+        "F2",
+        "Bb2",
+        "Eb3",
+        "G3",
+        "C4"
+       ],
+       "midi": [
+        36,
+        41,
+        46,
+        51,
+        55,
+        60
+       ],
+       "note": ""
+      },
+      {
+       "name": "B standard",
+       "notes": [
+        "B1",
+        "E2",
+        "A2",
+        "D3",
+        "F#3",
+        "B3"
+       ],
+       "midi": [
+        35,
+        40,
+        45,
+        50,
+        54,
+        59
+       ],
+       "note": ""
+      },
+      {
+       "name": "Drop D",
+       "notes": [
+        "D2",
+        "A2",
+        "D3",
+        "G3",
+        "B3",
+        "E4"
+       ],
+       "midi": [
+        38,
+        45,
+        50,
+        55,
+        59,
+        64
+       ],
+       "note": ""
+      },
+      {
+       "name": "Drop C#",
+       "notes": [
+        "C#2",
+        "G#2",
+        "C#3",
+        "F#3",
+        "A#3",
+        "D#4"
+       ],
+       "midi": [
+        37,
+        44,
+        49,
+        54,
+        58,
+        63
+       ],
+       "note": ""
+      },
+      {
+       "name": "Drop C",
+       "notes": [
+        "C2",
+        "G2",
+        "C3",
+        "F3",
+        "A3",
+        "D4"
+       ],
+       "midi": [
+        36,
+        43,
+        48,
+        53,
+        57,
+        62
+       ],
+       "note": ""
+      },
+      {
+       "name": "Drop B",
+       "notes": [
+        "B1",
+        "F#2",
+        "B2",
+        "E3",
+        "G#3",
+        "C#4"
+       ],
+       "midi": [
+        35,
+        42,
+        47,
+        52,
+        56,
+        61
+       ],
+       "note": ""
+      },
+      {
+       "name": "Drop A",
+       "notes": [
+        "A1",
+        "E2",
+        "A2",
+        "D3",
+        "F#3",
+        "B3"
+       ],
+       "midi": [
+        33,
+        40,
+        45,
+        50,
+        54,
+        59
+       ],
+       "note": ""
+      },
+      {
+       "name": "Double drop D",
+       "notes": [
+        "D2",
+        "A2",
+        "D3",
+        "G3",
+        "B3",
+        "D4"
+       ],
+       "midi": [
+        38,
+        45,
+        50,
+        55,
+        59,
+        62
+       ],
+       "note": ""
+      },
+      {
+       "name": "DADGAD",
+       "notes": [
+        "D2",
+        "A2",
+        "D3",
+        "G3",
+        "A3",
+        "D4"
+       ],
+       "midi": [
+        38,
+        45,
+        50,
+        55,
+        57,
+        62
+       ],
+       "note": ""
+      },
+      {
+       "name": "Open G",
+       "notes": [
+        "D2",
+        "G2",
+        "D3",
+        "G3",
+        "B3",
+        "D4"
+       ],
+       "midi": [
+        38,
+        43,
+        50,
+        55,
+        59,
+        62
+       ],
+       "note": ""
+      },
+      {
+       "name": "Open D",
+       "notes": [
+        "D2",
+        "A2",
+        "D3",
+        "F#3",
+        "A3",
+        "D4"
+       ],
+       "midi": [
+        38,
+        45,
+        50,
+        54,
+        57,
+        62
+       ],
+       "note": ""
+      },
+      {
+       "name": "Open E",
+       "notes": [
+        "E2",
+        "B2",
+        "E3",
+        "G#3",
+        "B3",
+        "E4"
+       ],
+       "midi": [
+        40,
+        47,
+        52,
+        56,
+        59,
+        64
+       ],
+       "note": ""
+      },
+      {
+       "name": "Open A",
+       "notes": [
+        "E2",
+        "A2",
+        "E3",
+        "A3",
+        "C#4",
+        "E4"
+       ],
+       "midi": [
+        40,
+        45,
+        52,
+        57,
+        61,
+        64
+       ],
+       "note": ""
+      },
+      {
+       "name": "Open C",
+       "notes": [
+        "C2",
+        "G2",
+        "C3",
+        "G3",
+        "C4",
+        "E4"
+       ],
+       "midi": [
+        36,
+        43,
+        48,
+        55,
+        60,
+        64
+       ],
+       "note": ""
+      },
+      {
+       "name": "Open D minor",
+       "notes": [
+        "D2",
+        "A2",
+        "D3",
+        "F3",
+        "A3",
+        "D4"
+       ],
+       "midi": [
+        38,
+        45,
+        50,
+        53,
+        57,
+        62
+       ],
+       "note": ""
+      },
+      {
+       "name": "Open G minor",
+       "notes": [
+        "D2",
+        "G2",
+        "D3",
+        "G3",
+        "Bb3",
+        "D4"
+       ],
+       "midi": [
+        38,
+        43,
+        50,
+        55,
+        58,
+        62
+       ],
+       "note": ""
+      },
+      {
+       "name": "Open C6",
+       "notes": [
+        "C2",
+        "A2",
+        "C3",
+        "G3",
+        "C4",
+        "E4"
+       ],
+       "midi": [
+        36,
+        45,
+        48,
+        55,
+        60,
+        64
+       ],
+       "note": ""
+      },
+      {
+       "name": "All fourths",
+       "notes": [
+        "E2",
+        "A2",
+        "D3",
+        "G3",
+        "C4",
+        "F4"
+       ],
+       "midi": [
+        40,
+        45,
+        50,
+        55,
+        60,
+        65
+       ],
+       "note": ""
+      },
+      {
+       "name": "New standard (Fripp)",
+       "notes": [
+        "C2",
+        "G2",
+        "D3",
+        "A3",
+        "E4",
+        "G4"
+       ],
+       "midi": [
+        36,
+        43,
+        50,
+        57,
+        64,
+        67
+       ],
+       "note": ""
+      },
+      {
+       "name": "Nashville (high strung)",
+       "notes": [
+        "E3",
+        "A3",
+        "D4",
+        "G4",
+        "B3",
+        "E4"
+       ],
+       "midi": [
+        52,
+        57,
+        62,
+        67,
+        59,
+        64
+       ],
+       "note": "The four low strings an octave up, from a 12-string set"
+      },
+      {
+       "name": "Open G (Keith Richards 5-string)",
+       "notes": [
+        "G2",
+        "D3",
+        "G3",
+        "B3",
+        "D4"
+       ],
+       "midi": [
+        43,
+        50,
+        55,
+        59,
+        62
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Guitar (12-string)",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard",
+       "notes": [
+        "E2",
+        "A2",
+        "D3",
+        "G3",
+        "B3",
+        "E4"
+       ],
+       "midi": [
+        40,
+        45,
+        50,
+        55,
+        59,
+        64
+       ],
+       "note": "Tune the main string of each pair; the octave strings sound an octave up"
+      },
+      {
+       "name": "Half step down (Eb)",
+       "notes": [
+        "Eb2",
+        "Ab2",
+        "Db3",
+        "Gb3",
+        "Bb3",
+        "Eb4"
+       ],
+       "midi": [
+        39,
+        44,
+        49,
+        54,
+        58,
+        63
+       ],
+       "note": ""
+      },
+      {
+       "name": "Drop D",
+       "notes": [
+        "D2",
+        "A2",
+        "D3",
+        "G3",
+        "B3",
+        "E4"
+       ],
+       "midi": [
+        38,
+        45,
+        50,
+        55,
+        59,
+        64
+       ],
+       "note": ""
+      },
+      {
+       "name": "Open G",
+       "notes": [
+        "D2",
+        "G2",
+        "D3",
+        "G3",
+        "B3",
+        "D4"
+       ],
+       "midi": [
+        38,
+        43,
+        50,
+        55,
+        59,
+        62
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Guitar (7-string)",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard",
+       "notes": [
+        "B1",
+        "E2",
+        "A2",
+        "D3",
+        "G3",
+        "B3",
+        "E4"
+       ],
+       "midi": [
+        35,
+        40,
+        45,
+        50,
+        55,
+        59,
+        64
+       ],
+       "note": ""
+      },
+      {
+       "name": "Drop A",
+       "notes": [
+        "A1",
+        "E2",
+        "A2",
+        "D3",
+        "G3",
+        "B3",
+        "E4"
+       ],
+       "midi": [
+        33,
+        40,
+        45,
+        50,
+        55,
+        59,
+        64
+       ],
+       "note": ""
+      },
+      {
+       "name": "Half step down",
+       "notes": [
+        "Bb1",
+        "Eb2",
+        "Ab2",
+        "Db3",
+        "Gb3",
+        "Bb3",
+        "Eb4"
+       ],
+       "midi": [
+        34,
+        39,
+        44,
+        49,
+        54,
+        58,
+        63
+       ],
+       "note": ""
+      },
+      {
+       "name": "Russian (7-string)",
+       "notes": [
+        "D2",
+        "G2",
+        "B2",
+        "D3",
+        "G3",
+        "B3",
+        "D4"
+       ],
+       "midi": [
+        38,
+        43,
+        47,
+        50,
+        55,
+        59,
+        62
+       ],
+       "note": "Open G, the Russian guitar's own tuning"
+      }
+     ]
+    },
+    {
+     "name": "Guitar (8-string)",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard",
+       "notes": [
+        "F#1",
+        "B1",
+        "E2",
+        "A2",
+        "D3",
+        "G3",
+        "B3",
+        "E4"
+       ],
+       "midi": [
+        30,
+        35,
+        40,
+        45,
+        50,
+        55,
+        59,
+        64
+       ],
+       "note": ""
+      },
+      {
+       "name": "Drop E",
+       "notes": [
+        "E1",
+        "B1",
+        "E2",
+        "A2",
+        "D3",
+        "G3",
+        "B3",
+        "E4"
+       ],
+       "midi": [
+        28,
+        35,
+        40,
+        45,
+        50,
+        55,
+        59,
+        64
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Baritone guitar",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "B standard",
+       "notes": [
+        "B1",
+        "E2",
+        "A2",
+        "D3",
+        "F#3",
+        "B3"
+       ],
+       "midi": [
+        35,
+        40,
+        45,
+        50,
+        54,
+        59
+       ],
+       "note": ""
+      },
+      {
+       "name": "A standard",
+       "notes": [
+        "A1",
+        "D2",
+        "G2",
+        "C3",
+        "E3",
+        "A3"
+       ],
+       "midi": [
+        33,
+        38,
+        43,
+        48,
+        52,
+        57
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Tenor guitar",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard (fifths)",
+       "notes": [
+        "C3",
+        "G3",
+        "D4",
+        "A4"
+       ],
+       "midi": [
+        48,
+        55,
+        62,
+        69
+       ],
+       "note": ""
+      },
+      {
+       "name": "Chicago",
+       "notes": [
+        "D3",
+        "G3",
+        "B3",
+        "E4"
+       ],
+       "midi": [
+        50,
+        55,
+        59,
+        64
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Guitalele",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard",
+       "notes": [
+        "A2",
+        "D3",
+        "G3",
+        "C4",
+        "E4",
+        "A4"
+       ],
+       "midi": [
+        45,
+        50,
+        55,
+        60,
+        64,
+        69
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Requinto guitar",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard",
+       "notes": [
+        "A2",
+        "D3",
+        "G3",
+        "C4",
+        "E4",
+        "A4"
+       ],
+       "midi": [
+        45,
+        50,
+        55,
+        60,
+        64,
+        69
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Resonator / Dobro",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Open G (high bass)",
+       "notes": [
+        "G2",
+        "B2",
+        "D3",
+        "G3",
+        "B3",
+        "D4"
+       ],
+       "midi": [
+        43,
+        47,
+        50,
+        55,
+        59,
+        62
+       ],
+       "note": ""
+      },
+      {
+       "name": "Open D",
+       "notes": [
+        "D2",
+        "A2",
+        "D3",
+        "F#3",
+        "A3",
+        "D4"
+       ],
+       "midi": [
+        38,
+        45,
+        50,
+        54,
+        57,
+        62
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Lap steel",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "C6",
+       "notes": [
+        "C3",
+        "E3",
+        "G3",
+        "A3",
+        "C4",
+        "E4"
+       ],
+       "midi": [
+        48,
+        52,
+        55,
+        57,
+        60,
+        64
+       ],
+       "note": ""
+      },
+      {
+       "name": "A6",
+       "notes": [
+        "C#3",
+        "E3",
+        "F#3",
+        "A3",
+        "C#4",
+        "E4"
+       ],
+       "midi": [
+        49,
+        52,
+        54,
+        57,
+        61,
+        64
+       ],
+       "note": ""
+      },
+      {
+       "name": "Open E",
+       "notes": [
+        "E2",
+        "B2",
+        "E3",
+        "G#3",
+        "B3",
+        "E4"
+       ],
+       "midi": [
+        40,
+        47,
+        52,
+        56,
+        59,
+        64
+       ],
+       "note": ""
+      },
+      {
+       "name": "Open G",
+       "notes": [
+        "D2",
+        "G2",
+        "D3",
+        "G3",
+        "B3",
+        "D4"
+       ],
+       "midi": [
+        38,
+        43,
+        50,
+        55,
+        59,
+        62
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Pedal steel (10-string)",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "E9",
+       "notes": [
+        "B2",
+        "D3",
+        "E3",
+        "F#3",
+        "G#3",
+        "B3",
+        "E4",
+        "G#4",
+        "D#4",
+        "F#4"
+       ],
+       "midi": [
+        47,
+        50,
+        52,
+        54,
+        56,
+        59,
+        64,
+        68,
+        63,
+        66
+       ],
+       "note": "Strings 10 to 1, open (no pedals)"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Basses",
+   "instruments": [
+    {
+     "name": "Bass (4-string)",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard",
+       "notes": [
+        "E1",
+        "A1",
+        "D2",
+        "G2"
+       ],
+       "midi": [
+        28,
+        33,
+        38,
+        43
+       ],
+       "note": ""
+      },
+      {
+       "name": "Drop D",
+       "notes": [
+        "D1",
+        "A1",
+        "D2",
+        "G2"
+       ],
+       "midi": [
+        26,
+        33,
+        38,
+        43
+       ],
+       "note": ""
+      },
+      {
+       "name": "Half step down",
+       "notes": [
+        "Eb1",
+        "Ab1",
+        "Db2",
+        "Gb2"
+       ],
+       "midi": [
+        27,
+        32,
+        37,
+        42
+       ],
+       "note": ""
+      },
+      {
+       "name": "D standard",
+       "notes": [
+        "D1",
+        "G1",
+        "C2",
+        "F2"
+       ],
+       "midi": [
+        26,
+        31,
+        36,
+        41
+       ],
+       "note": ""
+      },
+      {
+       "name": "Drop C",
+       "notes": [
+        "C1",
+        "G1",
+        "C2",
+        "F2"
+       ],
+       "midi": [
+        24,
+        31,
+        36,
+        41
+       ],
+       "note": ""
+      },
+      {
+       "name": "BEAD",
+       "notes": [
+        "B0",
+        "E1",
+        "A1",
+        "D2"
+       ],
+       "midi": [
+        23,
+        28,
+        33,
+        38
+       ],
+       "note": ""
+      },
+      {
+       "name": "Fifths (cello-style)",
+       "notes": [
+        "C1",
+        "G1",
+        "D2",
+        "A2"
+       ],
+       "midi": [
+        24,
+        31,
+        38,
+        45
+       ],
+       "note": ""
+      },
+      {
+       "name": "Piccolo bass",
+       "notes": [
+        "E2",
+        "A2",
+        "D3",
+        "G3"
+       ],
+       "midi": [
+        40,
+        45,
+        50,
+        55
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Bass (5-string)",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard (low B)",
+       "notes": [
+        "B0",
+        "E1",
+        "A1",
+        "D2",
+        "G2"
+       ],
+       "midi": [
+        23,
+        28,
+        33,
+        38,
+        43
+       ],
+       "note": ""
+      },
+      {
+       "name": "High C",
+       "notes": [
+        "E1",
+        "A1",
+        "D2",
+        "G2",
+        "C3"
+       ],
+       "midi": [
+        28,
+        33,
+        38,
+        43,
+        48
+       ],
+       "note": ""
+      },
+      {
+       "name": "Drop A",
+       "notes": [
+        "A0",
+        "E1",
+        "A1",
+        "D2",
+        "G2"
+       ],
+       "midi": [
+        21,
+        28,
+        33,
+        38,
+        43
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Bass (6-string)",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard",
+       "notes": [
+        "B0",
+        "E1",
+        "A1",
+        "D2",
+        "G2",
+        "C3"
+       ],
+       "midi": [
+        23,
+        28,
+        33,
+        38,
+        43,
+        48
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Upright / double bass",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Orchestral (fourths)",
+       "notes": [
+        "E1",
+        "A1",
+        "D2",
+        "G2"
+       ],
+       "midi": [
+        28,
+        33,
+        38,
+        43
+       ],
+       "note": ""
+      },
+      {
+       "name": "Solo tuning",
+       "notes": [
+        "F#1",
+        "B1",
+        "E2",
+        "A2"
+       ],
+       "midi": [
+        30,
+        35,
+        40,
+        45
+       ],
+       "note": "A whole step up, for solo playing with solo strings"
+      },
+      {
+       "name": "Fifths",
+       "notes": [
+        "C1",
+        "G1",
+        "D2",
+        "A2"
+       ],
+       "midi": [
+        24,
+        31,
+        38,
+        45
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Acoustic bass guitar",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard",
+       "notes": [
+        "E1",
+        "A1",
+        "D2",
+        "G2"
+       ],
+       "midi": [
+        28,
+        33,
+        38,
+        43
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Guitarron (Mexican)",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard",
+       "notes": [
+        "A1",
+        "D2",
+        "G2",
+        "C3",
+        "E2",
+        "A2"
+       ],
+       "midi": [
+        33,
+        38,
+        43,
+        48,
+        40,
+        45
+       ],
+       "note": "Re-entrant: the 5th and 6th strings drop back down"
+      }
+     ]
+    },
+    {
+     "name": "Bajo sexto",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard",
+       "notes": [
+        "E2",
+        "A2",
+        "D3",
+        "G3",
+        "C4",
+        "F4"
+       ],
+       "midi": [
+        40,
+        45,
+        50,
+        55,
+        60,
+        65
+       ],
+       "note": ""
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Ukuleles",
+   "instruments": [
+    {
+     "name": "Ukulele (soprano, concert, tenor)",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard (high G)",
+       "notes": [
+        "G4",
+        "C4",
+        "E4",
+        "A4"
+       ],
+       "midi": [
+        67,
+        60,
+        64,
+        69
+       ],
+       "note": "Re-entrant: the G string is higher than the C"
+      },
+      {
+       "name": "Low G",
+       "notes": [
+        "G3",
+        "C4",
+        "E4",
+        "A4"
+       ],
+       "midi": [
+        55,
+        60,
+        64,
+        69
+       ],
+       "note": ""
+      },
+      {
+       "name": "D tuning (old-style)",
+       "notes": [
+        "A4",
+        "D4",
+        "F#4",
+        "B4"
+       ],
+       "midi": [
+        69,
+        62,
+        66,
+        71
+       ],
+       "note": ""
+      },
+      {
+       "name": "Slack key (open C)",
+       "notes": [
+        "G4",
+        "C4",
+        "E4",
+        "G4"
+       ],
+       "midi": [
+        67,
+        60,
+        64,
+        67
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Baritone ukulele",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard",
+       "notes": [
+        "D3",
+        "G3",
+        "B3",
+        "E4"
+       ],
+       "midi": [
+        50,
+        55,
+        59,
+        64
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Bass ukulele",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard",
+       "notes": [
+        "E1",
+        "A1",
+        "D2",
+        "G2"
+       ],
+       "midi": [
+        28,
+        33,
+        38,
+        43
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Banjolele",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard",
+       "notes": [
+        "G4",
+        "C4",
+        "E4",
+        "A4"
+       ],
+       "midi": [
+        67,
+        60,
+        64,
+        69
+       ],
+       "note": ""
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Mandolins",
+   "instruments": [
+    {
+     "name": "Mandolin",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard",
+       "notes": [
+        "G3",
+        "D4",
+        "A4",
+        "E5"
+       ],
+       "midi": [
+        55,
+        62,
+        69,
+        76
+       ],
+       "note": ""
+      },
+      {
+       "name": "Cross A (AEAE)",
+       "notes": [
+        "A3",
+        "E4",
+        "A4",
+        "E5"
+       ],
+       "midi": [
+        57,
+        64,
+        69,
+        76
+       ],
+       "note": ""
+      },
+      {
+       "name": "Open G (GDGD)",
+       "notes": [
+        "G3",
+        "D4",
+        "G4",
+        "D5"
+       ],
+       "midi": [
+        55,
+        62,
+        67,
+        74
+       ],
+       "note": ""
+      },
+      {
+       "name": "Cross G (GDGB)",
+       "notes": [
+        "G3",
+        "D4",
+        "G4",
+        "B4"
+       ],
+       "midi": [
+        55,
+        62,
+        67,
+        71
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Mandola",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard",
+       "notes": [
+        "C3",
+        "G3",
+        "D4",
+        "A4"
+       ],
+       "midi": [
+        48,
+        55,
+        62,
+        69
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Octave mandolin / mandocello",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Octave mandolin",
+       "notes": [
+        "G2",
+        "D3",
+        "A3",
+        "E4"
+       ],
+       "midi": [
+        43,
+        50,
+        57,
+        64
+       ],
+       "note": ""
+      },
+      {
+       "name": "Mandocello",
+       "notes": [
+        "C2",
+        "G2",
+        "D3",
+        "A3"
+       ],
+       "midi": [
+        36,
+        43,
+        50,
+        57
+       ],
+       "note": ""
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Banjos",
+   "instruments": [
+    {
+     "name": "Banjo (5-string)",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Open G",
+       "notes": [
+        "G4",
+        "D3",
+        "G3",
+        "B3",
+        "D4"
+       ],
+       "midi": [
+        67,
+        50,
+        55,
+        59,
+        62
+       ],
+       "note": "The short 5th string comes first"
+      },
+      {
+       "name": "Double C",
+       "notes": [
+        "G4",
+        "C3",
+        "G3",
+        "C4",
+        "D4"
+       ],
+       "midi": [
+        67,
+        48,
+        55,
+        60,
+        62
+       ],
+       "note": ""
+      },
+      {
+       "name": "Standard C",
+       "notes": [
+        "G4",
+        "C3",
+        "G3",
+        "B3",
+        "D4"
+       ],
+       "midi": [
+        67,
+        48,
+        55,
+        59,
+        62
+       ],
+       "note": ""
+      },
+      {
+       "name": "Sawmill / modal (gDGCD)",
+       "notes": [
+        "G4",
+        "D3",
+        "G3",
+        "C4",
+        "D4"
+       ],
+       "midi": [
+        67,
+        50,
+        55,
+        60,
+        62
+       ],
+       "note": ""
+      },
+      {
+       "name": "Open D",
+       "notes": [
+        "F#4",
+        "D3",
+        "F#3",
+        "A3",
+        "D4"
+       ],
+       "midi": [
+        66,
+        50,
+        54,
+        57,
+        62
+       ],
+       "note": ""
+      },
+      {
+       "name": "Graveyard / open D minor",
+       "notes": [
+        "F4",
+        "D3",
+        "F3",
+        "A3",
+        "D4"
+       ],
+       "midi": [
+        65,
+        50,
+        53,
+        57,
+        62
+       ],
+       "note": ""
+      },
+      {
+       "name": "Open A",
+       "notes": [
+        "A4",
+        "E3",
+        "A3",
+        "C#4",
+        "E4"
+       ],
+       "midi": [
+        69,
+        52,
+        57,
+        61,
+        64
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Tenor banjo",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard (fifths)",
+       "notes": [
+        "C3",
+        "G3",
+        "D4",
+        "A4"
+       ],
+       "midi": [
+        48,
+        55,
+        62,
+        69
+       ],
+       "note": ""
+      },
+      {
+       "name": "Irish",
+       "notes": [
+        "G2",
+        "D3",
+        "A3",
+        "E4"
+       ],
+       "midi": [
+        43,
+        50,
+        57,
+        64
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Plectrum banjo",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard",
+       "notes": [
+        "C3",
+        "G3",
+        "B3",
+        "D4"
+       ],
+       "midi": [
+        48,
+        55,
+        59,
+        62
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Banjo (6-string)",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard (guitar)",
+       "notes": [
+        "E2",
+        "A2",
+        "D3",
+        "G3",
+        "B3",
+        "E4"
+       ],
+       "midi": [
+        40,
+        45,
+        50,
+        55,
+        59,
+        64
+       ],
+       "note": ""
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Orchestral strings",
+   "instruments": [
+    {
+     "name": "Violin / fiddle",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard",
+       "notes": [
+        "G3",
+        "D4",
+        "A4",
+        "E5"
+       ],
+       "midi": [
+        55,
+        62,
+        69,
+        76
+       ],
+       "note": ""
+      },
+      {
+       "name": "Cross A (AEAE)",
+       "notes": [
+        "A3",
+        "E4",
+        "A4",
+        "E5"
+       ],
+       "midi": [
+        57,
+        64,
+        69,
+        76
+       ],
+       "note": ""
+      },
+      {
+       "name": "Cross G (GDGD)",
+       "notes": [
+        "G3",
+        "D4",
+        "G4",
+        "D5"
+       ],
+       "midi": [
+        55,
+        62,
+        67,
+        74
+       ],
+       "note": ""
+      },
+      {
+       "name": "ADAE",
+       "notes": [
+        "A3",
+        "D4",
+        "A4",
+        "E5"
+       ],
+       "midi": [
+        57,
+        62,
+        69,
+        76
+       ],
+       "note": ""
+      },
+      {
+       "name": "Calico (AEAC#)",
+       "notes": [
+        "A3",
+        "E4",
+        "A4",
+        "C#5"
+       ],
+       "midi": [
+        57,
+        64,
+        69,
+        73
+       ],
+       "note": ""
+      },
+      {
+       "name": "DDAD",
+       "notes": [
+        "D3",
+        "D4",
+        "A4",
+        "D5"
+       ],
+       "midi": [
+        50,
+        62,
+        69,
+        74
+       ],
+       "note": ""
+      },
+      {
+       "name": "Baroque (A = 415)",
+       "notes": [
+        "G3",
+        "D4",
+        "A4",
+        "E5"
+       ],
+       "midi": [
+        55,
+        62,
+        69,
+        76
+       ],
+       "note": "Set the reference to 415 Hz"
+      }
+     ]
+    },
+    {
+     "name": "Viola",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard",
+       "notes": [
+        "C3",
+        "G3",
+        "D4",
+        "A4"
+       ],
+       "midi": [
+        48,
+        55,
+        62,
+        69
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Cello",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard",
+       "notes": [
+        "C2",
+        "G2",
+        "D3",
+        "A3"
+       ],
+       "midi": [
+        36,
+        43,
+        50,
+        57
+       ],
+       "note": ""
+      },
+      {
+       "name": "Bach suite 5 (scordatura)",
+       "notes": [
+        "C2",
+        "G2",
+        "D3",
+        "G3"
+       ],
+       "midi": [
+        36,
+        43,
+        50,
+        55
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Hardanger fiddle",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard (ADAE)",
+       "notes": [
+        "A3",
+        "D4",
+        "A4",
+        "E5"
+       ],
+       "midi": [
+        57,
+        62,
+        69,
+        76
+       ],
+       "note": "Melody strings; tune the sympathetic strings by ear to the piece"
+      }
+     ]
+    },
+    {
+     "name": "Nyckelharpa",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard",
+       "notes": [
+        "C3",
+        "G3",
+        "C4",
+        "A4"
+       ],
+       "midi": [
+        48,
+        55,
+        60,
+        69
+       ],
+       "note": "The melody strings"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Early music",
+   "instruments": [
+    {
+     "name": "Renaissance lute (6-course)",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "In G",
+       "notes": [
+        "G2",
+        "C3",
+        "F3",
+        "A3",
+        "D4",
+        "G4"
+       ],
+       "midi": [
+        43,
+        48,
+        53,
+        57,
+        62,
+        67
+       ],
+       "note": ""
+      },
+      {
+       "name": "In A",
+       "notes": [
+        "A2",
+        "D3",
+        "G3",
+        "B3",
+        "E4",
+        "A4"
+       ],
+       "midi": [
+        45,
+        50,
+        55,
+        59,
+        64,
+        69
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Renaissance lute (8-course)",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "In G",
+       "notes": [
+        "D2",
+        "F2",
+        "G2",
+        "C3",
+        "F3",
+        "A3",
+        "D4",
+        "G4"
+       ],
+       "midi": [
+        38,
+        41,
+        43,
+        48,
+        53,
+        57,
+        62,
+        67
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Baroque lute (13-course)",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "D minor",
+       "notes": [
+        "A1",
+        "B1",
+        "C2",
+        "D2",
+        "E2",
+        "F2",
+        "G2",
+        "A2",
+        "D3",
+        "F3",
+        "A3",
+        "D4",
+        "F4"
+       ],
+       "midi": [
+        33,
+        35,
+        36,
+        38,
+        40,
+        41,
+        43,
+        45,
+        50,
+        53,
+        57,
+        62,
+        65
+       ],
+       "note": "The basses are often retuned to the key of the piece"
+      }
+     ]
+    },
+    {
+     "name": "Viola da gamba",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Bass viol",
+       "notes": [
+        "D2",
+        "G2",
+        "C3",
+        "E3",
+        "A3",
+        "D4"
+       ],
+       "midi": [
+        38,
+        43,
+        48,
+        52,
+        57,
+        62
+       ],
+       "note": ""
+      },
+      {
+       "name": "Tenor viol",
+       "notes": [
+        "G2",
+        "C3",
+        "F3",
+        "A3",
+        "D4",
+        "G4"
+       ],
+       "midi": [
+        43,
+        48,
+        53,
+        57,
+        62,
+        67
+       ],
+       "note": ""
+      },
+      {
+       "name": "Treble viol",
+       "notes": [
+        "D3",
+        "G3",
+        "C4",
+        "E4",
+        "A4",
+        "D5"
+       ],
+       "midi": [
+        50,
+        55,
+        60,
+        64,
+        69,
+        74
+       ],
+       "note": ""
+      },
+      {
+       "name": "Violone in G",
+       "notes": [
+        "G1",
+        "C2",
+        "F2",
+        "A2",
+        "D3",
+        "G3"
+       ],
+       "midi": [
+        31,
+        36,
+        41,
+        45,
+        50,
+        55
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Vihuela (Spanish)",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard",
+       "notes": [
+        "G2",
+        "C3",
+        "F3",
+        "A3",
+        "D4",
+        "G4"
+       ],
+       "midi": [
+        43,
+        48,
+        53,
+        57,
+        62,
+        67
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Baroque guitar (5-course)",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Re-entrant",
+       "notes": [
+        "A3",
+        "D4",
+        "G3",
+        "B3",
+        "E4"
+       ],
+       "midi": [
+        57,
+        62,
+        55,
+        59,
+        64
+       ],
+       "note": "The 4th and 5th courses tuned high"
+      }
+     ]
+    },
+    {
+     "name": "Hurdy-gurdy",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "G/C",
+       "notes": [
+        "C3",
+        "G3",
+        "G4",
+        "G4"
+       ],
+       "midi": [
+        48,
+        55,
+        67,
+        67
+       ],
+       "note": "Drones C and G, two chanters on G"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Folk and world strings",
+   "instruments": [
+    {
+     "name": "Bouzouki (Irish)",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "GDAD",
+       "notes": [
+        "G2",
+        "D3",
+        "A3",
+        "D4"
+       ],
+       "midi": [
+        43,
+        50,
+        57,
+        62
+       ],
+       "note": ""
+      },
+      {
+       "name": "GDAE",
+       "notes": [
+        "G2",
+        "D3",
+        "A3",
+        "E4"
+       ],
+       "midi": [
+        43,
+        50,
+        57,
+        64
+       ],
+       "note": ""
+      },
+      {
+       "name": "ADAD",
+       "notes": [
+        "A2",
+        "D3",
+        "A3",
+        "D4"
+       ],
+       "midi": [
+        45,
+        50,
+        57,
+        62
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Bouzouki (Greek)",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Tetrachordo (4-course)",
+       "notes": [
+        "C3",
+        "F3",
+        "A3",
+        "D4"
+       ],
+       "midi": [
+        48,
+        53,
+        57,
+        62
+       ],
+       "note": ""
+      },
+      {
+       "name": "Trichordo (3-course)",
+       "notes": [
+        "D3",
+        "A3",
+        "D4"
+       ],
+       "midi": [
+        50,
+        57,
+        62
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Oud",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Arabic",
+       "notes": [
+        "C2",
+        "F2",
+        "A2",
+        "D3",
+        "G3",
+        "C4"
+       ],
+       "midi": [
+        36,
+        41,
+        45,
+        50,
+        55,
+        60
+       ],
+       "note": ""
+      },
+      {
+       "name": "Turkish",
+       "notes": [
+        "E2",
+        "A2",
+        "B2",
+        "E3",
+        "A3",
+        "D4"
+       ],
+       "midi": [
+        40,
+        45,
+        47,
+        52,
+        57,
+        62
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Appalachian dulcimer",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "DAd (Ionian)",
+       "notes": [
+        "D3",
+        "A3",
+        "D4"
+       ],
+       "midi": [
+        50,
+        57,
+        62
+       ],
+       "note": ""
+      },
+      {
+       "name": "DAA (Mixolydian)",
+       "notes": [
+        "D3",
+        "A3",
+        "A3"
+       ],
+       "midi": [
+        50,
+        57,
+        57
+       ],
+       "note": ""
+      },
+      {
+       "name": "DGD",
+       "notes": [
+        "D3",
+        "G3",
+        "D4"
+       ],
+       "midi": [
+        50,
+        55,
+        62
+       ],
+       "note": ""
+      },
+      {
+       "name": "CGc",
+       "notes": [
+        "C3",
+        "G3",
+        "C4"
+       ],
+       "midi": [
+        48,
+        55,
+        60
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Balalaika (prima)",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard",
+       "notes": [
+        "E4",
+        "E4",
+        "A4"
+       ],
+       "midi": [
+        64,
+        64,
+        69
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Domra (4-string)",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard",
+       "notes": [
+        "G3",
+        "D4",
+        "A4",
+        "E5"
+       ],
+       "midi": [
+        55,
+        62,
+        69,
+        76
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Charango",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard",
+       "notes": [
+        "G4",
+        "C5",
+        "E5",
+        "A4",
+        "E5"
+       ],
+       "midi": [
+        67,
+        72,
+        76,
+        69,
+        76
+       ],
+       "note": "Re-entrant: the middle course is the lowest"
+      }
+     ]
+    },
+    {
+     "name": "Cavaquinho",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard (DGBD)",
+       "notes": [
+        "D4",
+        "G4",
+        "B4",
+        "D5"
+       ],
+       "midi": [
+        62,
+        67,
+        71,
+        74
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Cuatro (Venezuelan)",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard",
+       "notes": [
+        "A3",
+        "D4",
+        "F#4",
+        "B3"
+       ],
+       "midi": [
+        57,
+        62,
+        66,
+        59
+       ],
+       "note": "Re-entrant: the 1st string is lower than the 2nd"
+      }
+     ]
+    },
+    {
+     "name": "Cuatro (Puerto Rican)",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard",
+       "notes": [
+        "B2",
+        "E3",
+        "A3",
+        "D4",
+        "G4"
+       ],
+       "midi": [
+        47,
+        52,
+        57,
+        62,
+        67
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Tres cubano",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard",
+       "notes": [
+        "G4",
+        "C4",
+        "E4"
+       ],
+       "midi": [
+        67,
+        60,
+        64
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Vihuela (Mexican)",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard",
+       "notes": [
+        "A3",
+        "D4",
+        "G4",
+        "B3",
+        "E4"
+       ],
+       "midi": [
+        57,
+        62,
+        67,
+        59,
+        64
+       ],
+       "note": "Re-entrant"
+      }
+     ]
+    },
+    {
+     "name": "Tiple (Colombian)",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard",
+       "notes": [
+        "D4",
+        "G4",
+        "B4",
+        "E5"
+       ],
+       "midi": [
+        62,
+        67,
+        71,
+        76
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Bandurria",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard",
+       "notes": [
+        "G#3",
+        "C#4",
+        "F#4",
+        "B4",
+        "E5",
+        "A5"
+       ],
+       "midi": [
+        56,
+        61,
+        66,
+        71,
+        76,
+        81
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Laud (Spanish)",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard",
+       "notes": [
+        "G#2",
+        "C#3",
+        "F#3",
+        "B3",
+        "E4",
+        "A4"
+       ],
+       "midi": [
+        44,
+        49,
+        54,
+        59,
+        64,
+        69
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Kantele (5-string)",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard",
+       "notes": [
+        "D4",
+        "E4",
+        "F4",
+        "G4",
+        "A4"
+       ],
+       "midi": [
+        62,
+        64,
+        65,
+        67,
+        69
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Pipa",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard",
+       "notes": [
+        "A2",
+        "D3",
+        "E3",
+        "A3"
+       ],
+       "midi": [
+        45,
+        50,
+        52,
+        57
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Zhongruan",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard",
+       "notes": [
+        "G2",
+        "D3",
+        "G3",
+        "D4"
+       ],
+       "midi": [
+        43,
+        50,
+        55,
+        62
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Erhu",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Standard",
+       "notes": [
+        "D4",
+        "A4"
+       ],
+       "midi": [
+        62,
+        69
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Shamisen",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Honchoshi",
+       "notes": [
+        "C3",
+        "F3",
+        "C4"
+       ],
+       "midi": [
+        48,
+        53,
+        60
+       ],
+       "note": "Usually tuned to the singer: move it all up or down together"
+      },
+      {
+       "name": "Niagari",
+       "notes": [
+        "C3",
+        "G3",
+        "C4"
+       ],
+       "midi": [
+        48,
+        55,
+        60
+       ],
+       "note": ""
+      },
+      {
+       "name": "Sansagari",
+       "notes": [
+        "C3",
+        "F3",
+        "Bb3"
+       ],
+       "midi": [
+        48,
+        53,
+        58
+       ],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Koto (13-string)",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Hirajoshi",
+       "notes": [
+        "D3",
+        "G3",
+        "A3",
+        "Bb3",
+        "D4",
+        "Eb4",
+        "G4",
+        "A4",
+        "Bb4",
+        "D5",
+        "Eb5",
+        "G5",
+        "A5"
+       ],
+       "midi": [
+        50,
+        55,
+        57,
+        58,
+        62,
+        63,
+        67,
+        69,
+        70,
+        74,
+        75,
+        79,
+        81
+       ],
+       "note": ""
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Winds and brass",
+   "instruments": [
+    {
+     "name": "Flute",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Concert pitch",
+       "notes": [],
+       "midi": [],
+       "note": "Shows the note you read"
+      }
+     ]
+    },
+    {
+     "name": "Piccolo",
+     "transpose": -12,
+     "tunings": [
+      {
+       "name": "Concert pitch (sounds an octave up)",
+       "notes": [],
+       "midi": [],
+       "note": "Shows the note you read"
+      }
+     ]
+    },
+    {
+     "name": "Oboe",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Concert pitch",
+       "notes": [],
+       "midi": [],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "English horn (F)",
+     "transpose": 7,
+     "tunings": [
+      {
+       "name": "In F",
+       "notes": [],
+       "midi": [],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Clarinet (Bb)",
+     "transpose": 2,
+     "tunings": [
+      {
+       "name": "In Bb",
+       "notes": [],
+       "midi": [],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Clarinet (A)",
+     "transpose": 3,
+     "tunings": [
+      {
+       "name": "In A",
+       "notes": [],
+       "midi": [],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Bass clarinet (Bb)",
+     "transpose": 14,
+     "tunings": [
+      {
+       "name": "In Bb",
+       "notes": [],
+       "midi": [],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Bassoon",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Concert pitch",
+       "notes": [],
+       "midi": [],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Soprano saxophone (Bb)",
+     "transpose": 2,
+     "tunings": [
+      {
+       "name": "In Bb",
+       "notes": [],
+       "midi": [],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Alto saxophone (Eb)",
+     "transpose": 9,
+     "tunings": [
+      {
+       "name": "In Eb",
+       "notes": [],
+       "midi": [],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Tenor saxophone (Bb)",
+     "transpose": 14,
+     "tunings": [
+      {
+       "name": "In Bb",
+       "notes": [],
+       "midi": [],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Baritone saxophone (Eb)",
+     "transpose": 21,
+     "tunings": [
+      {
+       "name": "In Eb",
+       "notes": [],
+       "midi": [],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Trumpet / cornet (Bb)",
+     "transpose": 2,
+     "tunings": [
+      {
+       "name": "In Bb",
+       "notes": [],
+       "midi": [],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Flugelhorn (Bb)",
+     "transpose": 2,
+     "tunings": [
+      {
+       "name": "In Bb",
+       "notes": [],
+       "midi": [],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "French horn (F)",
+     "transpose": 7,
+     "tunings": [
+      {
+       "name": "In F",
+       "notes": [],
+       "midi": [],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Mellophone (F)",
+     "transpose": 7,
+     "tunings": [
+      {
+       "name": "In F",
+       "notes": [],
+       "midi": [],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Trombone",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Concert pitch",
+       "notes": [],
+       "midi": [],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Euphonium / baritone horn",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Concert pitch (bass clef)",
+       "notes": [],
+       "midi": [],
+       "note": ""
+      }
+     ]
+    },
+    {
+     "name": "Tuba",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Concert pitch",
+       "notes": [],
+       "midi": [],
+       "note": ""
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Anything else",
+   "instruments": [
+    {
+     "name": "Chromatic (any instrument)",
+     "transpose": 0,
+     "tunings": [
+      {
+       "name": "Any note",
+       "notes": [],
+       "midi": [],
+       "note": "Voice, piano, harp, drums, handpan, didgeridoo, bagpipes..."
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "temperaments": [
+  {
+   "name": "Equal temperament",
+   "cents": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "name": "Just intonation (major)",
+   "cents": [
+    0,
+    11.7,
+    3.9,
+    15.6,
+    -13.7,
+    -2.0,
+    -9.8,
+    2.0,
+    13.7,
+    -15.6,
+    17.6,
+    -11.7
+   ]
+  },
+  {
+   "name": "Pythagorean",
+   "cents": [
+    0,
+    13.7,
+    3.9,
+    -5.9,
+    7.8,
+    -2.0,
+    11.7,
+    2.0,
+    15.6,
+    5.9,
+    -3.9,
+    9.8
+   ]
+  },
+  {
+   "name": "Quarter-comma meantone",
+   "cents": [
+    0,
+    -24.0,
+    -6.8,
+    10.3,
+    -13.7,
+    3.4,
+    -20.5,
+    -3.4,
+    -27.4,
+    -10.3,
+    6.8,
+    -17.1
+   ]
+  },
+  {
+   "name": "Werckmeister III",
+   "cents": [
+    0,
+    -9.8,
+    -7.8,
+    -5.9,
+    -9.8,
+    -2.0,
+    -11.7,
+    -3.9,
+    -7.8,
+    -11.7,
+    -3.9,
+    -7.8
+   ]
+  },
+  {
+   "name": "Kirnberger III",
+   "cents": [
+    0,
+    -9.8,
+    -6.8,
+    -5.9,
+    -13.7,
+    -2.0,
+    -9.8,
+    -3.4,
+    -7.8,
+    -10.3,
+    -3.9,
+    -11.7
+   ]
+  },
+  {
+   "name": "Vallotti",
+   "cents": [
+    0,
+    -3.9,
+    -2.0,
+    0,
+    -5.9,
+    2.0,
+    -5.9,
+    -2.0,
+    -2.0,
+    -3.9,
+    2.0,
+    -5.9
+   ]
+  }
+ ],
+ "references": [
+  {
+   "name": "440 Hz (modern)",
+   "hz": 440
+  },
+  {
+   "name": "442 Hz (European orchestras)",
+   "hz": 442
+  },
+  {
+   "name": "443 Hz",
+   "hz": 443
+  },
+  {
+   "name": "441 Hz",
+   "hz": 441
+  },
+  {
+   "name": "432 Hz",
+   "hz": 432
+  },
+  {
+   "name": "430 Hz (classical era)",
+   "hz": 430
+  },
+  {
+   "name": "415 Hz (baroque)",
+   "hz": 415
+  },
+  {
+   "name": "466 Hz (Chorton)",
+   "hz": 466
+  }
+ ]
+}
