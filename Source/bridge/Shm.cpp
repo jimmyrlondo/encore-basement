@@ -8,6 +8,8 @@
 #include <windows.h>
 #include <cstdio>
 #include <cstring>
+#include <string>
+#include <thread>
 
 namespace bridgeos
 {
@@ -106,4 +108,32 @@ namespace bridgeos
     }
 
     unsigned long currentProcessId() { return GetCurrentProcessId(); }
+
+    void hideWindowsWhileScanning (int giveUpMs, const wchar_t* flagFile)
+    {
+        std::thread ([giveUpMs, flag = std::wstring (flagFile != nullptr ? flagFile : L"")]
+        {
+            struct Search { DWORD pid; int hidden; };
+            DWORD firstSeen = 0;
+            for (;;)
+            {
+                Sleep (25);
+                Search s { GetCurrentProcessId(), 0 };
+                EnumWindows ([] (HWND h, LPARAM p) -> BOOL
+                {
+                    auto* s = reinterpret_cast<Search*> (p);
+                    DWORD owner = 0;
+                    GetWindowThreadProcessId (h, &owner);
+                    if (owner == s->pid && IsWindowVisible (h)) { ShowWindowAsync (h, SW_HIDE); ++s->hidden; }
+                    return TRUE;
+                }, (LPARAM) &s);
+                if (s.hidden > 0 && firstSeen == 0) firstSeen = GetTickCount();
+                if (firstSeen != 0 && GetTickCount() - firstSeen > (DWORD) giveUpMs)
+                {
+                    if (! flag.empty()) if (FILE* f = _wfopen (flag.c_str(), L"w")) std::fclose (f);
+                    TerminateProcess (GetCurrentProcess(), 3);
+                }
+            }
+        }).detach();
+    }
 }

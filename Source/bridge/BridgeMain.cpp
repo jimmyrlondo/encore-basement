@@ -351,6 +351,7 @@ public:
         args.removeEmptyStrings();
         if (args.size() >= 3 && args[0] == "--scan")
         {
+            bridgeos::hideWindowsWhileScanning (4000, nullptr);
             setApplicationReturnValue (scan (args[1], juce::File (args[2])));
             quit();
             return;

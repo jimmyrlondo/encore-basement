@@ -545,31 +545,141 @@ private:
     }
 };
 
-/** Transport > Metronome Settings: how loud, accent on beat one, when it plays, count-in */
+/** Metronome sounds, made here (no sample files to ship): each sound in two versions, one
+    for the first beat of the bar and one for the rest. They're written once to
+    "Click sounds" in Studio's settings folder and handed to the engine. */
+namespace clicks
+{
+    inline const juce::StringArray& sounds()
+    {
+        static const juce::StringArray s { "Classic", "Woodblock", "Cowbell", "Clave", "Hi-hat", "Rimshot", "Beep", "Soft tick" };
+        return s;
+    }
+    inline const juce::StringArray& accents()
+    {
+        static const juce::StringArray a { "Higher click on beat 1", "Louder click on beat 1", "Different sound on beat 1 (cowbell)", "Same click on every beat" };
+        return a;
+    }
+    constexpr double fs = 48000.0;
+
+    /** One click: big is the beat-one version (higher, when the accent is "higher") */
+    inline juce::AudioBuffer<float> make (int sound, bool higher)
+    {
+        const double up = higher ? 1.5 : 1.0;
+        const int n = (int) (fs * 0.25);
+        juce::AudioBuffer<float> b (1, n);
+        b.clear();
+        auto* d = b.getWritePointer (0);
+        juce::Random r (sound * 7 + (higher ? 1 : 0));
+        double hp = 0, last = 0;
+        for (int i = 0; i < n; ++i)
+        {
+            const double t = i / fs, tau = juce::MathConstants<double>::twoPi * t;
+            double v = 0;
+            switch (sound)
+            {
+                case 0: v = std::sin (tau * 1000.0 * up) * std::exp (-t / 0.012); break;                                          // classic blip
+                case 1: v = (std::sin (tau * 820.0 * up) + 0.5 * std::sin (tau * 2210.0 * up)) * std::exp (-t / 0.022)          // woodblock
+                            + (r.nextFloat() * 2 - 1) * 0.3 * std::exp (-t / 0.002); break;
+                case 2:                                                                                                           // cowbell
+                {
+                    auto sq = [&] (double f) { return std::sin (tau * f) > 0 ? 1.0 : -1.0; };
+                    v = 0.5 * (sq (545.0 * up) + sq (815.0 * up)) * (0.75 * std::exp (-t / 0.035) + 0.25 * std::exp (-t / 0.18));
+                    hp = 0.6 * (hp + v - last); last = v; v = hp;   // takes the boom out
+                    break;
+                }
+                case 3: v = std::sin (tau * 2500.0 * up) * std::exp (-t / 0.018); break;                                         // clave
+                case 4:                                                                                                           // hi-hat
+                {
+                    const double x = r.nextFloat() * 2 - 1;
+                    hp = 0.7 * (hp + x - last); last = x;
+                    v = hp * std::exp (-t / (higher ? 0.06 : 0.03));
+                    break;
+                }
+                case 5: v = 0.6 * (r.nextFloat() * 2 - 1) * std::exp (-t / 0.008) + std::sin (tau * 1700.0 * up) * std::exp (-t / 0.03); break; // rimshot
+                case 6: v = std::sin (tau * 880.0 * up) * juce::jlimit (0.0, 1.0, std::min (t / 0.003, (0.07 - t) / 0.01)); break;        // beep
+                default: v = std::sin (tau * 1300.0 * up) * std::exp (-t / 0.006) * 0.6; break;                                        // soft tick
+            }
+            d[i] = (float) v;
+        }
+        // same loudness for every sound
+        const float peak = b.getMagnitude (0, n);
+        if (peak > 0) b.applyGain (0.8f / peak);
+        // trim the silent tail
+        int end = n;
+        while (end > 64 && std::abs (d[end - 1]) < 0.0005f) --end;
+        b.setSize (1, end, true);
+        return b;
+    }
+
+    inline juce::File folder() { return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory).getChildFile (studioProfile()).getChildFile ("Click sounds"); }
+
+    inline juce::File write (const juce::String& name, const juce::AudioBuffer<float>& audio, float gain)
+    {
+        auto f = folder().getChildFile (name + ".wav");
+        folder().createDirectory();
+        juce::AudioBuffer<float> copy (audio);
+        copy.applyGain (gain);
+        f.deleteFile();
+        juce::WavAudioFormat wav;
+        std::unique_ptr<juce::OutputStream> os (f.createOutputStream().release());
+        if (os != nullptr)
+            if (auto w = wav.createWriterFor (os, juce::AudioFormatWriterOptions().withSampleRate (fs).withNumChannels (1).withBitsPerSample (24)))
+                w->writeFromAudioSampleBuffer (copy, 0, copy.getNumSamples());
+        return f;
+    }
+
+    /** Sets the engine's click to a sound and accent (the indexes into sounds() and accents()) */
+    inline void apply (te::Engine& engine, int sound, int accent)
+    {
+        sound = juce::jlimit (0, sounds().size() - 1, sound);
+        accent = juce::jlimit (0, accents().size() - 1, accent);
+        const auto base = sounds()[sound].retainCharacters ("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz");
+        auto small = write (base + " beat", make (sound, false), accent == 1 ? 0.5f : 1.0f);
+        auto big = accent == 0 ? write (base + " bar", make (sound, true), 1.0f)
+                 : accent == 1 ? write (base + " bar", make (sound, false), 1.0f)
+                 : accent == 2 ? write (base + " bar", make (2, true), 1.0f)
+                               : small;
+        engine.getPropertyStorage().setProperty (te::SettingID::clickTrackSampleBig, big.getFullPathName());
+        engine.getPropertyStorage().setProperty (te::SettingID::clickTrackSampleSmall, small.getFullPathName());
+        te::TransportControl::restartAllTransports (engine, false);   // the click is loaded when playback starts
+    }
+}
+
+/** Transport > Metronome Settings: the sound, beat one, how loud, when it plays, count-in */
 class MetronomeComponent : public juce::Component
 {
 public:
-    MetronomeComponent (te::Edit& e) : edit (e)
+    MetronomeComponent (te::Edit& e, juce::PropertiesFile& p) : edit (e), props (p)
     {
-        for (auto* l : { &volumeL, &countL }) { hubui::styleLabel (*l); addAndMakeVisible (l); }
+        setLookAndFeel (&look.get());
+        for (auto* l : { &soundL, &accentL, &volumeL, &countL, &whenL }) { prefs::styleRowLabel (*l); addAndMakeVisible (l); }
+        sound.addItemList (clicks::sounds(), 1);
+        sound.setSelectedItemIndex (props.getIntValue ("clickSound", 0), juce::dontSendNotification);
+        accent.addItemList (clicks::accents(), 1);
+        accent.setSelectedItemIndex (edit.clickTrackEmphasiseBars.get() ? props.getIntValue ("clickAccent", 0) : 3, juce::dontSendNotification);
+        auto changed = [this]
+        {
+            props.setValue ("clickSound", sound.getSelectedItemIndex());
+            const int a = accent.getSelectedItemIndex();
+            if (a != 3) props.setValue ("clickAccent", a);
+            edit.clickTrackEmphasiseBars = a != 3;
+            clicks::apply (edit.engine, sound.getSelectedItemIndex(), a);
+        };
+        sound.onChange = changed;
+        accent.onChange = changed;
+        for (auto* c : { &sound, &accent }) addAndMakeVisible (c);
         volume.setRange (0.2, 1.0, 0.01);
         volume.setValue (edit.getClickTrackVolume(), juce::dontSendNotification);
         volume.setSliderStyle (juce::Slider::LinearHorizontal);
         volume.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
         volume.onValueChange = [this] { edit.setClickTrackVolume ((float) volume.getValue()); };
         addAndMakeVisible (volume);
-        accent.setToggleState (edit.clickTrackEmphasiseBars.get(), juce::dontSendNotification);
-        accent.onClick = [this] { edit.clickTrackEmphasiseBars = accent.getToggleState(); };
         recordingOnly.setToggleState (edit.clickTrackRecordingOnly.get(), juce::dontSendNotification);
         recordingOnly.onClick = [this] { edit.clickTrackRecordingOnly = recordingOnly.getToggleState(); };
         enabled.setToggleState (edit.clickTrackEnabled.get(), juce::dontSendNotification);
         enabled.onClick = [this] { edit.clickTrackEnabled = enabled.getToggleState(); };
-        for (auto* b : { &enabled, &accent, &recordingOnly })
-        {
-            b->setColour (juce::ToggleButton::textColourId, theme::paper);
-            b->setColour (juce::ToggleButton::tickColourId, theme::accent);
-            addAndMakeVisible (b);
-        }
+        for (auto* b : { &enabled, &recordingOnly }) addAndMakeVisible (b);
         count.addItemList ({ "No count-in", "1 beat", "2 beats", "1 bar", "2 bars" }, 1);
         auto mode = edit.getCountInMode();
         count.setSelectedId (mode == te::Edit::CountIn::none ? 1 : mode == te::Edit::CountIn::oneBeat ? 2 : mode == te::Edit::CountIn::twoBeat ? 3
@@ -579,28 +689,53 @@ public:
             const te::Edit::CountIn modes[] = { te::Edit::CountIn::none, te::Edit::CountIn::oneBeat, te::Edit::CountIn::twoBeat, te::Edit::CountIn::oneBar, te::Edit::CountIn::twoBar };
             edit.setCountInMode (modes[juce::jlimit (0, 4, count.getSelectedId() - 1)]);
         };
-        hubui::styleCombo (count);
         addAndMakeVisible (count);
-        setSize (440, 250);
+        styleBox.setText ("Sound");
+        playBox.setText ("This song");
+        for (auto* g : { &styleBox, &playBox }) { g->setInterceptsMouseClicks (false, false); addAndMakeVisible (g); g->toBack(); }
+        prefs::styleNote (note);
+        note.setText ("The sound is the same in every song. Turn the click on and off with C, or the Click button.", juce::dontSendNotification);
+        addAndMakeVisible (note);
+        ok.onClick = [this] { if (auto* d = findParentComponentOfClass<juce::DialogWindow>()) d->exitModalState (0); };
+        addAndMakeVisible (ok);
+        setSize (520, 400);
     }
+    ~MetronomeComponent() override { setLookAndFeel (nullptr); }
 
     void paint (juce::Graphics& g) override { g.fillAll (theme::surface); }
     void resized() override
     {
-        auto r = getLocalBounds().reduced (24, 20);
-        enabled.setBounds (r.removeFromTop (28)); r.removeFromTop (10);
-        auto v = r.removeFromTop (28); volumeL.setBounds (v.removeFromLeft (110)); volume.setBounds (v); r.removeFromTop (10);
-        accent.setBounds (r.removeFromTop (28)); r.removeFromTop (6);
-        recordingOnly.setBounds (r.removeFromTop (28)); r.removeFromTop (12);
-        auto c = r.removeFromTop (30); countL.setBounds (c.removeFromLeft (110)); count.setBounds (c.removeFromLeft (180));
+        auto r = getLocalBounds().reduced (18, 14);
+        ok.setBounds (r.removeFromBottom (26).removeFromRight (90));
+        r.removeFromBottom (10);
+        const int lw = 130;
+        auto rowOf = [&] (juce::Rectangle<int>& in, juce::Label& l) { auto x = in.removeFromTop (26); in.removeFromTop (8); l.setBounds (x.removeFromLeft (lw)); return x; };
+        auto s = r.removeFromTop (26 * 2 + 8 + 30 + 28);
+        styleBox.setBounds (s);
+        s = s.reduced (14, 0).withTrimmedTop (24);
+        sound.setBounds (rowOf (s, soundL).removeFromLeft (220));
+        accent.setBounds (rowOf (s, accentL).removeFromLeft (300));
+        note.setBounds (s.withTrimmedLeft (lw));
+        r.removeFromTop (12);
+        auto p = r;
+        playBox.setBounds (p);
+        p = p.reduced (14, 0).withTrimmedTop (24);
+        enabled.setBounds (p.removeFromTop (26)); p.removeFromTop (8);
+        volume.setBounds (rowOf (p, volumeL).removeFromLeft (260));
+        recordingOnly.setBounds (rowOf (p, whenL));
+        count.setBounds (rowOf (p, countL).removeFromLeft (180));
     }
 
 private:
     te::Edit& edit;
+    juce::PropertiesFile& props;
+    juce::SharedResourcePointer<prefs::DialogLookAndFeel> look;
+    juce::GroupComponent styleBox, playBox;
+    juce::ComboBox sound, accent, count;
     juce::Slider volume;
-    juce::ToggleButton enabled { "Click on" }, accent { "Accent the first beat of each bar" }, recordingOnly { "Only while recording" };
-    juce::ComboBox count;
-    juce::Label volumeL { {}, "Volume" }, countL { {}, "Count-in" };
+    juce::ToggleButton enabled { "Click on" }, recordingOnly { "Only while recording" };
+    juce::Label soundL { {}, "Click sound" }, accentL { {}, "Beat 1" }, volumeL { {}, "Volume" }, countL { {}, "Count-in" }, whenL { {}, "When" }, note;
+    juce::TextButton ok { "OK" };
 };
 
 /** The big count-in numbers over the song while the click counts you in */
@@ -933,6 +1068,7 @@ public:
         studioLog ("startup: engine ready in " + juce::String (juce::Time::getMillisecondCounterHiRes() - constructionStarted, 0) + " ms");
         registerEncorePlugins (engine);
         registerBridgedPlugins (engine);   // 32-bit plugins, through the bridge
+        if (props().containsKey ("clickSound")) clicks::apply (engine, props().getIntValue ("clickSound", 0), props().getIntValue ("clickAccent", 0));
         behaviour->songFolder = [this] { return songFile.getParentDirectory(); };
 
         commandManager.registerAllCommandsForTarget (this);
@@ -996,7 +1132,7 @@ public:
         playButton.setTooltip ("Play / stop (Space)");
         recordButton.setTooltip ("Record on the armed tracks (R)");
         loopButton.setTooltip ("Loop the selected clips, or the whole song (L)");
-        clickButton.setTooltip ("Metronome click (C)");
+        clickButton.setTooltip ("Metronome click (C). Right-click for the sound and settings");
 
         timeLabel.setFont (juce::FontOptions (22.0f, juce::Font::bold));
         barLabel.setFont (juce::FontOptions (13.0f));
@@ -1013,7 +1149,9 @@ public:
         playButton.onClick = [this] { invoke (cmdPlay); };
         recordButton.onClick = [this] { invoke (cmdRecord); };
         loopButton.onClick = [this] { invoke (cmdLoop); };
-        clickButton.onClick = [this] { invoke (cmdClick); };
+        clickButton.onClick = [this] { if (! juce::ModifierKeys::currentModifiers.isPopupMenu()) invoke (cmdClick); };
+        clickRightClick.fn = [this] { if (edit) invoke (cmdMetronome); };
+        clickButton.addMouseListener (&clickRightClick, false);
 
         StudioHooks::commands = &commandManager;
         StudioHooks::fillClipMenu = [this] (juce::PopupMenu& m, te::Clip& c) { fillClipMenu (m, c); };
@@ -1706,7 +1844,7 @@ public:
             case cmdCount2Beats:    edit->setCountInMode (te::Edit::CountIn::twoBeat); return true;
             case cmdCount1Bar:      edit->setCountInMode (te::Edit::CountIn::oneBar); return true;
             case cmdCount2Bars:     edit->setCountInMode (te::Edit::CountIn::twoBar); return true;
-            case cmdMetronome:      showDialog ("Metronome", new MetronomeComponent (*edit), this); return true;
+            case cmdMetronome:      showDialog ("Metronome", new MetronomeComponent (*edit, props()), this); return true;
             case cmdPunch:          togglePunch(); return true;
 
             case cmdAudioSetup:     showPreferences ("Audio"); return true;
@@ -1783,6 +1921,11 @@ private:
     juce::Array<juce::File> recentFiles;
 
     juce::TextButton homeButton { "|<" }, playButton { "Play" }, recordButton { "Record" }, loopButton { "Loop" }, clickButton { "Click" };
+    struct RightClick : juce::MouseListener
+    {
+        std::function<void()> fn;
+        void mouseDown (const juce::MouseEvent& e) override { if (e.mods.isPopupMenu() && fn) fn(); }
+    } clickRightClick;
     ViewTabs viewTabs;
     NoticeBar notice;
     std::function<void()> noticeAction;

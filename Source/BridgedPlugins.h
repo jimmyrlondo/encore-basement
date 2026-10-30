@@ -416,6 +416,12 @@ namespace bridged
                     return;
                 }
             }
+            if (p.getExitCode() == 3)   // it stopped to show a window (hidden before it reached the screen)
+            {
+                studioLog ("32-bit plugin skipped (it opened a window, like an activation prompt): " + path);
+                out.deleteFile();
+                return;
+            }
             if (auto xml = juce::parseXML (out))
                 for (auto* e : xml->getChildIterator())
                 {

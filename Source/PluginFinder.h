@@ -69,6 +69,9 @@ public:
     }
 
     bool isRunning() const { return isThreadRunning(); }
+
+    /** Made by a plugin-checking helper that had to hide a window and give up (see bridgeos::hideWindowsWhileScanning) */
+    static juce::File windowFlag() { return juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("Encore Studio plugin window.flag"); }
     juce::String status() const { const juce::ScopedLock sl (lock); return current; }
 
     /** Every folder Studio looks in, for the Preferences page */
@@ -244,8 +247,16 @@ private:
                     setStatus ("Finding plugins: " + scanner.getNextPluginFileThatWillBeScanned()
                                + " (" + juce::String (n + 1) + " of " + juce::String (total) + ")");
                     fileStarted = juce::jmax ((juce::uint32) 1, juce::Time::getMillisecondCounter());
+                    windowFlag().deleteFile();
+                    const auto next = scanner.getNextPluginFileThatWillBeScanned();
                     const bool more = scanner.scanNextFile (true, name);
                     fileStarted = 0;
+                    if (windowFlag().existsAsFile())   // the helper hid a window the plugin showed, then gave up on it
+                    {
+                        windowFlag().deleteFile();
+                        studioLog ("plugin skipped (it opened a window, like an activation prompt): " + next);
+                        list.addToBlacklist (next);
+                    }
                     if (setAside.exchange (false)) { again = true; break; }
                     if (! more) break;
                     ++n;

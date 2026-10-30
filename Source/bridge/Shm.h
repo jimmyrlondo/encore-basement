@@ -32,4 +32,10 @@ namespace bridgeos
     bool processHasWindow (unsigned long pid);
     void killProcess (unsigned long pid);
     unsigned long currentProcessId();
+
+    /** For a process that's only checking a plugin: any window it shows (an activation prompt, a
+        splash) is hidden straight away, so nothing flashes up on screen. If the plugin still hasn't
+        finished giveUpMs after showing one, it's waiting on that window: the flag file (if any) is
+        made and the process ends with exit code 3, so the plugin is set aside. */
+    void hideWindowsWhileScanning (int giveUpMs, const wchar_t* flagFile);
 }

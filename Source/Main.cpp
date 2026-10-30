@@ -44,7 +44,13 @@ public:
     {
         // Studio launched as its own plugin-scanning helper: no window, just scan
         if (te::PluginManager::startChildProcessPluginScan (args))
+        {
+           #if JUCE_WINDOWS
+            // a plugin's activation prompt or splash never reaches the screen (see PluginFinder)
+            bridgeos::hideWindowsWhileScanning (4000, PluginFinder::windowFlag().getFullPathName().toWideCharPointer());
+           #endif
             return;
+        }
 
         if (args.contains ("--devices"))
         {
