@@ -1175,7 +1175,7 @@ public:
         pluginFinder.onProgress = [this] (juce::String s) { statusSoft (s); };
         pluginFinder.onFinished = [this] (int found)
         {
-            statusSoft (found > 0 ? "Found " + juce::String (found) + (found == 1 ? " new plugin" : " new plugins") + ": they're in every track's Effects menu"
+            statusSoft (found > 0 ? "Found " + juce::String (found) + (found == 1 ? " new plugin" : " new plugins") + ": they're in every track's Plug-ins menu (the + in each track's Plug-ins column)"
                                   : juce::String());
             commandManager.commandStatusChanged();
         };
