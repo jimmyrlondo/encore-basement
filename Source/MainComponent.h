@@ -261,6 +261,7 @@ public:
 };
 
 
+#include "Genres.h"
 #include "Account.h"
 #include "Hub.h"
 #include "AccountUI.h"
@@ -3206,6 +3207,17 @@ private:
             rel->setProperty ("bpm", info.bpm);
             rel->setProperty ("timeSignature", info.sigText());
             rel->setProperty ("notes", info.notes);
+            // from the artist's profile: who owns the recording, and the songwriter's rights society
+            for (auto& a : account::get().artists)
+                if (a.name == info.artist)
+                {
+                    if (a.copyright.isNotEmpty())
+                        rel->setProperty ("copyright", juce::String (juce::CharPointer_UTF8 ("\xe2\x84\x97 ")) + juce::String (juce::Time::getCurrentTime().getYear()) + " " + a.copyright);
+                    if (a.pro.isNotEmpty()) rel->setProperty ("pro", a.pro);
+                    if (a.ipi.isNotEmpty()) rel->setProperty ("ipi", a.ipi);
+                    if (a.hometown.isNotEmpty()) rel->setProperty ("hometown", a.hometown);
+                    if (a.genre.contains (",")) rel->setProperty ("genres", juce::StringArray::fromTokens (a.genre, ",", {}).joinIntoString ("|"));
+                }
             rel->setProperty ("lengthSeconds", edit->getLength().inSeconds());
             rel->setProperty ("audio", base + ".wav");
             rel->setProperty ("loudness", choice.loud ? "-14 LUFS" : "as mixed");

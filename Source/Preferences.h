@@ -219,7 +219,7 @@ namespace prefs
     class RecordingPage : public Page
     {
     public:
-        RecordingPage (juce::PropertiesFile& p) : props (p)
+        RecordingPage (juce::PropertiesFile& p, te::Engine& e) : props (p), engine (e)
         {
             for (auto* l : { &offsetL, &drumsL, &countL }) { styleRowLabel (*l); addAndMakeVisible (l); }
             for (auto* l : { &offsetNote }) { styleNote (*l); addAndMakeVisible (l); }
@@ -238,8 +238,11 @@ namespace prefs
             drums.onClick = [this] { props.setValue ("drumRecordSnap", drums.getToggleState()); };
             addAndMakeVisible (drums);
             count.addItemList ({ "No count-in", "1 beat", "2 beats", "1 bar", "2 bars" }, 1);
-            count.setSelectedId (props.getIntValue ("defaultCountIn", 4), juce::dontSendNotification);
-            count.onChange = [this] { props.setValue ("defaultCountIn", count.getSelectedId()); };
+            // the engine keeps the count-in (one setting for every song)
+            static const int modes[] = { 0, 4, 3, 1, 2 };   // the list's order, as the engine numbers them (none, 1 bar, 2 bars, 2 beats, 1 beat)
+            const int now = (int) engine.getPropertyStorage().getProperty (te::SettingID::countInMode);
+            for (int i = 0; i < 5; ++i) if (modes[i] == now) count.setSelectedId (i + 1, juce::dontSendNotification);
+            count.onChange = [this] { engine.getPropertyStorage().setProperty (te::SettingID::countInMode, modes[juce::jlimit (0, 4, count.getSelectedId() - 1)]); };
             addAndMakeVisible (count);
             timing = &group ("Timing");
             midi = &group ("Drums and MIDI");
@@ -257,9 +260,10 @@ namespace prefs
         }
     private:
         juce::PropertiesFile& props;
+        te::Engine& engine;
         juce::GroupComponent* timing = nullptr;
         juce::GroupComponent* midi = nullptr;
-        juce::Label offsetL { {}, "Recording offset" }, drumsL { {}, "Drum recording" }, countL { {}, "Count-in for new songs" }, offsetNote;
+        juce::Label offsetL { {}, "Recording offset" }, drumsL { {}, "Drum recording" }, countL { {}, "Count-in before recording" }, offsetNote;
         juce::Slider offset;
         juce::ToggleButton drums;
         juce::ComboBox count;
@@ -459,7 +463,7 @@ namespace prefs
             setLookAndFeel (&look.get());
             pages.add (new GeneralPage (props));
             pages.add (new AudioPage (engine));
-            pages.add (new RecordingPage (props));
+            pages.add (new RecordingPage (props, engine));
             pages.add (new PluginsPage (props));
             pages.add (new ShortcutsPage (commands, std::move (keyName)));
             list.names = { "General", "Audio", "Recording", "Plug-ins", "Keyboard Shortcuts" };

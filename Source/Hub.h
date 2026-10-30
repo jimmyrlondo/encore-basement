@@ -116,19 +116,19 @@ public:
             e->onTextChange = [this] { if (onChange) onChange(); };
         }
 
-        genre.setEditableText (true);
-        genre.addItemList (hubui::genres(), 1);
-        genre.setTextWhenNothingSelected ("Pick or type one");
         int id = 1;
         for (auto s : { "4/4", "3/4", "6/8", "2/4", "5/4", "7/8", "9/8", "12/8" }) sig.addItem (s, id++);
         key.addItem ("Not set", 1);
         key.addItemList (hubui::keys(), 2);
-        for (auto* c : { &genre, &sig, &key })
+        for (auto* c : { &sig, &key })
         {
             hubui::styleCombo (*c);
             addAndMakeVisible (c);
             c->onChange = [this] { if (onChange) onChange(); };
         }
+        hubui::styleEditor (genre.getEditor(), "Pick or type one");
+        genre.onChange = [this] { if (onChange) onChange(); };
+        addAndMakeVisible (genre);
         set ({});
     }
 
@@ -137,7 +137,7 @@ public:
         title.setText (i.title, false);
         artist.setText (i.artist, false);
         album.setText (i.album, false);
-        genre.setText (i.genre, juce::dontSendNotification);
+        genre.setText (i.genre);
         bpm.setText (i.bpmText(), false);
         sig.setText (i.sigText(), juce::dontSendNotification);
         if (sig.getSelectedId() == 0) sig.setText (i.sigText(), juce::dontSendNotification);
@@ -171,7 +171,7 @@ public:
         title.setBounds (row (titleL));
         artist.setBounds (row (artistL));
         album.setBounds (row (albumL));
-        genre.setBounds (row (genreL).removeFromLeft (260));
+        genre.setBounds (row (genreL).removeFromLeft (340));
         auto t = row (tempoL);
         bpm.setBounds (t.removeFromLeft (70));
         bpmUnit.setBounds (t.removeFromLeft (44).withTrimmedLeft (8));
@@ -185,7 +185,12 @@ public:
     juce::TextEditor title, artist, album, bpm, notes;
 
 private:
-    juce::ComboBox genre, sig, key;
+    genres::Field genre { false };
+    juce::ComboBox sig, key;
+public:
+    /** The artist's own genres, at the top of the genre list */
+    void setGenreSuggestions (const juce::StringArray& s) { genre.suggestions = s; genre.suggestions.trim(); genre.suggestions.removeEmptyStrings(); }
+private:
     juce::Label titleL { {}, "Song title" }, artistL { {}, "Artist" }, albumL { {}, "Album / EP" }, genreL { {}, "Genre" },
                 tempoL { {}, "Tempo" }, sigL { {}, "Time sig." }, keyL { {}, "Key" }, notesL { {}, "Notes" }, bpmUnit { {}, "BPM" };
 };
@@ -586,7 +591,8 @@ public:
     {
         SongInfo blank;
         blank.title = {};
-        if (auto* a = account::get().artist()) { blank.artist = a->name; blank.genre = a->genre; }
+        if (auto* a = account::get().artist()) { blank.artist = a->name; blank.genre = a->mainGenre(); }
+        fields.setGenreSuggestions (account::get().artist() != nullptr ? juce::StringArray::fromTokens (account::get().artist()->genre, ",", {}) : juce::StringArray());
         changeWhere.setVisible (! account::get().signedIn());
         if (auto* d = engine.getDeviceManager().deviceManager.getCurrentAudioDevice()) blank.sampleRate = d->getCurrentSampleRate();
         fields.set (blank);
@@ -650,15 +656,16 @@ private:
         auto heading = [&] (const juce::String& t) { headings.add ({ 0, y, w, headingH - 10 }); headingText.add (t); y += headingH; };
         auto line = [&] (int h = rowH) { auto r = juce::Rectangle<int> (0, y, w, h); y += h + gap; return r; };
 
+        // the song first, then where it starts from, with the tracks that gives right under it
+        heading ("Song");
+        fields.setBounds (0, y, w, SongFields::heightFor());
+        y += SongFields::heightFor() + 8;
+
         heading ("Start from");
         const int cols = w > 760 ? 3 : 2, tileW = (w - (cols - 1) * 10) / cols, tileH = 62;
         for (int i = 0; i < tiles.size(); ++i)
             tiles[i]->setBounds ((i % cols) * (tileW + 10), y + (i / cols) * (tileH + 10), tileW, tileH);
         y += ((tiles.size() + cols - 1) / cols) * (tileH + 10) + 8;
-
-        heading ("Song");
-        fields.setBounds (0, y, w, SongFields::heightFor());
-        y += SongFields::heightFor() + 8;
 
         heading ("Recording");
         auto lw = SongFields::labelW;
@@ -907,7 +914,7 @@ public:
             auto i = fields.get();
             i.title = fields.title.getText();
             i.artist = a->name;
-            if (a->genre.isNotEmpty()) i.genre = a->genre;
+            if (a->genre.isNotEmpty()) i.genre = a->mainGenre();
             fields.set (i);
         }
         changeWhere.setVisible (! account::get().signedIn());

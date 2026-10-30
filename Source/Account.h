@@ -21,7 +21,36 @@ namespace account
 {
     struct Artist
     {
-        juce::String name, genre;
+        juce::String name;
+        juce::String genre;      // their genres from Apple Music's list, the main one first ("Indie Pop, Alternative")
+        juce::String hometown, members, website;
+        juce::String copyright;  // who owns the recordings, for release notes ("Sick City", or a label)
+        juce::String pro, ipi;   // the songwriter's performing rights organisation (ASCAP, BMI...) and IPI number
+
+        /** The genre new songs get */
+        juce::String mainGenre() const { return genre.upToFirstOccurrenceOf (",", false, false).trim(); }
+
+        void writeTo (juce::DynamicObject& o) const
+        {
+            o.setProperty ("name", name);
+            o.setProperty ("genre", genre);
+            for (auto [key, value] : { std::pair<const char*, const juce::String*> { "hometown", &hometown }, { "members", &members }, { "website", &website },
+                                       { "copyright", &copyright }, { "pro", &pro }, { "ipi", &ipi } })
+                if (value->isNotEmpty()) o.setProperty (key, *value);
+        }
+        static Artist from (const juce::var& v)
+        {
+            Artist a;
+            a.name = v["name"].toString().trim();
+            a.genre = v["genre"].toString();
+            a.hometown = v["hometown"].toString();
+            a.members = v["members"].toString();
+            a.website = v["website"].toString();
+            a.copyright = v["copyright"].toString();
+            a.pro = v["pro"].toString();
+            a.ipi = v["ipi"].toString();
+            return a;
+        }
     };
 
     struct Profile
@@ -51,8 +80,7 @@ namespace account
             for (auto& a : artists)
             {
                 auto* x = new juce::DynamicObject();
-                x->setProperty ("name", a.name);
-                x->setProperty ("genre", a.genre);
+                a.writeTo (*x);
                 list.add (juce::var (x));
             }
             o->setProperty ("artists", list);
@@ -71,7 +99,7 @@ namespace account
             p.label = v["label"].toString();
             if (auto* list = v["artists"].getArray())
                 for (auto& a : *list)
-                    if (a["name"].toString().trim().isNotEmpty()) p.artists.add ({ a["name"].toString().trim(), a["genre"].toString() });
+                    if (a["name"].toString().trim().isNotEmpty()) p.artists.add (Artist::from (a));
             p.current = juce::jlimit (0, juce::jmax (0, p.artists.size() - 1), (int) v["current"]);
             if (v["library"].toString().isNotEmpty()) p.library = juce::File (v["library"].toString());
             if (v["signedInWith"].toString().isNotEmpty()) p.signedInWith = v["signedInWith"].toString();
@@ -137,8 +165,7 @@ namespace library
         for (auto sub : { "Songs", "Releases", "Masters", "Live" }) dir.getChildFile (sub).createDirectory();
         auto* o = new juce::DynamicObject();
         o->setProperty ("kind", "encore-artist");
-        o->setProperty ("name", a.name);
-        o->setProperty ("genre", a.genre);
+        a.writeTo (*o);
         dir.getChildFile ("artist.json").replaceWithText (juce::JSON::toString (juce::var (o)));
         auto readme = dir.getChildFile ("What goes where.txt");
         if (! readme.existsAsFile())

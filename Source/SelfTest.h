@@ -280,12 +280,13 @@ namespace selftest
             // the template list includes the built-in starting points
             auto all = templates::all();
             auto find = [&] (const String& n) { for (auto& t : all) if (t.name == n) return t; return templates::Template {}; };
-            expect ("built-in templates", find ("Full band, live").trackNames.size() == 10 && find ("Live multitrack").allInputs
-                                           && find ("Mix stems").importStems && find ("Band, 4 inputs").needsInputs == 4);
+            expect ("built-in templates", find ("Full band").trackNames.size() == 10 && find ("Blank").trackNames.isEmpty()
+                                           && ! find ("Blank").inputs && find ("Mix stems").importStems && find ("Podcast").trackNames.size() == 3);
 
-            // a band template on a 4-input interface: drums on 1-4, overdubs back on input 1, and on a
-            // 2-input interface the drum mics wrap round onto the inputs it has
-            auto band4 = find ("Band, 4 inputs");
+            // a band layout on a 4-input interface: drums on 1-4, overdubs back on input 1, and on a
+            // 2-input interface the drum mics wrap round onto the inputs it has (a user's own layouts work this way)
+            auto band4 = templates::band ("Band, 4 inputs", "", 4,
+                     { "Kick|1|Drums", "Snare|2|Drums", "Overhead L|3|Drums", "Overhead R|4|Drums", "Bass|1", "Guitar 1|1|Guitars", "Guitar 2|1|Guitars", "Vocal|1|Vocals", "Backing vocals|2|Vocals" });
             StringArray four { "In 1", "In 2", "In 3", "In 4" }, two { "In 1", "In 2" }, used;
             expect ("template inputs: drums across all four, then overdubs on input 1",
                     band4.inputFor (3, four, used) == "In 4" && band4.inputFor (4, four, used) == "In 1" && band4.inputFor (8, four, used) == "In 2");
@@ -441,6 +442,50 @@ namespace selftest
             e->getUndoManager().undo();
             expect ("and undo brings it back", ts.getNumTempos() == 2 && ts.getNumTimeSigs() == 2);
         }
+
+        // genres are Apple Music's: its main ones, with the ones under them
+        {
+            int withMore = 0;
+            for (auto& g : genres::apple()) if (! g.more.empty()) ++withMore;
+            const auto all = genres::all();
+            expect ("genres: Apple Music's list", genres::apple().size() >= 45 && withMore >= 30 && all.size() >= 450
+                                                   && all.contains ("Hip-Hop/Rap") && all.contains ("Singer/Songwriter") && all.contains ("Polka"),
+                    String (genres::apple().size()) + " main, " + String (all.size()) + " in all");
+            expect ("genres: several in one field, main one first", genres::Field::tidy (" Indie Pop,Rock , ,Rock") == "Indie Pop, Rock");
+        }
+
+        // an artist's profile details (several genres, members, who owns the recordings, PRO) survive saving
+        {
+            account::Profile p;
+            account::Artist a1;
+            a1.name = "Sick City"; a1.genre = "Indie Pop, Alternative"; a1.hometown = "Cleveland, Ohio";
+            a1.members = "Jimmy: guitar, vocals"; a1.copyright = "Sick & Sad Records"; a1.pro = "BMI"; a1.ipi = "00123456789";
+            p.artists.add (a1);
+            auto back = account::Profile::fromVar (JSON::parse (JSON::toString (p.toVar())));
+            const auto& b = back.artists[0];
+            expect ("profile details save and load", b.mainGenre() == "Indie Pop" && b.genre == a1.genre && b.hometown == a1.hometown
+                                                       && b.members == a1.members && b.copyright == a1.copyright && b.pro == "BMI" && b.ipi == a1.ipi);
+        }
+
+        // metronome sounds: every one is made, with a different beat-one click when asked
+        {
+            auto& props = engine.getPropertyStorage();
+            bool made = true;
+            for (int s = 0; s < clicks::sounds().size(); ++s)
+            {
+                auto audio = clicks::make (s, false);
+                made = made && audio.getNumSamples() > 100 && audio.getMagnitude (0, audio.getNumSamples()) > 0.5f;
+            }
+            clicks::apply (engine, 1, 0);
+            const File big (props.getProperty (te::SettingID::clickTrackSampleBig).toString()), small (props.getProperty (te::SettingID::clickTrackSampleSmall).toString());
+            expect ("metronome sounds", made && big.existsAsFile() && small.existsAsFile() && big != small, big.getFullPathName());
+            clicks::apply (engine, 1, 3);
+            expect ("metronome: same click on every beat",
+                    props.getProperty (te::SettingID::clickTrackSampleBig).toString() == props.getProperty (te::SettingID::clickTrackSampleSmall).toString());
+            props.setProperty (te::SettingID::clickTrackSampleBig, String());
+            props.setProperty (te::SettingID::clickTrackSampleSmall, String());
+        }
+        expect ("inputs named the way people say them", inputLabel ("Input channel 3") == "Input 3" && inputLabel ("Volt 476") == "Volt 476");
 
         // the account: a label's profile survives saving, each artist gets Songs/Releases/Masters/Live,
         // a song in an artist's folder knows whose it is, and remastering keeps the earlier master

@@ -227,19 +227,12 @@ namespace templates
     inline juce::Array<Template> all()
     {
         juce::Array<Template> t;
-        t.add ({ "Blank", "Two tracks on inputs 1 and 2", { "Track 1", "Track 2" } });
+        auto blank = Template { "Blank", "Nothing at all: add tracks as you need them", {} };
+        blank.inputs = false;
+        t.add (blank);
         t.add ({ "Singer-songwriter", "Vocal and acoustic guitar", { "Vocal", "Acoustic guitar" } });
-        // bands, sized to the interface: drums first on every input, then the rest overdubbed
-        t.add (band ("Band, 2 inputs", "Drums in stereo, then each part on input 1", 2,
-                     { "Drums L|1|Drums", "Drums R|2|Drums", "Bass|1", "Guitar 1|1|Guitars", "Guitar 2|1|Guitars", "Vocal|1|Vocals", "Backing vocals|1|Vocals" }));
-        t.add (band ("Band, 4 inputs", "Kick, snare and overheads at once, then the rest one at a time", 4,
-                     { "Kick|1|Drums", "Snare|2|Drums", "Overhead L|3|Drums", "Overhead R|4|Drums", "Bass|1", "Guitar 1|1|Guitars", "Guitar 2|1|Guitars", "Vocal|1|Vocals", "Backing vocals|2|Vocals" }));
-        t.add (band ("Band, 8 inputs", "A full drum kit at once, then bass, guitars and vocals", 8,
-                     { "Kick|1|Drums", "Snare|2|Drums", "Hi-hat|3|Drums", "Tom|4|Drums", "Floor tom|5|Drums", "Overhead L|6|Drums", "Overhead R|7|Drums", "Room|8|Drums",
-                       "Bass|1", "Guitar 1|1|Guitars", "Guitar 2|2|Guitars", "Vocal|1|Vocals", "Backing vocals|2|Vocals" }));
-        t.add (band ("Full band, live", "Everyone at once, a track per input, grouped", 10,
+        t.add (band ("Full band", "Drums, bass, guitars, keys and vocals, each on its own input, grouped", 10,
                      { "Kick||Drums", "Snare||Drums", "Overhead L||Drums", "Overhead R||Drums", "Bass", "Guitar 1||Guitars", "Guitar 2||Guitars", "Keys", "Vocal||Vocals", "Backing vocals||Vocals" }));
-        t.add ({ "Live multitrack", "One track per input on your interface", {}, true });
         t.add ({ "Podcast", "Host and two guests, no click", { "Host", "Guest 1", "Guest 2" } });
         t.add ({ "Mix stems", "Bring in audio files, each on its own track", {}, false, false, true });
         for (auto& f : folder().findChildFiles (juce::File::findFiles, false, songfile::patterns))
