@@ -23,10 +23,12 @@ still open as they are.
   right-click a track, its lane or its plug-ins for what you can do there.
 - The Effects column is now Plug-ins, with names you can read and a bypass dot.
 - Selected text shows up (it was the same colour as the field).
-- The tuner: 82 instruments and 163 tunings (guitar and bass to mandolin,
+- The tuner: 85 instruments and 184 tunings (guitar and bass to mandolin,
   banjo, bouzouki, oud, lute, viols, koto and transposing horns), which string
   you're playing, a needle or strobe, any reference pitch and historical
-  temperaments. The same tuner is on the web beside Master and Live.
+  temperaments. Paired strings (12-string, mandolin, lute, bouzouki, charango,
+  tres, tiple...) show every string, octave strings included. The same tuner
+  is on the web beside Master and Live.
 - Metronome sounds (8) and how beat 1 sounds: higher, louder, a cowbell or the
   same. Right-click the Click button for its settings.
 - New Song: the song's details first, then where it starts from, with its

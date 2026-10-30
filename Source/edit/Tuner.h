@@ -1,14 +1,15 @@
 // Encore: Studio
 // Copyright (C) 2026 Encore Studio. AGPLv3 (see LICENSE).
 //
-// Window > Tuner (T): pick your instrument and tuning (82 instruments, from
+// Window > Tuner (T): pick your instrument and tuning (85 instruments, from
 // guitar and bass to bouzouki, oud, lute, viols and transposing horns; see
 // tools/tunings.py) and it shows which string you're playing and how far off
-// it is, or use it chromatically for anything with a pitch. A needle or a
+// it is, or use it chromatically for anything with a pitch. Paired and grouped
+// strings (12-string, mandolin, lute...) show every string, by course. A needle or a
 // strobe, any reference pitch (A = 415 to 466), and historical temperaments
 // (meantone, Werckmeister, just...) for early music. It listens to the
 // interface directly, so it works whether or not the song is playing, and
-// reads 28 Hz to 2.1 kHz: a five-string bass's low B to a piccolo's top.
+// reads 25 Hz to 2.1 kHz: a bass dropped to low A to a piccolo's top.
 #pragma once
 
 #include "Tunings.h"
@@ -16,7 +17,7 @@
 /** YIN pitch estimate on a block of samples (de Cheveigne & Kawahara) */
 struct TunerPitch
 {
-    static float estimate (const float* x, int n, double sampleRate, float minHz = 28.0f, float maxHz = 2100.0f)
+    static float estimate (const float* x, int n, double sampleRate, float minHz = 25.0f, float maxHz = 2100.0f)
     {
         const int tauMin = juce::jmax (2, (int) (sampleRate / maxHz)), tauMax = juce::jmin (n / 2, (int) (sampleRate / minHz));
         const int w = n - tauMax;
@@ -207,7 +208,7 @@ public:
         buffer.resize (16384, 0.0f);
         dm.deviceManager.addAudioCallback (this);
         startTimerHz (30);
-        setSize (700, 470);
+        setSize (700, 510);
     }
 
     ~TunerComponent() override
@@ -226,28 +227,45 @@ public:
         const bool inTune = have && std::abs (reading.cents) <= 3.0f;
         auto colour = ! have ? theme::muted : inTune ? Colour (0xff22c55e) : std::abs (reading.cents) <= 15.0f ? theme::solo : theme::record;
 
-        // the strings of the tuning, the one you're playing lit up (a tick once it's been in tune)
+        // the strings of the tuning, the one you're playing lit up (a tick once it's been in tune). Strings
+        // played as a pair or group sit together; two at the same pitch show once, marked x2
         if (! strings.empty())
         {
-            auto row = r.removeFromTop (48);
-            const int n = (int) strings.size(), pillW = jmin (72, (row.getWidth() - (n - 1) * 6) / n);
-            auto pills = row.withSizeKeepingCentre (n * pillW + (n - 1) * 6, 36);
-            for (int i = 0; i < n; ++i)
+            const int n = (int) strings.size(), courses = pills.empty() ? 0 : pills.back().course + 1;
+            constexpr int inner = 3, between = 10;
+            const int width = r.getWidth();
+            auto widthFor = [&] (int pillW, int from, int to)   // pills [from, to)
             {
-                auto p = pills.removeFromLeft (pillW).toFloat();
-                pills.removeFromLeft (6);
-                const bool active = reading.string == i;
-                g.setColour (active ? colour.withAlpha (0.25f) : theme::raised);
-                g.fillRoundedRectangle (p, 8.0f);
-                g.setColour (active ? colour : tuned[(size_t) i] ? Colour (0xff22c55e).withAlpha (0.7f) : theme::strong.brighter (0.2f));
-                g.drawRoundedRectangle (p.reduced (0.5f), 8.0f, active ? 2.0f : 1.0f);
-                g.setColour (active ? theme::paper : theme::text2);
-                g.setFont (FontOptions (pillW < 44 ? 12.0f : 15.0f, Font::bold));
-                g.drawText (TunerReading::name (strings[(size_t) i] + transpose()), p.toNearestInt(), Justification::centred);
-                if (tuned[(size_t) i])
+                int w = 0;
+                for (int i = from; i < to; ++i) w += pillW + (i == from ? 0 : pills[(size_t) i].course != pills[(size_t) i - 1].course ? between : inner);
+                return w;
+            };
+            // one row if the pills fit at a readable size, else two rows split between courses
+            int pillW = jmin (72, (width - (n - 1) * inner - (courses - 1) * (between - inner)) / n), split = n;
+            if (pillW < 44 && courses > 1)
+            {
+                int bestSplit = n, bestW = 0;
+                for (int s = 1; s < n; ++s)
+                    if (pills[(size_t) s].course != pills[(size_t) s - 1].course)
+                    {
+                        int w = 72;
+                        while (w > 24 && jmax (widthFor (w, 0, s), widthFor (w, s, n)) > width) --w;
+                        if (w > bestW) { bestW = w; bestSplit = s; }
+                    }
+                pillW = bestW;
+                split = bestSplit;
+            }
+            for (int rowStart : { 0, split })
+            {
+                const int rowEnd = rowStart == 0 ? split : n;
+                if (rowStart >= rowEnd) continue;
+                auto row = r.removeFromTop (44);
+                auto line = row.withSizeKeepingCentre (widthFor (pillW, rowStart, rowEnd), 36);
+                for (int i = rowStart; i < rowEnd; ++i)
                 {
-                    g.setColour (Colour (0xff22c55e));
-                    g.fillEllipse (p.getRight() - 11, p.getY() + 4, 7, 7);
+                    if (i > rowStart) line.removeFromLeft (pills[(size_t) i].course != pills[(size_t) i - 1].course ? between : inner);
+                    auto p = line.removeFromLeft (pillW).toFloat();
+                    drawPill (g, p, i, pillW, colour);
                 }
             }
             r.removeFromTop (6);
@@ -310,12 +328,46 @@ public:
         g.setColour (colour);
         g.setFont (FontOptions (17.0f, Font::bold));
         g.drawText (! have ? (strings.empty() ? "Play a note" : "Play a string") : inTune ? "In tune"
-                        : (reading.cents < 0 ? "Flat " : "Sharp ") + String (std::abs (reading.cents), 0) + " cents"
-                          + (reading.string >= 0 ? "  (string " + String ((int) strings.size() - reading.string) + ")" : String()),
+                        : (reading.cents < 0 ? "Flat " : "Sharp ") + String (std::abs (reading.cents), 0) + " cents" + whichString(),
                     r.removeFromTop (26), Justification::centred);
         g.setColour (theme::muted);
         g.setFont (FontOptions (12.5f));
         g.drawText (have ? String (hz, 1) + " Hz   (target " + String (reading.targetHz, 1) + " Hz)" : String(), r.removeFromTop (18), Justification::centred);
+    }
+
+    void drawPill (Graphics& g, juce::Rectangle<float> p, int i, int pillW, Colour colour)
+    {
+        const bool active = reading.string == i;
+        g.setColour (active ? colour.withAlpha (0.25f) : theme::raised);
+        g.fillRoundedRectangle (p, 8.0f);
+        g.setColour (active ? colour : tuned[(size_t) i] ? Colour (0xff22c55e).withAlpha (0.7f) : theme::strong.brighter (0.2f));
+        g.drawRoundedRectangle (p.reduced (0.5f), 8.0f, active ? 2.0f : 1.0f);
+        g.setColour (active ? theme::paper : theme::text2);
+        g.setFont (FontOptions (pillW < 44 ? 12.0f : 15.0f, Font::bold));
+        g.drawText (TunerReading::name (strings[(size_t) i] + transpose()), p.toNearestInt(), Justification::centred);
+        if (pills[(size_t) i].count > 1)
+        {
+            g.setColour (theme::muted);
+            g.setFont (FontOptions (10.0f, Font::bold));
+            g.drawText (String (CharPointer_UTF8 ("\xc3\x97")) + String (pills[(size_t) i].count), p.reduced (4.0f, 2.0f).toNearestInt(), Justification::bottomRight);
+        }
+        if (tuned[(size_t) i])
+        {
+            g.setColour (Colour (0xff22c55e));
+            g.fillEllipse (p.getRight() - 11, p.getY() + 4, 7, 7);
+        }
+    }
+
+    /** "  (string 6)", or for paired strings "  (course 6)" and, when the pair has two pitches, which one */
+    String whichString() const
+    {
+        if (reading.string < 0 || reading.string >= (int) pills.size()) return {};
+        auto& p = pills[(size_t) reading.string];
+        const int courses = pills.back().course + 1;
+        if (! hasCourses) return "  (string " + String (courses - p.course) + ")";
+        int low = 999, high = -1;
+        for (auto& q : pills) if (q.course == p.course) { low = jmin (low, q.note); high = jmax (high, q.note); }
+        return "  (course " + String (courses - p.course) + (low == high ? String() : p.note == high ? ", high string" : ", low string") + ")";
     }
 
     void resized() override
@@ -353,8 +405,11 @@ private:
     static constexpr int controlsH = 90;
 
     const tunings::Instrument* instrument = nullptr;
-    std::vector<int> strings;          // the chosen tuning's notes (empty: chromatic)
-    std::vector<bool> tuned;           // strings that have been in tune
+    struct Pill { int note, course, count; };
+    std::vector<Pill> pills;           // what's shown: each course's notes, a unison pair once (count 2)
+    bool hasCourses = false;
+    std::vector<int> strings;          // the pills' notes, what a pitch is matched against (empty: chromatic)
+    std::vector<bool> tuned;           // pills that have been in tune
     int inTuneFrames = 0, lastString = -1;
 
     std::atomic<int> channel { -1 };
@@ -391,8 +446,10 @@ private:
             String text = tunings::text (t.name);
             if (! t.strings.empty())
             {
+                // one name per course
                 StringArray notes;
-                for (auto n : t.strings) notes.add (TunerReading::name (n, false));
+                for (size_t s = 0, c = 0; s < t.strings.size(); s += t.courses.empty() ? 1 : (size_t) t.courses[c++])
+                    notes.add (TunerReading::name (t.strings[s], false));
                 text << "   (" << notes.joinIntoString (" ") << ")";
             }
             tuning.addItem (text, tuning.getNumItems() + 1);
@@ -408,7 +465,22 @@ private:
         props.setValue ("tunerTuning", t);
         if (instrument == nullptr || t >= (int) instrument->tunings.size()) return;
         auto& chosen = instrument->tunings[(size_t) t];
-        strings = chosen.strings;
+        pills.clear();
+        strings.clear();
+        hasCourses = ! chosen.courses.empty();
+        for (size_t s = 0, c = 0; s < chosen.strings.size(); ++c)
+        {
+            const size_t size = hasCourses ? (size_t) chosen.courses[c] : 1;
+            for (size_t k = s; k < s + size; ++k)
+            {
+                bool merged = false;
+                for (auto& p : pills)
+                    if (p.course == (int) c && p.note == chosen.strings[k]) { ++p.count; merged = true; }
+                if (! merged) pills.push_back ({ chosen.strings[k], (int) c, 1 });
+            }
+            s += size;
+        }
+        for (auto& p : pills) strings.push_back (p.note);
         tuned.assign (strings.size(), false);
         String note = tunings::text (chosen.note);
         if (transpose() != 0) note = "Shows the note you read: concert pitch " + String (transpose() > 0 ? "-" : "+") + String (std::abs (transpose())) + " semitones. " + note;

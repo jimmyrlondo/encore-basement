@@ -9,7 +9,9 @@
 #
 # Strings are written in the order you see them holding the instrument, low side
 # first (so a 5-string banjo's short 5th string comes first). Pitches use
-# scientific names (A4 = 440 Hz). "transpose" is for horns and reeds: the written
+# scientific names (A4 = 440 Hz). Strings played together as a pair or group
+# (a course: 12-string, mandolin, lute, bouzouki...) are joined with "+", every
+# string written out, e.g. "E2+E3" for an octave pair, "B3+B3" for a unison pair. "transpose" is for horns and reeds: the written
 # note is the concert note plus that many semitones.
 
 import json, os
@@ -17,7 +19,8 @@ import json, os
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 def T(name, notes, note=""):
-    return {"name": name, "notes": notes.split(), "note": note}
+    courses = [c.split("+") for c in notes.split()]
+    return {"name": name, "notes": [n for c in courses for n in c], "courses": [len(c) for c in courses], "note": note}
 
 CATALOG = [
     ("Guitars", [
@@ -48,10 +51,13 @@ CATALOG = [
             T("Open G (Keith Richards 5-string)", "G2 D3 G3 B3 D4"),
         ]),
         ("Guitar (12-string)", [
-            T("Standard", "E2 A2 D3 G3 B3 E4", "Tune the main string of each pair; the octave strings sound an octave up"),
-            T("Half step down (Eb)", "Eb2 Ab2 Db3 Gb3 Bb3 Eb4"),
-            T("Drop D", "D2 A2 D3 G3 B3 E4"),
-            T("Open G", "D2 G2 D3 G3 B3 D4"),
+            T("Standard", "E2+E3 A2+A3 D3+D4 G3+G4 B3+B3 E4+E4", "The four low pairs have an octave string; the B and E pairs are two strings at the same pitch"),
+            T("Half step down (Eb)", "Eb2+Eb3 Ab2+Ab3 Db3+Db4 Gb3+Gb4 Bb3+Bb3 Eb4+Eb4"),
+            T("Whole step down (D)", "D2+D3 G2+G3 C3+C4 F3+F4 A3+A3 D4+D4"),
+            T("Drop D", "D2+D3 A2+A3 D3+D4 G3+G4 B3+B3 E4+E4"),
+            T("DADGAD", "D2+D3 A2+A3 D3+D4 G3+G4 A3+A3 D4+D4"),
+            T("Open G", "D2+D3 G2+G3 D3+D4 G3+G4 B3+B3 D4+D4"),
+            T("Open D", "D2+D3 A2+A3 D3+D4 F#3+F#4 A3+A3 D4+D4"),
         ]),
         ("Guitar (7-string)", [
             T("Standard", "B1 E2 A2 D3 G3 B3 E4"),
@@ -83,7 +89,10 @@ CATALOG = [
             T("Open E", "E2 B2 E3 G#3 B3 E4"),
             T("Open G", "D2 G2 D3 G3 B3 D4"),
         ]),
-        ("Pedal steel (10-string)", [T("E9", "B2 D3 E3 F#3 G#3 B3 E4 G#4 D#4 F#4", "Strings 10 to 1, open (no pedals)")]),
+        ("Pedal steel (10-string)", [
+            T("E9", "B2 D3 E3 F#3 G#3 B3 E4 G#4 D#4 F#4", "Strings 10 to 1, open (no pedals)"),
+            T("C6", "C2 F2 A2 C3 E3 G3 A3 C4 E4 D4", "Strings 10 to 1, open (no pedals)"),
+        ]),
     ]),
     ("Basses", [
         ("Bass (4-string)", [
@@ -93,6 +102,7 @@ CATALOG = [
             T("D standard", "D1 G1 C2 F2"),
             T("Drop C", "C1 G1 C2 F2"),
             T("BEAD", "B0 E1 A1 D2"),
+            T("Tenor (ADGC)", "A1 D2 G2 C3"),
             T("Fifths (cello-style)", "C1 G1 D2 A2"),
             T("Piccolo bass", "E2 A2 D3 G3"),
         ]),
@@ -104,12 +114,17 @@ CATALOG = [
         ("Bass (6-string)", [T("Standard", "B0 E1 A1 D2 G2 C3")]),
         ("Upright / double bass", [
             T("Orchestral (fourths)", "E1 A1 D2 G2"),
+            T("5-string (low B)", "B0 E1 A1 D2 G2"),
             T("Solo tuning", "F#1 B1 E2 A2", "A whole step up, for solo playing with solo strings"),
             T("Fifths", "C1 G1 D2 A2"),
         ]),
         ("Acoustic bass guitar", [T("Standard", "E1 A1 D2 G2")]),
         ("Guitarron (Mexican)", [T("Standard", "A1 D2 G2 C3 E2 A2", "Re-entrant: the 5th and 6th strings drop back down")]),
-        ("Bajo sexto", [T("Standard", "E2 A2 D3 G3 C4 F4")]),
+        ("Bajo sexto", [
+            T("Standard", "E1+E2 A1+A2 D2+D3 G2+G2 C3+C3 F3+F3", "About an octave below a 12-string: the three low pairs have an octave string, the top three are pairs at the same pitch"),
+            T("Solo (B and E on top)", "E1+E2 A1+A2 D2+D3 G2+G2 B2+B2 E3+E3"),
+        ]),
+        ("Bajo quinto", [T("Standard", "A1+A2 D2+D3 G2+G2 C3+C3 F3+F3")]),
     ]),
     ("Ukuleles", [
         ("Ukulele (soprano, concert, tenor)", [
@@ -124,16 +139,17 @@ CATALOG = [
     ]),
     ("Mandolins", [
         ("Mandolin", [
-            T("Standard", "G3 D4 A4 E5"),
-            T("Cross A (AEAE)", "A3 E4 A4 E5"),
-            T("Open G (GDGD)", "G3 D4 G4 D5"),
-            T("Cross G (GDGB)", "G3 D4 G4 B4"),
+            T("Standard", "G3+G3 D4+D4 A4+A4 E5+E5", "Four pairs, both strings of a pair at the same pitch"),
+            T("Cross A (AEAE)", "A3+A3 E4+E4 A4+A4 E5+E5"),
+            T("Open G (GDGD)", "G3+G3 D4+D4 G4+G4 D5+D5"),
+            T("Cross G (GDGB)", "G3+G3 D4+D4 G4+G4 B4+B4"),
         ]),
-        ("Mandola", [T("Standard", "C3 G3 D4 A4")]),
-        ("Octave mandolin / mandocello", [
-            T("Octave mandolin", "G2 D3 A3 E4"),
-            T("Mandocello", "C2 G2 D3 A3"),
+        ("Mandola", [T("Standard", "C3+C3 G3+G3 D4+D4 A4+A4")]),
+        ("Octave mandolin", [
+            T("Standard", "G2+G2 D3+D3 A3+A3 E4+E4"),
+            T("Octave strings on the low pairs", "G2+G3 D3+D4 A3+A3 E4+E4"),
         ]),
+        ("Mandocello", [T("Standard", "C2+C2 G2+G2 D3+D3 A3+A3")]),
     ]),
     ("Banjos", [
         ("Banjo (5-string)", [
@@ -141,8 +157,9 @@ CATALOG = [
             T("Double C", "G4 C3 G3 C4 D4"),
             T("Standard C", "G4 C3 G3 B3 D4"),
             T("Sawmill / modal (gDGCD)", "G4 D3 G3 C4 D4"),
+            T("Open G minor (gDGBbD)", "G4 D3 G3 Bb3 D4"),
             T("Open D", "F#4 D3 F#3 A3 D4"),
-            T("Graveyard / open D minor", "F4 D3 F3 A3 D4"),
+            T("Open D minor (aDFAD)", "A4 D3 F3 A3 D4"),
             T("Open A", "A4 E3 A3 C#4 E4"),
         ]),
         ("Tenor banjo", [
@@ -167,58 +184,80 @@ CATALOG = [
             T("Standard", "C2 G2 D3 A3"),
             T("Bach suite 5 (scordatura)", "C2 G2 D3 G3"),
         ]),
-        ("Hardanger fiddle", [T("Standard (ADAE)", "A3 D4 A4 E5", "Melody strings; tune the sympathetic strings by ear to the piece")]),
-        ("Nyckelharpa", [T("Standard", "C3 G3 C4 A4", "The melody strings")]),
+        ("Hardanger fiddle", [T("Standard (ADAE)", "A3 D4 A4 E5 B3 D4 E4 F#4 A4", "The 4 melody strings, then the 5 sympathetic strings under them (a common setup; it changes with the piece)")]),
+        ("Nyckelharpa", [T("Standard", "C3 G3 C4 A4", "The 4 played strings; tune the sympathetic strings by ear")]),
     ]),
     ("Early music", [
         ("Renaissance lute (6-course)", [
-            T("In G", "G2 C3 F3 A3 D4 G4"),
-            T("In A", "A2 D3 G3 B3 E4 A4"),
+            T("In G", "G2+G3 C3+C4 F3+F4 A3+A3 D4+D4 G4", "Single top string; octave strings on the three low pairs (the 4th is sometimes at the same pitch)"),
+            T("In A", "A2+A3 D3+D4 G3+G4 B3+B3 E4+E4 A4"),
         ]),
-        ("Renaissance lute (8-course)", [T("In G", "D2 F2 G2 C3 F3 A3 D4 G4")]),
-        ("Baroque lute (13-course)", [T("D minor", "A1 B1 C2 D2 E2 F2 G2 A2 D3 F3 A3 D4 F4", "The basses are often retuned to the key of the piece")]),
+        ("Renaissance lute (8-course)", [T("In G", "D2+D3 F2+F3 G2+G3 C3+C4 F3+F4 A3+A3 D4+D4 G4", "Single top string; octave strings on the five low pairs")]),
+        ("Baroque lute (13-course)", [T("D minor", "A1+A2 B1+B2 C2+C3 D2+D3 E2+E3 F2+F3 G2+G3 A2+A3 D3+D3 F3+F3 A3+A3 D4 F4",
+                                       "Two single top strings, octave strings on the eight basses; the basses are often retuned to the key of the piece")]),
         ("Viola da gamba", [
             T("Bass viol", "D2 G2 C3 E3 A3 D4"),
+            T("Bass viol (7-string)", "A1 D2 G2 C3 E3 A3 D4"),
             T("Tenor viol", "G2 C3 F3 A3 D4 G4"),
             T("Treble viol", "D3 G3 C4 E4 A4 D5"),
             T("Violone in G", "G1 C2 F2 A2 D3 G3"),
         ]),
-        ("Vihuela (Spanish)", [T("Standard", "G2 C3 F3 A3 D4 G4")]),
-        ("Baroque guitar (5-course)", [T("Re-entrant", "A3 D4 G3 B3 E4", "The 4th and 5th courses tuned high")]),
-        ("Hurdy-gurdy", [T("G/C", "C3 G3 G4 G4", "Drones C and G, two chanters on G")]),
+        ("Vihuela (Spanish)", [T("Standard", "G2+G2 C3+C3 F3+F3 A3+A3 D4+D4 G4", "Single top string, the others in pairs")]),
+        ("Baroque guitar (5-course)", [
+            T("Re-entrant (Spanish)", "A3+A3 D4+D4 G3+G3 B3+B3 E4", "No low strings: the 4th and 5th pairs are tuned high"),
+            T("French (bourdon on the 4th)", "A3+A3 D3+D4 G3+G3 B3+B3 E4"),
+            T("Bourdons on the 4th and 5th", "A2+A3 D3+D4 G3+G3 B3+B3 E4"),
+        ]),
+        ("Hurdy-gurdy", [T("G/C", "C3 G3 C4 G4+G4", "Drones (bourdon C, mouche G, trompette C), then the two melody strings on G. Drone setups vary by maker")]),
     ]),
     ("Folk and world strings", [
         ("Bouzouki (Irish)", [
-            T("GDAD", "G2 D3 A3 D4"),
-            T("GDAE", "G2 D3 A3 E4"),
-            T("ADAD", "A2 D3 A3 D4"),
+            T("GDAD (octave low pairs)", "G2+G3 D3+D4 A3+A3 D4+D4", "Octave strings on the G and D pairs, a common setup"),
+            T("GDAD (all pairs the same pitch)", "G2+G2 D3+D3 A3+A3 D4+D4"),
+            T("GDAE", "G2+G3 D3+D4 A3+A3 E4+E4"),
+            T("ADAD", "A2+A3 D3+D4 A3+A3 D4+D4"),
         ]),
         ("Bouzouki (Greek)", [
-            T("Tetrachordo (4-course)", "C3 F3 A3 D4"),
-            T("Trichordo (3-course)", "D3 A3 D4"),
+            T("Tetrachordo (4-course)", "C3+C4 F3+F4 A3+A3 D4+D4"),
+            T("Trichordo (3-course)", "D3+D4 A3+A3 D4+D4"),
         ]),
         ("Oud", [
-            T("Arabic", "C2 F2 A2 D3 G3 C4"),
-            T("Turkish", "E2 A2 B2 E3 A3 D4"),
+            T("Arabic", "C2 F2+F2 A2+A2 D3+D3 G3+G3 C4+C4", "Single low string, then five pairs"),
+            T("Turkish", "E2 A2+A2 B2+B2 E3+E3 A3+A3 D4+D4"),
         ]),
         ("Appalachian dulcimer", [
             T("DAd (Ionian)", "D3 A3 D4"),
+            T("DAdd (doubled melody string)", "D3 A3 D4+D4"),
             T("DAA (Mixolydian)", "D3 A3 A3"),
             T("DGD", "D3 G3 D4"),
             T("CGc", "C3 G3 C4"),
         ]),
         ("Balalaika (prima)", [T("Standard", "E4 E4 A4")]),
-        ("Domra (4-string)", [T("Standard", "G3 D4 A4 E5")]),
-        ("Charango", [T("Standard", "G4 C5 E5 A4 E5", "Re-entrant: the middle course is the lowest")]),
+        ("Domra", [
+            T("3-string", "E4 A4 D5"),
+            T("4-string", "G3 D4 A4 E5"),
+        ]),
+        ("Charango", [T("Standard", "G4+G4 C5+C5 E4+E5 A4+A4 E5+E5", "Re-entrant: the middle pair has the lowest string, an octave under its partner")]),
         ("Cavaquinho", [T("Standard (DGBD)", "D4 G4 B4 D5")]),
         ("Cuatro (Venezuelan)", [T("Standard", "A3 D4 F#4 B3", "Re-entrant: the 1st string is lower than the 2nd")]),
-        ("Cuatro (Puerto Rican)", [T("Standard", "B2 E3 A3 D4 G4")]),
-        ("Tres cubano", [T("Standard", "G4 C4 E4")]),
+        ("Cuatro (Puerto Rican)", [T("Standard", "B2+B3 E3+E4 A3+A3 D4+D4 G4+G4", "Octave strings on the B and E pairs")]),
+        ("Tres (Cuban)", [
+            T("Standard (C)", "G3+G4 C4+C4 E4+E5", "Octave strings on the G and E pairs"),
+            T("Unison top pair", "G3+G4 C4+C4 E4+E4"),
+            T("D tuning", "A3+A4 D4+D4 F#4+F#5"),
+        ]),
+        ("Tres (Puerto Rican)", [T("Standard", "G3+G4+G4 C4+C4+C4 E3+E4+E4", "Three groups of three strings")]),
         ("Vihuela (Mexican)", [T("Standard", "A3 D4 G4 B3 E4", "Re-entrant")]),
-        ("Tiple (Colombian)", [T("Standard", "D4 G4 B4 E5")]),
-        ("Bandurria", [T("Standard", "G#3 C#4 F#4 B4 E5 A5")]),
-        ("Laud (Spanish)", [T("Standard", "G#2 C#3 F#3 B3 E4 A4")]),
-        ("Kantele (5-string)", [T("Standard", "D4 E4 F4 G4 A4")]),
+        ("Tiple (Colombian)", [
+            T("Modern", "D3+D4+D4 G3+G4+G4 B3+B4+B4 E4+E4+E4", "Three groups of three: the middle string of the low three groups is an octave down"),
+            T("Traditional", "C3+C4+C4 F3+F4+F4 A3+A4+A4 D4+D4+D4"),
+        ]),
+        ("Bandurria", [T("Standard", "G#3+G#3 C#4+C#4 F#4+F#4 B4+B4 E5+E5 A5+A5")]),
+        ("Laud (Spanish)", [T("Standard", "G#2+G#2 C#3+C#3 F#3+F#3 B3+B3 E4+E4 A4+A4")]),
+        ("Kantele (5-string)", [
+            T("Minor", "D4 E4 F4 G4 A4"),
+            T("Major", "D4 E4 F#4 G4 A4"),
+        ]),
         ("Pipa", [T("Standard", "A2 D3 E3 A3")]),
         ("Zhongruan", [T("Standard", "G2 D3 G3 D4")]),
         ("Erhu", [T("Standard", "D4 A4")]),
@@ -295,6 +334,7 @@ def check():
                 for n in t["notes"]:
                     m = midi(n)
                     assert 20 <= m <= 100, (name, t["name"], n)
+                assert sum(t["courses"]) == len(t["notes"]), (name, t["name"])
 
 def cpp_str(s):
     out = '"'
@@ -310,7 +350,9 @@ def write_cpp():
     for family, instruments in CATALOG:
         lines.append("            { %s, {" % cpp_str(family))
         for name, tunings in instruments:
-            ts = ", ".join("{ %s, { %s }, %s }" % (cpp_str(t["name"]), ", ".join(str(midi(n)) for n in t["notes"]), cpp_str(t["note"])) for t in tunings)
+            ts = ", ".join("{ %s, { %s }, { %s }, %s }" % (cpp_str(t["name"]), ", ".join(str(midi(n)) for n in t["notes"]),
+                                                        ", ".join(str(c) for c in t["courses"]) if max(t["courses"], default=1) > 1 else "",
+                                                        cpp_str(t["note"])) for t in tunings)
             lines.append("                { %s, %d, { %s } }," % (cpp_str(name), TRANSPOSE.get(name, 0), ts))
         lines.append("            } },")
     temps = ",\n".join("            { %s, { %s } }" % (cpp_str(n), ", ".join("%.1ff" % v for v in offs)) for n, offs in TEMPERAMENTS)
@@ -322,7 +364,8 @@ def write_cpp():
 def write_json():
     data = {
         "families": [{"name": f, "instruments": [{"name": n, "transpose": TRANSPOSE.get(n, 0),
-                                                   "tunings": [{"name": t["name"], "notes": t["notes"], "midi": [midi(x) for x in t["notes"]], "note": t["note"]} for t in ts]}
+                                                   "tunings": [{"name": t["name"], "notes": t["notes"], "midi": [midi(x) for x in t["notes"]],
+                                                               "courses": t["courses"], "note": t["note"]} for t in ts]}
                                                   for n, ts in insts]} for f, insts in CATALOG],
         "temperaments": [{"name": n, "cents": offs} for n, offs in TEMPERAMENTS],
         "references": [{"name": n, "hz": v} for n, v in REFERENCES],
@@ -335,4 +378,5 @@ if __name__ == "__main__":
     write_json()
     n = sum(len(i) for _, i in CATALOG)
     t = sum(len(ts) for _, i in CATALOG for _, ts in i)
-    print(f"{n} instruments, {t} tunings, {len(TEMPERAMENTS)} temperaments")
+    strings = sum(len(x["notes"]) for _, i in CATALOG for _, ts in i for x in ts)
+    print(f"{n} instruments, {t} tunings, {strings} strings in all, {len(TEMPERAMENTS)} temperaments")

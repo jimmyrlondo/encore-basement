@@ -7,7 +7,9 @@
 
 namespace tunings
 {
-    struct Tuning     { const char* name; std::vector<int> strings; const char* note; };   // strings: MIDI notes (60 = C4), low side first
+    // strings: every string's MIDI note (60 = C4), low side first. courses: how many strings sound together
+    // in each pair or group, in the same order (empty: every string on its own)
+    struct Tuning     { const char* name; std::vector<int> strings; std::vector<int> courses; const char* note; };
     struct Instrument { const char* name; int transpose; std::vector<Tuning> tunings; };     // transpose: written = concert + this
     struct Family     { const char* name; std::vector<Instrument> instruments; };
     struct Temperament { const char* name; std::array<float, 12> cents; };                  // offsets from equal temperament, built on C

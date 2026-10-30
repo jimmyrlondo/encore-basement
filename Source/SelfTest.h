@@ -491,15 +491,26 @@ namespace selftest
             const tunings::Instrument* guitar = nullptr;
             const tunings::Instrument* trumpet = nullptr;
             const tunings::Instrument* bouzouki = nullptr;
+            const tunings::Instrument* twelve = nullptr;
+            bool coursesAddUp = true;
             for (auto& f : tunings::families())
                 for (auto& i : f.instruments)
                 {
                     ++instruments;
+                    if (tunings::text (i.name) == "Guitar (12-string)") twelve = &i;
+                    for (auto& t : i.tunings)
+                    {
+                        int sum = 0;
+                        for (auto c : t.courses) sum += c;
+                        coursesAddUp = coursesAddUp && (t.courses.empty() || sum == (int) t.strings.size());
+                    }
                     if (tunings::text (i.name) == "Guitar (6-string)") guitar = &i;
                     if (tunings::text (i.name) == "Trumpet / cornet (Bb)") trumpet = &i;
                     if (tunings::text (i.name) == "Bouzouki (Irish)") bouzouki = &i;
                 }
             expect ("tuner: the instrument list", instruments >= 80 && guitar != nullptr && trumpet != nullptr && bouzouki != nullptr, String (instruments) + " instruments");
+            expect ("tuner: a 12-string has all 12 strings, in 6 pairs", coursesAddUp && twelve != nullptr && twelve->tunings[0].strings.size() == 12
+                                                                            && twelve->tunings[0].courses.size() == 6 && twelve->tunings[0].strings[1] == 52);
             if (guitar != nullptr && trumpet != nullptr)
             {
                 const std::array<float, 12> equal {};
@@ -515,7 +526,7 @@ namespace selftest
             }
             bool pitches = true;
             String heard;
-            for (float f : { 41.2f, 98.0f, 659.26f, 1760.0f })
+            for (float f : { 27.5f, 41.2f, 98.0f, 659.26f, 1760.0f })
             {
                 std::vector<float> x (4096);
                 for (size_t i = 0; i < x.size(); ++i) x[i] = 0.5f * std::sin (MathConstants<float>::twoPi * f * (float) i / 24000.0f) + 0.2f * std::sin (MathConstants<float>::twoPi * 2 * f * (float) i / 24000.0f);
@@ -523,7 +534,7 @@ namespace selftest
                 heard << String (got, 2) << " ";
                 pitches = pitches && std::abs (got / f - 1.0f) < 0.003f;
             }
-            expect ("tuner: hears 41 Hz to 1.76 kHz", pitches, heard);
+            expect ("tuner: hears 27.5 Hz (a low A) to 1.76 kHz", pitches, heard);
         }
         expect ("inputs named the way people say them", inputLabel ("Input channel 3") == "Input 3" && inputLabel ("Volt 476") == "Volt 476");
 
