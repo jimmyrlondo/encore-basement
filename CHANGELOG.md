@@ -6,6 +6,37 @@
 over by themselves. New songs are saved as .encore files, and .basement songs
 still open as they are.
 
+- Tabs under the toolbar for the parts you jump between: Tracks, Mixer, Piano
+  Roll, Drum Grid and Tuner (Alt+1 to Alt+5). Add Track, Import and Export
+  moved into the File menu.
+- Keyboard shortcuts you can change: Preferences > Keyboard Shortcuts lists
+  every action (docs/SHORTCUTS.md has the defaults).
+- Preferences is a normal settings window: General, Audio, Recording,
+  Plug-ins and Keyboard Shortcuts, with OK, Cancel and Apply.
+- When the audio interface is unplugged, a notice says so (and what Studio
+  is using instead), and Studio switches back when it's plugged in again.
+- A track's input menu names the interface and its inputs, ticks the ones the
+  track records from (click again to untick), lists MIDI keyboards apart, and
+  says plainly where the track's sound goes.
+- Tracks: the selected track takes a dark shade of its own colour, Shift-click
+  selects a run of tracks, drag a track's header up or down to move it, and
+  right-click a track, its lane or its plug-ins for what you can do there.
+- The Effects column is now Plug-ins, with names you can read and a bypass dot.
+- Selected text shows up (it was the same colour as the field).
+- The tuner: 82 instruments and 163 tunings (guitar and bass to mandolin,
+  banjo, bouzouki, oud, lute, viols, koto and transposing horns), which string
+  you're playing, a needle or strobe, any reference pitch and historical
+  temperaments. The same tuner is on the web beside Master and Live.
+- Metronome sounds (8) and how beat 1 sounds: higher, louder, a cowbell or the
+  same. Right-click the Click button for its settings.
+- New Song: the song's details first, then where it starts from, with its
+  tracks right under it. Blank really is blank; the band sizes and Live
+  multitrack starting points are gone (Full band stays).
+- Your profile: several genres from Apple Music's list (what Encore uses),
+  hometown, members, website, who owns the recordings, and the songwriter's
+  PRO and IPI, which go into what's sent to Encore.
+- Plugins that open a window while being checked (an activation prompt) no
+  longer flash it on screen.
 - Who you're making music as: the first screen asks for an artist or band, or
   a record label and its artists (a profile on this computer until Encore
   sign-in arrives). Pick the artist on the start page or in the Account menu,
