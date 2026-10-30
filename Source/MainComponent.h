@@ -4141,6 +4141,16 @@ private:
         if (b == &engine.getDeviceManager()) // an interface was added, removed or switched
         {
             if (audioSetupOpen) rememberChosenAudio();
+            // the interface changed under the song: rebuild what the engine plays, so live inputs (monitoring,
+            // meters) come from the interface that's there now
+            juce::Timer::callAfterDelay (600, [safe = juce::Component::SafePointer<MainComponent> (this)]
+            {
+                if (safe && safe->edit && ! safe->edit->getTransport().isPlaying())
+                {
+                    safe->edit->getTransport().ensureContextAllocated (true);
+                    studioLog ("audio: rebuilt playback for the song after a device change");
+                }
+            });
             lastAudioRetry = juce::Time::getMillisecondCounter();   // give Windows a moment before trying it again
             juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MainComponent> (this)] { if (safe) safe->checkAudioDevice(); });
             setupInputs();

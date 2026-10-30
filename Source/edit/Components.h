@@ -581,6 +581,7 @@ private:
 
     void showInputMenu();
     void selectFromClick (const MouseEvent&);
+    void logMonitoring (te::AudioTrack&, bool on);
 
     // drag a track up or down to move it
     bool reordering = false;

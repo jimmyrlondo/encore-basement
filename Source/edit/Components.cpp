@@ -966,6 +966,7 @@ TrackHeaderComponent::TrackHeaderComponent (EditViewState& evs, te::Track::Ptr t
         armButton.onClick = [this, at]
         {
             EngineHelpers::armTrack (*at, ! EngineHelpers::isTrackArmed (*at));
+            at->edit.getTransport().ensureContextAllocated();
             armButton.setToggleState (EngineHelpers::isTrackArmed (*at), dontSendNotification);
             updateMeterSource();
         };
@@ -974,8 +975,12 @@ TrackHeaderComponent::TrackHeaderComponent (EditViewState& evs, te::Track::Ptr t
             // explicit on/off for the input feeding this track
             const bool on = ! EngineHelpers::isInputMonitoringEnabled (*at);
             for (auto instance : at->edit.getAllInputDevices())
-                if (te::isOnTargetTrack (*instance, *at, 0))
+                if (instance->getTargets().contains (at->itemID))
                     instance->getInputDevice().setMonitorMode (on ? te::InputDevice::MonitorMode::on : te::InputDevice::MonitorMode::off);
+            // the engine builds live inputs into what it plays: make sure that's running, and rebuilt with this input in it
+            at->edit.getTransport().ensureContextAllocated();
+            at->edit.restartPlayback();
+            logMonitoring (*at, on);
             updateMonitor();
             updateMeterSource();
         };
@@ -1039,6 +1044,23 @@ void TrackHeaderComponent::timerCallback()
         updateMonitor();
         updateMeterSource();
     }
+}
+
+// What monitoring is hooked up to, in the log (Help > Open Log Folder), for when you hear nothing
+void TrackHeaderComponent::logMonitoring (te::AudioTrack& at, bool on)
+{
+    auto& dm = at.edit.engine.getDeviceManager().deviceManager;
+    String s = "monitor " + String (on ? "on" : "off") + " for " + at.getName() + ": audio=" + (dm.getCurrentAudioDevice() != nullptr ? dm.getCurrentAudioDevice()->getName() : String ("none"))
+             + " activeIns=" + (dm.getCurrentAudioDevice() != nullptr ? dm.getCurrentAudioDevice()->getActiveInputChannels().toString (2) : String ("-"))
+             + " context=" + String ((int) (at.edit.getCurrentPlaybackContext() != nullptr)) + " inputs=";
+    StringArray ins;
+    for (auto instance : at.edit.getAllInputDevices())
+        if (instance->getTargets().contains (at.itemID))
+        {
+            auto& d = instance->getInputDevice();
+            ins.add (d.getName() + (d.isEnabled() ? "" : " (disabled)") + " mode=" + String ((int) d.getMonitorMode()));
+        }
+    studioLog (s + (ins.isEmpty() ? String ("none") : ins.joinIntoString (", ")));
 }
 
 // While a track is armed or monitoring, its meter shows the input (so you can
