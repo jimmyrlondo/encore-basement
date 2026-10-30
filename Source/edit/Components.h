@@ -43,7 +43,16 @@ struct StudioHooks
     static inline std::function<void (PopupMenu&, te::Clip&)> fillClipMenu;
     static inline std::function<bool (const KeyPress&)> forwardKey;   // shortcuts typed in a plugin window still work
     static inline std::function<void (te::MidiClip&)> openPianoRoll;
+    /** Right-click on a track (its header, or its lane at a time) */
+    static inline std::function<void (PopupMenu&, te::Track&, std::optional<te::TimePosition>)> fillTrackMenu;
+    static inline std::function<void()> showAudioSetup;
 };
+
+/** "Input channel 1" (what the engine calls an interface's input) as people say it: "Input 1" */
+inline String inputLabel (const String& deviceName)
+{
+    return deviceName.startsWith ("Input channel ") ? "Input " + deviceName.fromFirstOccurrenceOf ("Input channel ", false, false) : deviceName;
+}
 
 //==============================================================================
 /** The plugins to offer in menus: an older VST2 copy is left out when the same
@@ -561,12 +570,23 @@ public:
     void mouseMove (const MouseEvent& e) override;
     void resized() override;
 
+    te::Track* getTrack() const { return track.get(); }
+
 private:
     void valueTreeChanged() override {}
     void valueTreePropertyChanged (juce::ValueTree&, const juce::Identifier&) override;
 
     EditViewState& editViewState;
     te::Track::Ptr track;
+
+    void showInputMenu();
+    void selectFromClick (const MouseEvent&);
+
+    // drag a track up or down to move it
+    bool reordering = false;
+    static inline Component::SafePointer<TrackHeaderComponent> dropTarget;
+    static inline bool dropAbove = false;
+    TrackHeaderComponent* headerAt (Point<int> screenPos) const;
 
     ValueTree inputsState;
     Label trackName;
@@ -601,6 +621,7 @@ public:
 
     using TextButton::clicked;
     void clicked (const ModifierKeys& modifiers) override;
+    void paintButton (Graphics&, bool over, bool down) override;
 
 private:
     EditViewState& editViewState;

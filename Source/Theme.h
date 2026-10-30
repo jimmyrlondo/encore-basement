@@ -150,6 +150,14 @@ public:
         setColour (TextEditor::backgroundColourId, theme::raised);
         setColour (TextEditor::outlineColourId, Colours::transparentBlack);
         setColour (TextEditor::focusedOutlineColourId, theme::text2);
+        // selected text: a clear blue behind it (the default was the field's own colour, so a selection was invisible)
+        setColour (TextEditor::highlightColourId, theme::accent.withAlpha (0.45f));
+        setColour (TextEditor::highlightedTextColourId, theme::paper);
+        setColour (CaretComponent::caretColourId, theme::paper);
+        setColour (Label::textWhenEditingColourId, theme::paper);
+        setColour (Label::backgroundWhenEditingColourId, theme::raised);
+        setColour (Label::outlineWhenEditingColourId, theme::accent);
+        setColour (ListBox::textColourId, theme::paper);
         setColour (ScrollBar::thumbColourId, theme::strong);
         setColour (ListBox::backgroundColourId, theme::surface);
         setColour (AlertWindow::backgroundColourId, theme::surface);

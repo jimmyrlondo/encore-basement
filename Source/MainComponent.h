@@ -266,6 +266,7 @@ public:
 #include "AccountUI.h"
 #include "Support.h"
 #include "Versions.h"
+#include "Preferences.h"
 
 //==============================================================================
 /** Small dialogs: Song Setup and Preferences */
@@ -308,106 +309,6 @@ private:
     juce::Label format;
     juce::TextButton saveButton { "Save" }, cancelButton { "Cancel" };
     void close() { if (auto* d = findParentComponentOfClass<juce::DialogWindow>()) d->exitModalState (0); }
-};
-
-class PreferencesComponent : public juce::Component
-{
-public:
-    PreferencesComponent (juce::PropertiesFile& p) : props (p)
-    {
-        for (auto* l : { &startL, &folderL, &folderPath, &recentL })
-        {
-            hubui::styleLabel (*l);
-            addAndMakeVisible (l);
-        }
-        hubui::styleLabel (folderPath, 13.0f, theme::paper);
-        startWith.addItem ("The Hub (recent songs and New song)", 1);
-        startWith.addItem ("The last song I had open", 2);
-        startWith.setSelectedId (props.getValue ("startWith", "hub") == "last" ? 2 : 1, juce::dontSendNotification);
-        startWith.onChange = [this] { props.setValue ("startWith", startWith.getSelectedId() == 2 ? "last" : "hub"); };
-        hubui::styleCombo (startWith);
-        addAndMakeVisible (startWith);
-        changeFolder.onClick = [this]
-        {
-            auto chooser = std::make_shared<juce::FileChooser> ("Where should Encore Studio keep your songs?", juce::File (props.getValue ("projectsFolder")));
-            chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories, [this, chooser] (const juce::FileChooser&)
-            {
-                if (chooser->getResult() == juce::File()) return;
-                props.setValue ("projectsFolder", chooser->getResult().getFullPathName());
-                update();
-            });
-        };
-        clearRecent.onClick = [this] { recent::save (props, {}); update(); };
-        addPluginFolder.onClick = [this]
-        {
-            auto chooser = std::make_shared<juce::FileChooser> ("A folder with plugins in it (VST3 or VST2)", juce::File());
-            chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories, [this, chooser] (const juce::FileChooser&)
-            {
-                if (chooser->getResult() == juce::File()) return;
-                auto folders = juce::StringArray::fromLines (props.getValue ("pluginFolders"));
-                folders.removeEmptyStrings();
-                folders.addIfNotAlreadyThere (chooser->getResult().getFullPathName());
-                props.setValue ("pluginFolders", folders.joinIntoString ("\n"));
-                update();
-                if (StudioHooks::findPlugins) StudioHooks::findPlugins();
-            });
-        };
-        clearPluginFolders.onClick = [this] { props.setValue ("pluginFolders", juce::String()); update(); };
-        hubui::styleLabel (offsetL);
-        addAndMakeVisible (offsetL);
-        offset.setRange (-100.0, 100.0, 0.5);
-        offset.setValue (props.getDoubleValue ("recordOffsetMs", 0.0), juce::dontSendNotification);
-        offset.setTextValueSuffix (" ms");
-        offset.setTextBoxStyle (juce::Slider::TextBoxRight, false, 70, 24);
-        offset.setTooltip ("If recordings land a little late or early against what you played along to, move them by this much. "
-                           "Encore Studio already allows for what your interface reports, so most people leave this at 0.");
-        offset.onValueChange = [this] { props.setValue ("recordOffsetMs", offset.getValue()); if (StudioHooks::applyRecordOffset) StudioHooks::applyRecordOffset(); };
-        addAndMakeVisible (offset);
-        for (auto* b : { &changeFolder, &clearRecent, &addPluginFolder, &clearPluginFolders }) addAndMakeVisible (b);
-        hubui::styleLabel (pluginsL);
-        hubui::styleLabel (pluginFolders, 12.0f, theme::paper);
-        pluginFolders.setJustificationType (juce::Justification::topLeft);
-        addAndMakeVisible (pluginsL);
-        addAndMakeVisible (pluginFolders);
-        update();
-        setSize (660, 390);
-    }
-
-    void paint (juce::Graphics& g) override { g.fillAll (theme::surface); }
-    void resized() override
-    {
-        auto r = getLocalBounds().reduced (24);
-        auto row = [&r] { auto x = r.removeFromTop (34); r.removeFromTop (16); return x; };
-        auto a = row(); startL.setBounds (a.removeFromLeft (150)); startWith.setBounds (a);
-        auto b = row(); folderL.setBounds (b.removeFromLeft (150)); changeFolder.setBounds (b.removeFromRight (100)); folderPath.setBounds (b.withTrimmedRight (8));
-        auto c = row(); recentL.setBounds (c.removeFromLeft (150)); clearRecent.setBounds (c.removeFromLeft (180));
-        auto o = row(); offsetL.setBounds (o.removeFromLeft (150)); offset.setBounds (o.removeFromLeft (320));
-        auto d = r.removeFromTop (90);
-        pluginsL.setBounds (d.removeFromLeft (150).removeFromTop (34));
-        auto buttons = d.removeFromTop (34);
-        addPluginFolder.setBounds (buttons.removeFromLeft (170));
-        buttons.removeFromLeft (8);
-        clearPluginFolders.setBounds (buttons.removeFromLeft (120));
-        pluginFolders.setBounds (d.withTrimmedTop (6));
-    }
-
-private:
-    juce::PropertiesFile& props;
-    juce::ComboBox startWith;
-    juce::TextButton changeFolder { "Change..." }, clearRecent { "Clear recent songs" }, addPluginFolder { "Add a plugin folder..." }, clearPluginFolders { "Clear added" };
-    juce::Label startL { {}, "When Encore Studio opens" }, folderL { {}, "Songs folder" }, folderPath, recentL { {}, "Recent list" },
-                pluginsL { {}, "Plugin folders" }, pluginFolders, offsetL { {}, "Recording offset" };
-    juce::Slider offset { juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight };
-    void update()
-    {
-        folderPath.setText (props.getValue ("projectsFolder", "(not chosen yet)"), juce::dontSendNotification);
-        clearRecent.setButtonText ("Clear recent songs (" + juce::String (recent::load (props).size()) + ")");
-        auto added = juce::StringArray::fromLines (props.getValue ("pluginFolders"));
-        added.removeEmptyStrings();
-        pluginFolders.setText ("Always searched: the standard VST3 and VST2 folders. "
-                               + (added.isEmpty() ? juce::String ("Add any other folder you keep plugins in.") : "Also: " + added.joinIntoString ("; ")),
-                               juce::dontSendNotification);
-    }
 };
 
 /** File > Export > Audio Mixdown: the mix or every track (stems), whole song or loop, format and level,
@@ -869,6 +770,125 @@ public:
     void mouseUp (const juce::MouseEvent& e) override { if (onDrag) onDrag (e.getDistanceFromDragStartY(), true); }
 };
 
+//==============================================================================
+/** The row of tabs under the toolbar: the parts of Studio you jump between
+    (the tracks, the mixer, the piano roll, the drum grid, the tuner) */
+class ViewTabs : public juce::Component
+{
+public:
+    enum Tab { tracks, mixer, pianoRoll, drums, tuner, numTabs };
+    std::function<void (int)> onClick;
+    std::function<bool (int)> isActive;
+
+    static juce::String name (int t)
+    {
+        static const char* n[] = { "Tracks", "Mixer", "Piano Roll", "Drum Grid", "Tuner" };
+        return n[juce::jlimit (0, numTabs - 1, t)];
+    }
+    void setKeys (juce::StringArray k) { keys = std::move (k); repaint(); }
+
+    void paint (juce::Graphics& g) override
+    {
+        g.fillAll (theme::base);
+        g.setColour (theme::strong);
+        g.fillRect (getLocalBounds().removeFromBottom (1));
+        for (int t = 0; t < numTabs; ++t)
+        {
+            auto r = tabBounds (t);
+            const bool on = isActive && isActive (t), over = t == hover;
+            if (on || over)
+            {
+                g.setColour (on ? theme::surface : theme::raised.withAlpha (0.6f));
+                g.fillRect (r.withTrimmedBottom (on ? 0 : 1));
+            }
+            if (on)
+            {
+                g.setColour (theme::brand);
+                g.fillRect (r.removeFromTop (2));
+            }
+            g.setColour (on ? theme::paper : theme::text2);
+            g.setFont (juce::FontOptions (13.0f, on ? juce::Font::bold : juce::Font::plain));
+            auto label = tabBounds (t);
+            g.drawText (name (t), label.withTrimmedRight (keys[t].isNotEmpty() ? 26 : 0), juce::Justification::centred);
+            if (keys[t].isNotEmpty())
+            {
+                g.setColour (theme::muted);
+                g.setFont (juce::FontOptions (10.5f));
+                g.drawText (keys[t], label.removeFromRight (34), juce::Justification::centredLeft);
+            }
+        }
+    }
+    void mouseMove (const juce::MouseEvent& e) override { setHover (tabAt (e.x)); }
+    void mouseExit (const juce::MouseEvent&) override { setHover (-1); }
+    void mouseUp (const juce::MouseEvent& e) override
+    {
+        const int t = tabAt (e.x);
+        if (t >= 0 && onClick && getLocalBounds().contains (e.getPosition())) onClick (t);
+    }
+
+private:
+    juce::StringArray keys;
+    int hover = -1;
+    static constexpr int tabW = 128;
+    juce::Rectangle<int> tabBounds (int t) const { return { 12 + t * tabW, 0, tabW, getHeight() }; }
+    int tabAt (int x) const { const int t = (x - 12) / tabW; return x >= 12 && t < numTabs ? t : -1; }
+    void setHover (int t) { if (t != hover) { hover = t; repaint(); } }
+};
+
+//==============================================================================
+/** A message across the top of the song that stays until it's dealt with (the audio
+    interface was unplugged, say), with one button to fix it and an X to close it */
+class NoticeBar : public juce::Component
+{
+public:
+    NoticeBar()
+    {
+        addAndMakeVisible (action);
+        addAndMakeVisible (closeButton);
+        action.onClick = [this] { if (onAction) onAction(); };
+        closeButton.onClick = [this] { setVisible (false); if (onClosed) onClosed(); };
+        closeButton.setTooltip ("Hide this message");
+        for (auto* b : { &action, &closeButton }) b->setMouseClickGrabsKeyboardFocus (false);
+    }
+    std::function<void()> onAction, onClosed;
+
+    void show (const juce::String& message, const juce::String& actionText, juce::Colour c)
+    {
+        text = message;
+        colour = c;
+        action.setButtonText (actionText);
+        action.setVisible (actionText.isNotEmpty());
+        setVisible (true);
+        resized();
+        repaint();
+    }
+    juce::String getText() const { return isVisible() ? text : juce::String(); }
+
+    void paint (juce::Graphics& g) override
+    {
+        g.fillAll (colour.withAlpha (0.18f).overlaidWith (theme::surface.withAlpha (0.0f)));
+        g.setColour (colour);
+        g.fillRect (getLocalBounds().removeFromLeft (4));
+        g.setColour (theme::paper);
+        g.setFont (juce::FontOptions (13.5f));
+        g.drawFittedText (text, textArea, juce::Justification::centredLeft, 2);
+    }
+    void resized() override
+    {
+        auto r = getLocalBounds().reduced (12, 6);
+        closeButton.setBounds (r.removeFromRight (28));
+        r.removeFromRight (8);
+        if (action.isVisible()) { action.setBounds (r.removeFromRight (juce::jmax (110, action.getBestWidthForHeight (r.getHeight()) + 24))); r.removeFromRight (12); }
+        textArea = r.withTrimmedLeft (6);
+    }
+
+private:
+    juce::String text;
+    juce::Colour colour { theme::solo };
+    juce::Rectangle<int> textArea;
+    juce::TextButton action, closeButton { "X" };
+};
+
 class MainComponent : public juce::Component,
                       public juce::FileDragAndDropTarget,
                       public juce::KeyListener,
@@ -903,6 +923,7 @@ public:
         // Window
         cmdEffects, cmdZoomIn, cmdZoomOut, cmdZoomFit, cmdHeightSmall, cmdHeightMedium, cmdHeightLarge, cmdHeightHuge,
         cmdMixer, cmdTuner, cmdWaveBigger, cmdWaveSmaller, cmdAddFxReverb, cmdAddFxDelay, cmdAddFxEmpty, cmdAddGroup, cmdGroupSelected, cmdSendToEncore, cmdPianoRoll, cmdQuantize, cmdTransposeUp, cmdTransposeDown, cmdOctaveUp, cmdOctaveDown, cmdVelocityLouder, cmdVelocitySofter, cmdAutomationOff, cmdAutomationVolume, cmdAutomationPan, cmdAutomationCycle,
+        cmdShowTracks, cmdShowPianoRoll, cmdShowDrums,
         // Help
         cmdShortcuts, cmdGuide, cmdReport, cmdUpdates, cmdAutoUpdates, cmdLogFolder, cmdAbout
     };
@@ -916,6 +937,9 @@ public:
 
         commandManager.registerAllCommandsForTarget (this);
         commandManager.setFirstCommandTarget (this);
+        // your own shortcuts (Preferences > Keyboard Shortcuts), saved as the changes from the defaults
+        if (auto xml = juce::parseXML (props().getValue ("keyMappings")))
+            commandManager.getKeyMappings()->restoreFromXml (*xml);
         setApplicationCommandManagerToWatch (&commandManager);
         addAndMakeVisible (menuBar);
 
@@ -923,7 +947,7 @@ public:
         hub->onOpen = [this] (juce::File f) { loadSong (f); };
         hub->onOpenOther = [this] { openSong(); };
         hub->onBack = [this] { showHub (false); };
-        hub->onAudioSetup = [this] { EngineHelpers::showAudioDeviceSettings (engine); };
+        hub->onAudioSetup = [this] { showPreferences ("Audio"); };
         hub->onCreate = [this] (SongPlan p) { createSong (p); };
         hub->onSignIn = [this] { showFirstScreen(); };
         hub->onAddArtist = [this] { addArtist(); };
@@ -935,7 +959,7 @@ public:
         };
         addChildComponent (*hub);
 
-        for (auto* b : { &homeButton, &playButton, &recordButton, &loopButton, &clickButton, &addTrackButton, &importButton, &exportButton })
+        for (auto* b : { &homeButton, &playButton, &recordButton, &loopButton, &clickButton })
         {
             addChildComponent (b);
             b->setMouseClickGrabsKeyboardFocus (false);
@@ -943,10 +967,13 @@ public:
         for (auto* l : { &timeLabel, &barLabel, &tempoLabel, &tempoCaption, &statusLabel })
             addChildComponent (l);
         addChildComponent (masterMeter);
-        addChildComponent (mixerButton);
-        mixerButton.setTooltip ("Switch between the tracks and the mixer (F3)");
-        mixerButton.setMouseClickGrabsKeyboardFocus (false);
-        mixerButton.onClick = [this] { invoke (cmdMixer); };
+        addChildComponent (viewTabs);
+        viewTabs.setKeys (tabKeys());
+        viewTabs.onClick = [this] (int t) { showTab (t); };
+        viewTabs.isActive = [this] (int t) { return tabIsActive (t); };
+        addChildComponent (notice);
+        notice.onAction = [this] { if (noticeAction) noticeAction(); };
+        notice.onClosed = [this] { resized(); };
         addChildComponent (countIn);
         deviceLabel.setColour (juce::Label::textColourId, theme::muted);
         deviceLabel.setJustificationType (juce::Justification::centredRight);
@@ -962,7 +989,6 @@ public:
         snapBox.onChange = [this] { setSnap (snapBox.getSelectedId() - 1); };
         masterMeter.setTooltip ("The whole mix. Red at the end means it clipped: click to reset.");
 
-        exportButton.setColour (juce::TextButton::buttonColourId, theme::brand);
         recordButton.setColour (juce::TextButton::buttonOnColourId, theme::record);
         recordButton.setColour (juce::TextButton::textColourOnId, theme::paper);
 
@@ -971,9 +997,6 @@ public:
         recordButton.setTooltip ("Record on the armed tracks (R)");
         loopButton.setTooltip ("Loop the selected clips, or the whole song (L)");
         clickButton.setTooltip ("Metronome click (C)");
-        addTrackButton.setTooltip ("Add a track to record on (Ctrl+T)");
-        importButton.setTooltip ("Add audio files as new tracks, or drag them in (Ctrl+I)");
-        exportButton.setTooltip ("Mix the whole song down to a WAV (Ctrl+E)");
 
         timeLabel.setFont (juce::FontOptions (22.0f, juce::Font::bold));
         barLabel.setFont (juce::FontOptions (13.0f));
@@ -991,14 +1014,13 @@ public:
         recordButton.onClick = [this] { invoke (cmdRecord); };
         loopButton.onClick = [this] { invoke (cmdLoop); };
         clickButton.onClick = [this] { invoke (cmdClick); };
-        addTrackButton.onClick = [this] { invoke (cmdAddTrack); };
-        importButton.onClick = [this] { invoke (cmdImportAudio); };
-        exportButton.onClick = [this] { invoke (cmdExportMix); };
 
         StudioHooks::commands = &commandManager;
         StudioHooks::fillClipMenu = [this] (juce::PopupMenu& m, te::Clip& c) { fillClipMenu (m, c); };
         StudioHooks::forwardKey = [this] (const juce::KeyPress& k) { return keyPressed (k, nullptr); };
         StudioHooks::openPianoRoll = [this] (te::MidiClip& c) { openPianoRoll (c); };
+        StudioHooks::fillTrackMenu = [this] (juce::PopupMenu& m, te::Track& t, std::optional<te::TimePosition> at) { fillTrackMenu (m, t, at); };
+        StudioHooks::showAudioSetup = [this] { showPreferences ("Audio"); };
         addChildComponent (pianoDivider);
         pianoDivider.onDrag = [this] (int dy, bool finished)
         {
@@ -1060,6 +1082,13 @@ public:
             if (auto xml = safe->engine.getPropertyStorage().getXmlProperty (te::SettingID::audio_device_setup))
                 wanted = xml->getStringAttribute ("audioInputDeviceName", xml->getStringAttribute ("audioOutputDeviceName"));
             safe->engine.getDeviceManager().initialise();
+            if (safe->props().getValue ("chosenAudioOut").isEmpty() && safe->props().getValue ("chosenAudioIn").isEmpty())
+                if (auto xml = safe->engine.getPropertyStorage().getXmlProperty (te::SettingID::audio_device_setup))
+                {
+                    safe->props().setValue ("chosenAudioType", xml->getStringAttribute ("deviceType"));
+                    safe->props().setValue ("chosenAudioIn", xml->getStringAttribute ("audioInputDeviceName"));
+                    safe->props().setValue ("chosenAudioOut", xml->getStringAttribute ("audioOutputDeviceName"));
+                }
             auto* d = safe->engine.getDeviceManager().deviceManager.getCurrentAudioDevice();
             studioLog ("startup: audio interface opened in " + juce::String (juce::Time::getMillisecondCounterHiRes() - t, 0) + " ms: "
                          + (d ? d->getName() : juce::String ("none")) + (wanted.isNotEmpty() ? " (saved: " + wanted + ")" : juce::String()));
@@ -1097,6 +1126,8 @@ public:
         StudioHooks::fillClipMenu = nullptr;
         StudioHooks::forwardKey = nullptr;
         StudioHooks::openPianoRoll = nullptr;
+        StudioHooks::fillTrackMenu = nullptr;
+        StudioHooks::showAudioSetup = nullptr;
         pianoRoll = nullptr;
         setApplicationCommandManagerToWatch (nullptr);
         engine.getDeviceManager().removeChangeListener (this);
@@ -1151,7 +1182,8 @@ public:
         if (hubShown)
         {
             hub->setBounds (r);
-            for (auto* c : { (juce::Component*) &importButton, (juce::Component*) &addTrackButton }) c->setVisible (false);
+            viewTabs.setVisible (false);
+            notice.setVisible (false);
             return;
         }
 
@@ -1166,19 +1198,15 @@ public:
         t.removeFromLeft (8);
         place (clickButton, 56, 6);
         place (snapBox, 104, 6);
-        place (mixerButton, 66);
-        mixerButton.setToggleState (mixerShown, juce::dontSendNotification);
-        // narrow windows drop the extras first (they're all in the menus too)
-        exportButton.setBounds (t.removeFromRight (110)); t.removeFromRight (10);
-        masterMeter.setBounds (t.removeFromRight (100).withSizeKeepingCentre (100, 14)); t.removeFromRight (10);
-        const bool roomy = t.getWidth() >= 80 + 78 + 16;
-        importButton.setVisible (roomy && ! hubShown);
-        addTrackButton.setVisible (roomy && ! hubShown);
-        if (roomy)
-        {
-            importButton.setBounds (t.removeFromRight (78)); t.removeFromRight (6);
-            addTrackButton.setBounds (t.removeFromRight (80)); t.removeFromRight (10);
-        }
+        // the mix level gets whatever room is left on the right (a narrow window hides it rather than squeezing it)
+        t.removeFromLeft (8);
+        masterMeter.setVisible (edit != nullptr && t.getWidth() >= 90);
+        masterMeter.setBounds (t.removeFromRight (juce::jmin (220, t.getWidth())).withSizeKeepingCentre (juce::jmin (220, t.getWidth()), 14));
+
+        viewTabs.setVisible (edit != nullptr);
+        viewTabs.setBounds (r.removeFromTop (tabsH));
+        viewTabs.repaint();
+        if (notice.isVisible()) notice.setBounds (r.removeFromTop (44));
 
         // the piano roll takes the bottom of the window, under a bar you drag to resize it
         const bool showPiano = pianoRoll != nullptr && ! mixerShown;
@@ -1264,6 +1292,15 @@ public:
                 }
                 m.addSubMenu ("Open Recent", recentMenu, ! recentFiles.isEmpty());
                 add (cmdClose); m.addSeparator();
+                {
+                    juce::PopupMenu tracksMenu;
+                    addCommand (tracksMenu, cmdAddTrack); addCommand (tracksMenu, cmdAddDrumTrack);
+                    tracksMenu.addSubMenu ("Instrument Track", instrumentMenu(), edit != nullptr && ! hubShown);
+                    tracksMenu.addSeparator();
+                    addCommand (tracksMenu, cmdAddFxReverb); addCommand (tracksMenu, cmdAddFxDelay); addCommand (tracksMenu, cmdAddFxEmpty); addCommand (tracksMenu, cmdAddGroup);
+                    m.addSubMenu ("Add Track", tracksMenu, edit != nullptr && ! hubShown);
+                }
+                m.addSeparator();
                 add (cmdSave); add (cmdSaveAs); add (cmdSaveVersion); add (cmdVersions); add (cmdSaveTemplate); add (cmdRevert); m.addSeparator();
                 juce::PopupMenu imp; addCommand (imp, cmdImportAudio); addCommand (imp, cmdImportMidi);
                 m.addSubMenu ("Import", imp);
@@ -1347,7 +1384,8 @@ public:
                 add (cmdPreferences);
                 break;
             case 9: // Window
-                add (cmdHub); add (cmdMixer); add (cmdTuner); m.addSeparator();
+                add (cmdHub); m.addSeparator();
+                add (cmdShowTracks); add (cmdMixer); add (cmdShowPianoRoll); add (cmdShowDrums); add (cmdTuner); m.addSeparator();
                 add (cmdEffects);
                 {
                     juce::PopupMenu automation;
@@ -1391,7 +1429,7 @@ public:
         item.isEnabled = (info.flags & juce::ApplicationCommandInfo::isDisabled) == 0;
         item.isTicked = (info.flags & juce::ApplicationCommandInfo::isTicked) != 0;
         juce::StringArray keys;
-        for (auto& k : info.defaultKeypresses) keys.add (keyText (k));
+        for (auto& k : commandManager.getKeyMappings()->getKeyPressesAssignedToCommand (id)) keys.add (keyText (k));
         item.shortcutKeyDescription = keys.joinIntoString (", ");
         m.addItem (item);
     }
@@ -1418,6 +1456,7 @@ public:
         else if (c == KP::F3Key) key = "F3";
         else if (c == KP::upKey) key = "Up";
         else if (c == KP::downKey) key = "Down";
+        else if (c > 255 || c < 32) key = juce::KeyPress (c).getTextDescription();   // F-keys, page up/down, the number pad
         else key = juce::String::charToString ((juce::juce_wchar) c).toUpperCase();
         parts.add (key);
         return parts.joinIntoString ("+");
@@ -1499,7 +1538,7 @@ public:
             case cmdAddDrumTrack:   set ("Add Drum Track", "Project", songShown); key ('t', cmd | alt); break;
             case cmdDuplicateTrack: set ("Duplicate Track", "Project", songShown && selectedTrack() != nullptr); key ('d', cmd | shift); break;
             case cmdRenameTrack:    set ("Rename Track...", "Project", songShown && selectedTrack() != nullptr); key (KP::F2Key, none); break;
-            case cmdRemoveTrack:    set ("Remove Selected Track", "Project", songShown && selectedTrack() != nullptr); break;
+            case cmdRemoveTrack:    set ("Remove Selected Tracks", "Project", songShown && selectedTrack() != nullptr); break;
             case cmdSongSetup:      set ("Song Setup...", "Project", song); key ('s', shift); break;
             case cmdAddMarker:      set ("Add Marker at Playhead", "Project", songShown); key (KP::insertKey, none); break;
             case cmdPrevMarker:     set ("Previous Marker", "Transport", songShown); key (KP::leftKey, shift); break;
@@ -1541,7 +1580,7 @@ public:
             case cmdFindPlugins:    set ("Find New Plugins", "Studio", ! pluginFinder.isRunning()); break;
             case cmdReassignInputs: set ("Give Tracks Their Inputs", "Studio", songShown); break;
 
-            case cmdEffects:        set ("Effects Column", "Window", songShown); info.setTicked (editComponent && editComponent->getEditViewState().showFooters.get()); break;
+            case cmdEffects:        set ("Plug-ins Column", "Window", songShown); info.setTicked (editComponent && editComponent->getEditViewState().showFooters.get()); break;
             case cmdZoomIn:         set ("Zoom In", "Window", songShown); key ('=', cmd); break;
             case cmdZoomOut:        set ("Zoom Out", "Window", songShown); key ('-', cmd); break;
             case cmdZoomFit:        set ("Zoom to Song", "Window", songShown); key ('f', shift); break;
@@ -1549,8 +1588,11 @@ public:
             case cmdHeightMedium:   set ("Medium", "Window", songShown); break;
             case cmdHeightLarge:    set ("Large", "Window", songShown); break;
             case cmdHeightHuge:     set ("Extra Large", "Window", songShown); break;
-            case cmdMixer:          set ("Mixer", "Window", songShown); key (KP::F3Key, none); info.setTicked (mixerShown); break;
-            case cmdTuner:          set ("Tuner", "Window"); key ('t', none); break;
+            case cmdShowTracks:     set ("Tracks", "Window", songShown); key ('1', alt); info.setTicked (songShown && tabIsActive (ViewTabs::tracks)); break;
+            case cmdMixer:          set ("Mixer", "Window", songShown); key (KP::F3Key, none); key ('2', alt); info.setTicked (mixerShown); break;
+            case cmdShowPianoRoll:  set ("Piano Roll", "Window", songShown); key ('3', alt); info.setTicked (tabIsActive (ViewTabs::pianoRoll)); break;
+            case cmdShowDrums:      set ("Drum Grid", "Window", songShown); key ('4', alt); info.setTicked (tabIsActive (ViewTabs::drums)); break;
+            case cmdTuner:          set ("Tuner", "Window"); key ('t', none); key ('5', alt); break;
             case cmdWaveBigger:     set ("Taller Waveforms", "Window", songShown); key (KP::upKey, cmd | shift); break;
             case cmdWaveSmaller:    set ("Shorter Waveforms", "Window", songShown && ! waveZoomIs (1.0f)); key (KP::downKey, cmd | shift); break;
             case cmdAutomationOff:  set ("Off", "Window", songShown); info.setTicked (automationIs (0)); break;
@@ -1572,7 +1614,7 @@ public:
             case cmdVelocitySofter: set ("Softer (-10)", "MIDI", songShown && ! midiTargets().empty()); break;
             case cmdGroupSelected:  set ("Group Selected Tracks", "Project", songShown && ! selectedTracks().isEmpty()); key ('g', cmd); break;
 
-            case cmdShortcuts:      set ("Keyboard Shortcuts...", "Help"); break;
+            case cmdShortcuts:      set ("Keyboard Shortcuts...", "Help"); key ('k', cmd | alt); break;
             case cmdGuide:          set ("User Guide", "Help"); break;
             case cmdReport:         set ("Report a Problem...", "Help"); break;
             case cmdUpdates:        set ("Check for Updates...", "Help"); break;
@@ -1603,7 +1645,7 @@ public:
             case cmdImportLive:     importLiveRecording(); return true;
             case cmdExportMix:      exportMix(); return true;
             case cmdExportZip:      exportZip(); return true;
-            case cmdPreferences:    showDialog ("Preferences", new PreferencesComponent (props()), this); return true;
+            case cmdPreferences:    showPreferences ("General"); return true;
             case cmdQuit:           juce::JUCEApplication::getInstance()->systemRequestedQuit(); return true;
 
             case cmdUndo:           edit->getUndoManager().undo(); return true;
@@ -1630,7 +1672,7 @@ public:
             case cmdAddDrumTrack:   addDrumTrack(); return true;
             case cmdDuplicateTrack: duplicateTrack(); return true;
             case cmdRenameTrack:    renameTrack(); return true;
-            case cmdRemoveTrack:    if (auto t = selectedTrack()) { edit->deleteTrack (t); selectionManager.deselectAll(); } return true;
+            case cmdRemoveTrack:    removeSelectedTracks(); return true;
             case cmdSongSetup:      songSetup(); return true;
             case cmdAddMarker:      markers::add (*edit, edit->getTransport().getPosition()); status ("Marker added: double-click it on the ruler to rename, right-click for quick names"); return true;
             case cmdPrevMarker:     edit->getTransport().setPosition (markers::next (*edit, edit->getTransport().getPosition(), -1)); return true;
@@ -1648,7 +1690,7 @@ public:
             case cmdShowSongFolder: songFile.revealToUser(); return true;
             case cmdShowRecordings: revealFolder ("Recordings"); return true;
             case cmdShowAudio:      revealFolder ("Audio"); return true;
-            case cmdChangeProjectsFolder: showDialog ("Preferences", new PreferencesComponent (props()), this); return true;
+            case cmdChangeProjectsFolder: showPreferences ("General"); return true;
 
             case cmdPlay:           togglePlay(); return true;
             case cmdRecord:         toggleRecord(); return true;
@@ -1667,7 +1709,7 @@ public:
             case cmdMetronome:      showDialog ("Metronome", new MetronomeComponent (*edit), this); return true;
             case cmdPunch:          togglePunch(); return true;
 
-            case cmdAudioSetup:     EngineHelpers::showAudioDeviceSettings (engine); return true;
+            case cmdAudioSetup:     showPreferences ("Audio"); return true;
             case cmdPlugins:        showPluginList(); return true;
             case cmdFindPlugins:    startPluginSearch(); return true;
             case cmdReassignInputs: assignInputs (true); return true;
@@ -1681,6 +1723,9 @@ public:
             case cmdHeightLarge:    setAllTrackHeights (150); return true;
             case cmdHeightHuge:     setAllTrackHeights (260); return true;
             case cmdMixer:          showMixer (! mixerShown); return true;
+            case cmdShowTracks:     showTab (ViewTabs::tracks); return true;
+            case cmdShowPianoRoll:  showTab (ViewTabs::pianoRoll); return true;
+            case cmdShowDrums:      showTab (ViewTabs::drums); return true;
             case cmdTuner:          showTuner(); return true;
             case cmdWaveBigger:     setWaveZoom (2.0f); return true;
             case cmdWaveSmaller:    setWaveZoom (0.5f); return true;
@@ -1708,7 +1753,7 @@ public:
             case cmdVelocitySofter: editNotes ("Note velocity", [] (te::MidiClip& c, juce::Array<te::MidiNote*> n) { midiedit::velocity (c, n, -1, -10); }); return true;
             case cmdGroupSelected:  addGroup (selectedTracks()); return true;
 
-            case cmdShortcuts:      showShortcuts(); return true;
+            case cmdShortcuts:      showPreferences ("Keyboard Shortcuts"); return true;
             case cmdGuide:          url ("https://github.com/jimmyrlondo/encore-studio#readme"); return true;
             case cmdReport:         showReport(); return true;
             case cmdUpdates:        checkForUpdates (true); return true;
@@ -1737,8 +1782,11 @@ private:
     bool hubShown = false;
     juce::Array<juce::File> recentFiles;
 
-    juce::TextButton homeButton { "|<" }, playButton { "Play" }, recordButton { "Record" }, loopButton { "Loop" }, clickButton { "Click" },
-                     addTrackButton { "+ Track" }, importButton { "Import" }, exportButton { "Export mix" };
+    juce::TextButton homeButton { "|<" }, playButton { "Play" }, recordButton { "Record" }, loopButton { "Loop" }, clickButton { "Click" };
+    ViewTabs viewTabs;
+    NoticeBar notice;
+    std::function<void()> noticeAction;
+    static constexpr int tabsH = 32;
     juce::Label timeLabel { {}, "0:00.0" }, barLabel { {}, "Bar 1.1" }, tempoLabel { {}, "120" }, tempoCaption { {}, "BPM" }, statusLabel;
     LevelMeter masterMeter { LevelMeter::Orientation::horizontal };
     std::unique_ptr<MixerComponent> mixer;
@@ -1747,7 +1795,6 @@ private:
     int pianoRollH = 320;
     std::optional<int> dragStartHeight;
     bool mixerShown = false;
-    juce::TextButton mixerButton { "Mixer" };
     juce::ComboBox snapBox;
     juce::Label deviceLabel;
     CountInOverlay countIn;
@@ -1780,7 +1827,7 @@ private:
         if (show) hub->refresh (edit ? songTitle() : juce::String());
         const bool tools = ! show && edit != nullptr;
         for (auto* c : std::initializer_list<juce::Component*> { &homeButton, &playButton, &recordButton, &loopButton, &clickButton,
-                                                                 &exportButton, &timeLabel, &barLabel, &tempoLabel, &tempoCaption, &masterMeter, &snapBox, &mixerButton })
+                                                                 &timeLabel, &barLabel, &tempoLabel, &tempoCaption, &masterMeter, &snapBox, &viewTabs })
             c->setVisible (tools);
         if (editComponent) editComponent->setVisible (! show && ! mixerShown);
         if (mixer) mixer->setVisible (! show && mixerShown);
@@ -2412,6 +2459,130 @@ private:
             status ("Duplicated " + src->getName());
     }
 
+    /** Every selected track (groups and FX tracks too), in the song's order */
+    juce::Array<te::AudioTrack*> selectedTracksAll()
+    {
+        juce::Array<te::AudioTrack*> out;
+        if (! edit) return out;
+        for (auto* t : te::getAudioTracks (*edit)) if (selectionManager.isSelected (t)) out.add (t);
+        return out;
+    }
+
+    void removeSelectedTracks()
+    {
+        auto tracks = selectedTracksAll();
+        if (tracks.isEmpty()) if (auto t = selectedTrack()) tracks.add (t);
+        if (tracks.isEmpty()) return;
+        edit->getUndoManager().beginNewTransaction ("Remove tracks");
+        selectionManager.deselectAll();
+        for (auto* t : tracks) edit->deleteTrack (t);
+        status ("Removed " + juce::String (tracks.size()) + (tracks.size() == 1 ? " track" : " tracks") + " (Ctrl+Z brings them back)");
+    }
+
+    /** Moves the selected tracks one place up (-1) or down (1) */
+    void nudgeTracks (int direction)
+    {
+        auto tracks = selectedTracksAll();
+        if (tracks.isEmpty()) return;
+        auto all = te::getAudioTracks (*edit);
+        edit->getUndoManager().beginNewTransaction ("Move track");
+        if (direction < 0)
+        {
+            const int first = all.indexOf (tracks.getFirst());
+            if (first <= 0) return;
+            auto* before = first >= 2 ? all[first - 2] : nullptr;
+            for (auto* t : tracks) { edit->moveTrack (t, te::TrackInsertPoint (nullptr, before)); before = t; }
+        }
+        else
+        {
+            const int last = all.indexOf (tracks.getLast());
+            if (last < 0 || last + 1 >= all.size()) return;
+            te::Track* before = all[last + 1];
+            for (auto* t : tracks) { edit->moveTrack (t, te::TrackInsertPoint (nullptr, before)); before = t; }
+        }
+    }
+
+    /** Right-click on a track: what you can do to it (and, on its lane, at that spot in the song) */
+    void fillTrackMenu (juce::PopupMenu& m, te::Track& track, std::optional<te::TimePosition> at)
+    {
+        if (! edit) return;
+        auto* t = dynamic_cast<te::AudioTrack*> (&track);
+        const int count = juce::jmax (1, selectedTracksAll().size());
+        juce::Component::SafePointer<MainComponent> safe (this);
+        te::Track::Ptr keep (&track);
+
+        if (at)
+        {
+            const auto pos = *at;
+            const auto bb = edit->tempoSequence.toBarsAndBeats (pos);
+            m.addSectionHeader ("At bar " + juce::String (bb.bars + 1) + "." + juce::String (bb.getWholeBeats() + 1));
+            m.addItem ("Paste Here", ! clipboard.isEmpty() && t != nullptr, false, [safe, pos, t] { if (safe) safe->pasteClips (pos, t); });
+            m.addItem ("Move the Playhead Here", [safe, pos] { if (safe) safe->edit->getTransport().setPosition (pos); });
+            m.addItem ("Add a Marker Here", [safe, pos] { if (safe) markers::add (*safe->edit, pos); });
+            m.addItem ("Tempo or Time Signature Change Here...", [safe, pos] { if (safe && safe->editComponent) safe->editComponent->getRuler().editTempoChange (pos); });
+            m.addSeparator();
+        }
+
+        m.addSectionHeader (count > 1 ? juce::String (count) + " tracks" : track.getName());
+        addCommand (m, cmdRenameTrack);
+        if (t != nullptr)
+        {
+            juce::PopupMenu colours;
+            for (int i = 0; i < 8; ++i)
+            {
+                const auto c = theme::trackColour (i);
+                juce::PopupMenu::Item item ("Colour " + juce::String (i + 1));
+                item.colour = c;
+                item.isTicked = track.getColour() == c;
+                item.action = [safe, c]
+                {
+                    if (safe == nullptr) return;
+                    for (auto* s : safe->selectedTracksAll()) s->setColour (c);
+                    if (safe->editComponent) safe->editComponent->repaint();
+                };
+                colours.addItem (item);
+            }
+            m.addSubMenu ("Colour", colours);
+            m.addItem ("Arm for Recording", EngineHelpers::trackHasInput (*t), EngineHelpers::isTrackArmed (*t), [t] { EngineHelpers::armTrack (*t, ! EngineHelpers::isTrackArmed (*t)); });
+            m.addItem ("Mute", true, t->isMuted (false), [safe, t]
+            {
+                const bool to = ! t->isMuted (false);
+                if (safe) for (auto* s : safe->selectedTracksAll()) s->setMute (to);
+            });
+            m.addItem ("Solo", true, t->isSolo (false), [safe, t]
+            {
+                const bool to = ! t->isSolo (false);
+                if (safe) for (auto* s : safe->selectedTracksAll()) s->setSolo (to);
+            });
+        }
+        m.addSeparator();
+        addCommand (m, cmdDuplicateTrack);
+        m.addItem ("Move Up", [safe] { if (safe) safe->nudgeTracks (-1); });
+        m.addItem ("Move Down", [safe] { if (safe) safe->nudgeTracks (1); });
+        if (count > 1) addCommand (m, cmdGroupSelected);
+        {
+            juce::PopupMenu heights;
+            for (auto id : { cmdHeightSmall, cmdHeightMedium, cmdHeightLarge, cmdHeightHuge }) addCommand (heights, id);
+            m.addSubMenu ("Track Height (all tracks)", heights);
+        }
+        m.addSeparator();
+        if (t != nullptr && drums::isDrumTrack (*t)) m.addItem ("Open the Drum Grid", [safe] { if (safe) safe->showTab (ViewTabs::drums); });
+        else if (t != nullptr && ! t->getClips().isEmpty() && dynamic_cast<te::MidiClip*> (t->getClips().getFirst()) != nullptr)
+            m.addItem ("Open the Piano Roll", [safe] { if (safe) safe->showTab (ViewTabs::pianoRoll); });
+        {
+            juce::PopupMenu add;
+            addCommand (add, cmdAddTrack); addCommand (add, cmdAddDrumTrack);
+            add.addSubMenu ("Instrument Track", instrumentMenu());
+            add.addSeparator();
+            addCommand (add, cmdAddFxReverb); addCommand (add, cmdAddFxDelay); addCommand (add, cmdAddGroup);
+            m.addSubMenu ("Add a Track Below", add);
+        }
+        addCommand (m, cmdImportAudio);
+        m.addSeparator();
+        m.addItem (count > 1 ? "Remove " + juce::String (count) + " Tracks" : juce::String ("Remove Track"), [safe] { if (safe) safe->removeSelectedTracks(); });
+        juce::ignoreUnused (keep);
+    }
+
     void renameTrack()
     {
         auto t = selectedTrack();
@@ -2690,7 +2861,6 @@ private:
     {
         if (exportQueue.isEmpty())
         {
-            exportButton.setEnabled (true);
             if (auto then = std::exchange (afterExports, nullptr)) { then (exportFailures.isEmpty()); return; }
             if (exportFailures.isEmpty()) { status ("Exported " + juce::String (exportTotal) + (exportTotal == 1 ? " file" : " files") + " to " + exportFolder.getFullPathName()); exportFolder.revealToUser(); }
             else status ("Some exports didn't work: " + exportFailures.joinIntoString ("; "));
@@ -2698,7 +2868,6 @@ private:
         }
         auto job = exportQueue.removeAndReturn (0);
         exportingWhat = job.what + (exportTotal > 1 ? " (" + juce::String (exportTotal - exportQueue.size()) + " of " + juce::String (exportTotal) + ")" : juce::String());
-        exportButton.setEnabled (false);
         currentExport = exportSong (engine, songFile, job.dest, job.options, [this, job] (juce::File out, juce::String err)
         {
             currentExport = nullptr;
@@ -2706,7 +2875,6 @@ private:
             else if (job.master) keepMaster (out);
             runNextExport();
         });
-        if (currentExport == nullptr && exportQueue.isEmpty()) exportButton.setEnabled (true);
     }
     std::shared_ptr<SongExport> currentExport;
     std::function<void (bool ok)> afterExports;
@@ -2959,14 +3127,36 @@ private:
     // Transport
     void togglePlay()
     {
-        const bool wasRecording = edit->getTransport().isRecording();
-        EngineHelpers::togglePlay (*edit);
-        if (wasRecording) save();
+        auto& tr = edit->getTransport();
+        const bool wasRecording = tr.isRecording(), wasPlaying = tr.isPlaying();
+        studioLog ("play/stop: was " + juce::String (wasRecording ? "recording" : wasPlaying ? "playing" : "stopped"));
+        if (wasRecording || wasPlaying)
+        {
+            // stopping a recording stops everything: the playhead, the click and the count-in
+            tr.stop (false, false);
+            countIn.setVisible (false);
+            if (wasRecording) save();
+            // and if something started it again straight away (a second key event), stop it again
+            juce::Timer::callAfterDelay (150, [safe = juce::Component::SafePointer<MainComponent> (this)]
+            {
+                if (safe && safe->edit && safe->edit->getTransport().isPlaying() && ! safe->edit->getTransport().isRecording())
+                {
+                    studioLog ("play/stop: was still playing after a stop, stopping again");
+                    safe->edit->getTransport().stop (false, false);
+                }
+            });
+            lastStop = juce::Time::getMillisecondCounter();
+            return;
+        }
+        // a key bounce right after a stop doesn't start it again
+        if (juce::Time::getMillisecondCounter() - lastStop < 250) { studioLog ("play/stop: ignored a second press right after stopping"); return; }
+        tr.play (false);
     }
+    juce::uint32 lastStop = 0;
     void toggleRecord()
     {
         auto& tr = edit->getTransport();
-        if (tr.isRecording()) { tr.stop (false, false); save(); return; }
+        if (tr.isRecording()) { togglePlay(); return; }
         bool anyArmed = false;
         for (auto t : te::getAudioTracks (*edit)) anyArmed = anyArmed || EngineHelpers::isTrackArmed (*t);
         if (! anyArmed) { status ("Arm a track first: the R button on the track, after choosing its input."); return; }
@@ -3347,9 +3537,204 @@ private:
         mixerShown = show;
         if (editComponent) editComponent->setVisible (! hubShown && ! show);
         if (mixer) mixer->setVisible (! hubShown && show);
-        mixerButton.setToggleState (show, juce::dontSendNotification);
+        viewTabs.repaint();
         commandManager.commandStatusChanged();
     }
+
+    /** Studio > Preferences, open on a page ("General", "Audio", "Recording", "Plug-ins", "Keyboard Shortcuts") */
+    void showPreferences (const juce::String& page)
+    {
+        if (auto* open = prefsWindow.getComponent()) { open->toFront (true); return; }
+        auto* p = new prefs::PreferencesComponent (props(), engine, commandManager, [] (const juce::KeyPress& k) { return keyText (k); }, page);
+        audioSetupOpen = true;
+        p->onClosed = [safe = juce::Component::SafePointer<MainComponent> (this)]
+        {
+            if (safe == nullptr) return;
+            safe->audioSetupOpen = false;
+            safe->checkAudioDevice();
+            safe->viewTabs.setKeys (safe->tabKeys());
+            safe->menuItemsChanged();
+        };
+        juce::DialogWindow::LaunchOptions o;
+        o.dialogTitle = "Preferences";
+        o.dialogBackgroundColour = theme::surface;
+        o.escapeKeyTriggersCloseButton = true;
+        o.useNativeTitleBar = true;
+        o.resizable = false;
+        o.componentToCentreAround = this;
+        o.content.setOwned (p);
+        if (auto* w = o.launchAsync()) { darkTitleBar (*w); prefsWindow = w; }
+    }
+    juce::Component::SafePointer<juce::DialogWindow> prefsWindow;
+
+    /** The first key of each tab's command, shown on the tab */
+    juce::StringArray tabKeys()
+    {
+        juce::StringArray out;
+        for (auto id : { (int) cmdShowTracks, (int) cmdMixer, (int) cmdShowPianoRoll, (int) cmdShowDrums, (int) cmdTuner })
+        {
+            auto keys = commandManager.getKeyMappings()->getKeyPressesAssignedToCommand (id);
+            out.add (keys.isEmpty() ? juce::String() : keyText (keys.getFirst()));
+        }
+        return out;
+    }
+
+    /** The tabs under the toolbar */
+    bool tabIsActive (int t)
+    {
+        const bool drumsOpen = pianoRoll != nullptr && dynamic_cast<DrumGrid*> (pianoRoll.get()) != nullptr;
+        switch (t)
+        {
+            case ViewTabs::tracks:    return ! mixerShown && pianoRoll == nullptr;
+            case ViewTabs::mixer:     return mixerShown;
+            case ViewTabs::pianoRoll: return ! mixerShown && pianoRoll != nullptr && ! drumsOpen;
+            case ViewTabs::drums:     return ! mixerShown && drumsOpen;
+            case ViewTabs::tuner:     return tunerWindow != nullptr && tunerWindow->isVisible();
+            default:                  return false;
+        }
+    }
+
+    /** The MIDI clip a tab opens: the selected one, else one on the selected track, else the first in the song */
+    te::MidiClip* clipForTab (bool wantDrums)
+    {
+        if (! edit) return nullptr;
+        auto fits = [wantDrums] (te::MidiClip* c)
+        {
+            auto* t = c != nullptr ? dynamic_cast<te::AudioTrack*> (c->getTrack()) : nullptr;
+            return t != nullptr && drums::isDrumTrack (*t) == wantDrums;
+        };
+        if (auto* c = selectedMidiClip(); fits (c)) return c;
+        juce::Array<te::AudioTrack*> order;
+        if (auto* t = selectedTrack()) order.add (t);
+        for (auto* t : te::getAudioTracks (*edit)) order.addIfNotAlreadyThere (t);
+        for (auto* t : order)
+            for (auto* clip : t->getClips())
+                if (auto* mc = dynamic_cast<te::MidiClip*> (clip); fits (mc)) return mc;
+        return nullptr;
+    }
+
+    void showTab (int t)
+    {
+        if (! edit || hubShown) return;
+        switch (t)
+        {
+            case ViewTabs::tracks:
+                if (pianoRoll) closePianoRoll();
+                showMixer (false);
+                break;
+            case ViewTabs::mixer:
+                showMixer (true);
+                break;
+            case ViewTabs::pianoRoll:
+            case ViewTabs::drums:
+            {
+                const bool wantDrums = t == ViewTabs::drums;
+                if (tabIsActive (t)) { closePianoRoll(); break; }
+                if (mixerShown) showMixer (false);
+                if (auto* c = clipForTab (wantDrums)) { openPianoRoll (*c, wantDrums); break; }
+                status (wantDrums ? "No drum track yet: File > Add Track > Drum Track (Ctrl+Alt+T) makes one with a beat to edit"
+                                  : "No MIDI to edit yet: File > Add Track > Instrument Track, then record or double-click in it");
+                break;
+            }
+            case ViewTabs::tuner:
+                showTuner();
+                break;
+            default: break;
+        }
+        viewTabs.repaint();
+        commandManager.commandStatusChanged();
+    }
+
+    //==============================================================================
+    // The audio interface going away (unplugged, or the cable got knocked) and coming back.
+    // The one you chose is remembered; while it's missing a notice says what Studio is
+    // using instead, and when it shows up again Studio switches back to it.
+    struct ChosenAudio { juce::String type, input, output; };
+    ChosenAudio chosenAudio()
+    {
+        return { props().getValue ("chosenAudioType"), props().getValue ("chosenAudioIn"), props().getValue ("chosenAudioOut") };
+    }
+    void rememberChosenAudio()
+    {
+        auto& dm = engine.getDeviceManager().deviceManager;
+        if (dm.getCurrentAudioDevice() == nullptr) return;
+        auto s = dm.getAudioDeviceSetup();
+        props().setValue ("chosenAudioType", dm.getCurrentAudioDeviceType());
+        props().setValue ("chosenAudioIn", s.inputDeviceName);
+        props().setValue ("chosenAudioOut", s.outputDeviceName);
+        studioLog ("audio: remembering " + dm.getCurrentAudioDeviceType() + " in=" + s.inputDeviceName + " out=" + s.outputDeviceName);
+    }
+    static juce::String friendlyDevice (const juce::String& in, const juce::String& out)
+    {
+        return in.isNotEmpty() && in != out && out.isNotEmpty() ? in + " / " + out : (out.isNotEmpty() ? out : in);
+    }
+    bool usingChosenAudio()
+    {
+        auto c = chosenAudio();
+        if (c.output.isEmpty() && c.input.isEmpty()) return true;   // nothing chosen yet: whatever's open is fine
+        auto& dm = engine.getDeviceManager().deviceManager;
+        if (dm.getCurrentAudioDevice() == nullptr) return false;
+        auto s = dm.getAudioDeviceSetup();
+        return dm.getCurrentAudioDeviceType() == c.type && s.inputDeviceName == c.input && s.outputDeviceName == c.output;
+    }
+    juce::uint32 lastAudioRetry = 0;
+    bool audioNoticeShowing = false;
+    void checkAudioDevice()
+    {
+        auto& dm = engine.getDeviceManager().deviceManager;
+        if (audioSetupOpen) return;   // you're choosing one right now
+        if (usingChosenAudio())
+        {
+            if (audioNoticeShowing)
+            {
+                audioNoticeShowing = false;
+                notice.setVisible (false);
+                resized();
+                status (friendlyDevice (chosenAudio().input, chosenAudio().output) + " is back. Check each track's input before recording.");
+                studioLog ("audio: the chosen interface is back");
+            }
+            return;
+        }
+        auto c = chosenAudio();
+        const auto name = friendlyDevice (c.input, c.output);
+        auto* d = dm.getCurrentAudioDevice();
+        if (! audioNoticeShowing)
+        {
+            audioNoticeShowing = true;
+            studioLog ("audio: " + name + " isn't open; using " + (d ? d->getName() : juce::String ("nothing")));
+            noticeAction = [this] { showPreferences ("Audio"); };
+            notice.show (name + " isn't connected, so nothing is recording or playing through it. "
+                           + (d != nullptr ? "Studio is using " + d->getName() + " for now. " : juce::String ("There's no sound right now. "))
+                           + "Plug it back in and Studio switches back on its own.",
+                         "Audio Setup...", theme::record);
+            resized();
+        }
+        // is it back? (Windows lists a plugged-in interface again within a second or two; ASIO drivers are always listed, so those get a try every few seconds)
+        const auto now = juce::Time::getMillisecondCounter();
+        if (now - lastAudioRetry < 4000) return;
+        lastAudioRetry = now;
+        for (auto* type : dm.getAvailableDeviceTypes())
+        {
+            if (type->getTypeName() != c.type) continue;
+            type->scanForDevices();
+            const bool present = (c.output.isEmpty() || type->getDeviceNames (false).contains (c.output))
+                              && (c.input.isEmpty() || type->getDeviceNames (true).contains (c.input));
+            if (! present) return;
+            if (c.type == "ASIO" && d != nullptr && dm.getCurrentAudioDeviceType() == "ASIO") return;   // never knock a working ASIO device off to probe
+            const auto before = dm.createStateXml();
+            if (dm.getCurrentAudioDeviceType() != c.type) dm.setCurrentAudioDeviceType (c.type, true);
+            auto setup = dm.getAudioDeviceSetup();
+            setup.inputDeviceName = c.input;
+            setup.outputDeviceName = c.output;
+            setup.useDefaultInputChannels = setup.useDefaultOutputChannels = true;
+            const auto err = dm.setAudioDeviceSetup (setup, true);
+            if (err.isEmpty() && usingChosenAudio()) { studioLog ("audio: switched back to " + name); return; }
+            studioLog ("audio: " + name + " is listed but didn't open (" + err + ")");
+            if (before != nullptr) dm.initialise (512, 512, before.get(), true);
+            return;
+        }
+    }
+    bool audioSetupOpen = false;
 
     /** 0 reverb (Encore Verb), 1 delay, 2 empty */
     void addFxTrack (int kind)
@@ -3600,6 +3985,9 @@ private:
     {
         if (b == &engine.getDeviceManager()) // an interface was added, removed or switched
         {
+            if (audioSetupOpen) rememberChosenAudio();
+            lastAudioRetry = juce::Time::getMillisecondCounter();   // give Windows a moment before trying it again
+            juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MainComponent> (this)] { if (safe) safe->checkAudioDevice(); });
             setupInputs();
             assignUntil = juce::Time::getMillisecondCounter() + 4000;
             if (edit) assignInputs();
@@ -3611,6 +3999,7 @@ private:
     void timerCallback() override
     {
         updateDeviceLabel();
+        if (++audioCheckTick % 10 == 0) checkAudioDevice();
         if (! edit) return;
         autosaveIfDue();
         if (assignUntil != 0 && juce::Time::getMillisecondCounter() < assignUntil + 1000) assignInputs();
@@ -3640,6 +4029,8 @@ private:
             if (tempoLabel.getText() != bpm) tempoLabel.setText (bpm, juce::dontSendNotification);
         }
     }
+
+    int audioCheckTick = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };

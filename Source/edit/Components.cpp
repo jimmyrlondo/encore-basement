@@ -930,6 +930,7 @@ TrackHeaderComponent::TrackHeaderComponent (EditViewState& evs, te::Track::Ptr t
     trackName.setEditable (false, true, false);
     trackName.setTooltip ("Double-click to rename");
     trackName.onTextChange = [this] { track->setName (trackName.getText()); };
+    trackName.addMouseListener (this, false);
 
     if (auto at = dynamic_cast<te::AudioTrack*> (track.get()))
     {
@@ -961,119 +962,7 @@ TrackHeaderComponent::TrackHeaderComponent (EditViewState& evs, te::Track::Ptr t
 
     if (auto at = dynamic_cast<te::AudioTrack*> (track.get()))
     {
-        inputButton.onClick = [this, at]
-        {
-            PopupMenu m;
-
-            // a group track: tick the tracks that play into it
-            if (groups::isGroup (*at))
-            {
-                te::AudioTrack::Ptr group (at);
-                m.addSectionHeader ("Tracks in this group");
-                for (auto t : te::getAudioTracks (at->edit))
-                {
-                    if (t == at || groups::isFxTrack (*t)) continue;
-                    te::AudioTrack::Ptr member (t);
-                    const bool in = groups::of (*t) == at;
-                    m.addItem (t->getName(), in || groups::canRoute (*t, *at), in, [member, group, in]
-                    {
-                        groups::route (*member, in ? nullptr : group.get());
-                    });
-                }
-                m.addSeparator();
-                m.addItem ("Ungroup (all back to the master)", ! groups::members (*at).isEmpty(), false, [group] { groups::ungroup (*group); });
-                m.showMenuAsync (PopupMenu::Options().withTargetComponent (&inputButton));
-                return;
-            }
-
-            if (EngineHelpers::trackHasInput (*at))
-            {
-                bool ticked = EngineHelpers::isInputMonitoringEnabled (*at);
-                m.addItem (1000, "Input Monitoring", true, ticked);
-                m.addSeparator();
-            }
-
-            if (editViewState.showWaveDevices)
-            {
-                int id = 1;
-                for (auto instance : at->edit.getAllInputDevices())
-                {
-                    if (instance->getInputDevice().getDeviceType() == te::InputDevice::waveDevice)
-                    {
-                        bool ticked = instance->getTargets().getFirst() == at->itemID;
-                        m.addItem (id++, instance->getInputDevice().getName(), true, ticked);
-                    }
-                }
-            }
-
-            if (editViewState.showMidiDevices)
-            {
-                m.addSeparator();
-
-                int id = 100;
-                for (auto instance : at->edit.getAllInputDevices())
-                {
-                    if (instance->getInputDevice().getDeviceType() == te::InputDevice::physicalMidiDevice)
-                    {
-                        bool ticked = instance->getTargets().getFirst() == at->itemID;
-                        m.addItem (id++, instance->getInputDevice().getName(), true, ticked);
-                    }
-                }
-            }
-
-            // where the track plays: the master, or a group
-            if (! groups::isFxTrack (*at))
-            {
-                m.addSeparator();
-                m.addSectionHeader ("Plays into");
-                const auto current = groups::of (*at);
-                m.addItem (3000, "Master", true, current == nullptr);
-                int id = 3001;
-                for (auto* g : groups::all (at->edit))
-                    m.addItem (id++, g->getName(), groups::canRoute (*at, *g), current == g);
-            }
-
-            int res = m.showAt (&inputButton);
-
-            if (res >= 3000)
-            {
-                const auto all = groups::all (at->edit);
-                groups::route (*at, res == 3000 ? nullptr : all[res - 3001]);
-                updateInputName();
-            }
-            else if (res == 1000)
-            {
-                EngineHelpers::enableInputMonitoring (*at, ! EngineHelpers::isInputMonitoringEnabled (*at));
-            }
-            else if (res >= 100)
-            {
-                int id = 100;
-                for (auto instance : at->edit.getAllInputDevices())
-                {
-                    if (instance->getInputDevice().getDeviceType() == te::InputDevice::physicalMidiDevice)
-                    {
-                        if (id == res)
-                            [[ maybe_unused ]] auto result = instance->setTarget (at->itemID, true, &at->edit.getUndoManager(), 0);
-
-                        id++;
-                    }
-                }
-            }
-            else if (res >= 1)
-            {
-                int id = 1;
-                for (auto instance : at->edit.getAllInputDevices())
-                {
-                    if (instance->getInputDevice().getDeviceType() == te::InputDevice::waveDevice)
-                    {
-                        if (id == res)
-                            [[ maybe_unused ]] auto result = instance->setTarget (at->itemID, true, &at->edit.getUndoManager(), 0);
-
-                        id++;
-                    }
-                }
-            }
-        };
+        inputButton.onClick = [this] { showInputMenu(); };
         armButton.onClick = [this, at]
         {
             EngineHelpers::armTrack (*at, ! EngineHelpers::isTrackArmed (*at));
@@ -1216,10 +1105,11 @@ void TrackHeaderComponent::updateInputName()
         inputButton.setTooltip ("Choose which tracks play into this group");
         return;
     }
-    String name;
+    StringArray names;
     for (auto instance : at->edit.getAllInputDevices())
-        if (te::isOnTargetTrack (*instance, *at, 0))
-            name = instance->getInputDevice().getName();
+        if (instance->getTargets().contains (at->itemID))
+            names.add (inputLabel (instance->getInputDevice().getName()));
+    const auto name = names.joinIntoString (" + ");
     auto group = groups::of (*at);
     inputButton.setButtonText ((name.isEmpty() ? String ("No input") : name) + (group != nullptr ? "  " + groups::arrow() + " " + group->getName() : String()));
     inputButton.setTooltip ((name.isEmpty() ? String ("Choose which input this track records") : "Records from " + name + " (click to change)")
@@ -1229,10 +1119,16 @@ void TrackHeaderComponent::updateInputName()
 void TrackHeaderComponent::paint (Graphics& g)
 {
     const bool sel = editViewState.selectionManager.isSelected (track.get());
-    g.setColour (sel ? theme::raised : theme::surface);
+    // selected: the track's own colour, darkened, so you can see which one you're working on
+    g.setColour (sel ? theme::surface.interpolatedWith (track->getColour(), 0.30f) : theme::surface);
     g.fillRect (getLocalBounds());
     g.setColour (track->getColour());
-    g.fillRect (getLocalBounds().removeFromLeft (4));
+    g.fillRect (getLocalBounds().removeFromLeft (sel ? 7 : 4));
+    if (dropTarget == this)
+    {
+        g.setColour (theme::accent);
+        g.fillRect (getLocalBounds().removeFromTop (3).withY (dropAbove ? 0 : getHeight() - 3));
+    }
     g.setColour (theme::strong);
     g.fillRect (getLocalBounds().removeFromBottom (2).withTrimmedLeft (4)); // the edge you drag to resize
     if (volume.isVisible())
@@ -1244,26 +1140,83 @@ void TrackHeaderComponent::paint (Graphics& g)
     }
 }
 
-void TrackHeaderComponent::mouseDown (const MouseEvent& e)
+void TrackHeaderComponent::selectFromClick (const MouseEvent& e)
 {
-    resizing = overResizeEdge (e);
-    heightAtDragStart = getHeight();
-    if (resizing) return;
-    // Ctrl/Cmd-click adds tracks to the selection (to group them, say)
     auto& sm = editViewState.selectionManager;
+    if (e.mods.isPopupMenu())
+    {
+        if (! sm.isSelected (track.get())) sm.selectOnly (track.get());
+        return;
+    }
+    // Ctrl-click adds or removes one track, Shift-click selects every track from the last one clicked
     if (e.mods.isCommandDown())
     {
         if (sm.isSelected (track.get())) sm.deselect (track.get());
         else sm.addToSelection (track.get());
+        return;
     }
-    else
-        sm.selectOnly (track.get());
+    if (e.mods.isShiftDown())
+    {
+        auto all = te::getAllTracks (track->edit);
+        te::Track* anchor = nullptr;
+        for (auto* s : sm.getSelectedObjects())
+            if (auto* t = dynamic_cast<te::Track*> (s)) anchor = t;
+        const int from = anchor != nullptr ? all.indexOf (anchor) : -1, to = all.indexOf (track.get());
+        if (from >= 0 && to >= 0)
+        {
+            for (int i = jmin (from, to); i <= jmax (from, to); ++i)
+                if (all[i]->isAudioTrack() || all[i]->isFolderTrack()) sm.addToSelection (all[i]);
+            return;
+        }
+    }
+    if (! sm.isSelected (track.get()) || sm.getNumObjectsSelected() == 1) sm.selectOnly (track.get());
 }
 
-// Drag the bottom edge: this track's height (Alt: every track)
-void TrackHeaderComponent::mouseDrag (const MouseEvent& e)
+void TrackHeaderComponent::mouseDown (const MouseEvent& ev)
 {
-    if (! resizing) return;
+    const auto e = ev.getEventRelativeTo (this);
+    resizing = overResizeEdge (e);
+    heightAtDragStart = getHeight();
+    reordering = false;
+    if (resizing) return;
+    selectFromClick (e);
+    if (e.mods.isPopupMenu() && StudioHooks::fillTrackMenu)
+    {
+        PopupMenu m;
+        StudioHooks::fillTrackMenu (m, *track, std::nullopt);
+        m.showMenuAsync (PopupMenu::Options().withMousePosition());
+    }
+}
+
+TrackHeaderComponent* TrackHeaderComponent::headerAt (Point<int> screenPos) const
+{
+    if (auto* parent = getParentComponent())
+        for (auto* c : parent->getChildren())
+            if (auto* h = dynamic_cast<TrackHeaderComponent*> (c))
+                if (h->isVisible() && h->getScreenBounds().contains (screenPos)) return h;
+    return nullptr;
+}
+
+// Drag the bottom edge: this track's height (Alt: every track). Drag anywhere else: move the track up or down.
+void TrackHeaderComponent::mouseDrag (const MouseEvent& ev)
+{
+    const auto e = ev.getEventRelativeTo (this);
+    if (! resizing)
+    {
+        if (e.mods.isPopupMenu() || (! reordering && e.getDistanceFromDragStart() < 6)) return;
+        reordering = true;
+        setMouseCursor (MouseCursor::DraggingHandCursor);
+        auto* target = headerAt (e.getScreenPosition());
+        const bool above = target != nullptr && e.getScreenPosition().y < target->getScreenBounds().getCentreY();
+        if (target != dropTarget.getComponent() || above != dropAbove)
+        {
+            if (auto* old = dropTarget.getComponent()) old->repaint();
+            dropTarget = target;
+            dropAbove = above;
+            if (target != nullptr) target->repaint();
+        }
+        return;
+    }
     const int h = jlimit (EditComponent::minTrackHeight, EditComponent::maxTrackHeight, heightAtDragStart + e.getDistanceFromDragStartY());
     if (e.mods.isAltDown())
         for (auto t : te::getAllTracks (track->edit)) t->state.setProperty ("basementHeight", h, nullptr);
@@ -1272,7 +1225,43 @@ void TrackHeaderComponent::mouseDrag (const MouseEvent& e)
     if (auto ec = findParentComponentOfClass<EditComponent>()) ec->relayout();
 }
 
-void TrackHeaderComponent::mouseUp (const MouseEvent&) { resizing = false; }
+void TrackHeaderComponent::mouseUp (const MouseEvent&)
+{
+    resizing = false;
+    if (! std::exchange (reordering, false)) return;
+    setMouseCursor (MouseCursor::NormalCursor);
+    auto* target = dropTarget.getComponent();
+    dropTarget = nullptr;
+    if (target != nullptr) target->repaint();
+    if (target == nullptr || target == this) return;
+
+    // the selected tracks move together (in their order) when the dragged one is among them
+    auto& edit = track->edit;
+    auto all = te::getAllTracks (edit);
+    juce::Array<te::Track*> moving;
+    if (editViewState.selectionManager.isSelected (track.get()))
+        for (auto* t : all) if (editViewState.selectionManager.isSelected (t)) moving.add (t);
+    if (moving.isEmpty()) moving.add (track.get());
+    if (moving.contains (target->getTrack())) return;
+
+    // where they go: after the track before the drop line
+    te::Track* preceding = target->getTrack();
+    if (dropAbove)
+    {
+        preceding = nullptr;
+        for (auto* t : all)
+        {
+            if (t == target->getTrack()) break;
+            if (! moving.contains (t) && t->getParentTrack() == target->getTrack()->getParentTrack()) preceding = t;
+        }
+    }
+    edit.getUndoManager().beginNewTransaction ("Move track");
+    for (auto* t : moving)
+    {
+        edit.moveTrack (t, te::TrackInsertPoint (target->getTrack()->getParentTrack(), preceding));
+        preceding = t;
+    }
+}
 
 void TrackHeaderComponent::mouseMove (const MouseEvent& e)
 {
@@ -1304,12 +1293,125 @@ void TrackHeaderComponent::resized()
     pan.setBounds (bottom);
 }
 
+// What the track records from (ticked inputs: click one to add or remove it) and where it plays.
+// A group track lists the tracks that play into it instead.
+void TrackHeaderComponent::showInputMenu()
+{
+    auto at = dynamic_cast<te::AudioTrack*> (track.get());
+    if (at == nullptr) return;
+    PopupMenu m;
+    te::AudioTrack::Ptr safeTrack (at);
+    auto& um = at->edit.getUndoManager();
+
+    if (groups::isGroup (*at))
+    {
+        te::AudioTrack::Ptr group (at);
+        m.addSectionHeader ("Tracks in this group");
+        for (auto t : te::getAudioTracks (at->edit))
+        {
+            if (t == at || groups::isFxTrack (*t)) continue;
+            te::AudioTrack::Ptr member (t);
+            const bool in = groups::of (*t) == at;
+            m.addItem (t->getName(), in || groups::canRoute (*t, *at), in, [member, group, in]
+            {
+                groups::route (*member, in ? nullptr : group.get());
+            });
+        }
+        m.addSeparator();
+        m.addItem ("Ungroup (all back to the master)", ! groups::members (*at).isEmpty(), false, [group] { groups::ungroup (*group); });
+        m.showMenuAsync (PopupMenu::Options().withTargetComponent (&inputButton));
+        return;
+    }
+
+    auto toggle = [safeTrack, &um] (te::InputDeviceInstance* instance, bool on)
+    {
+        if (on) [[ maybe_unused ]] auto r = instance->removeTarget (safeTrack->itemID, &um);
+        else    [[ maybe_unused ]] auto r = instance->setTarget (safeTrack->itemID, false, &um, 0);
+    };
+
+    // audio: the interface's inputs, under the interface's name
+    auto& dm = at->edit.engine.getDeviceManager().deviceManager;
+    const auto setup = dm.getAudioDeviceSetup();
+    juce::String interfaceName = setup.inputDeviceName.isNotEmpty() ? setup.inputDeviceName : juce::String ("No audio input chosen");
+    if (dm.getCurrentAudioDevice() != nullptr) interfaceName << "  (" << dm.getCurrentAudioDeviceType() << ")";
+    m.addSectionHeader ("Record audio from: " + interfaceName);
+    int audioInputs = 0;
+    if (editViewState.showWaveDevices)
+        for (auto instance : at->edit.getAllInputDevices())
+            if (instance->getInputDevice().getDeviceType() == te::InputDevice::waveDevice)
+            {
+                const bool on = instance->getTargets().contains (at->itemID);
+                ++audioInputs;
+                m.addItem (inputLabel (instance->getInputDevice().getName()), true, on, [instance, on, toggle] { toggle (instance, on); });
+            }
+    if (audioInputs == 0)
+        m.addItem ("No inputs: the interface isn't connected, or has none turned on", false, false, nullptr);
+
+    // MIDI: keyboards, pads and drum kits (an interface's MIDI port shows here under its own name)
+    if (editViewState.showMidiDevices)
+    {
+        m.addSectionHeader ("Record MIDI from (keyboards, pads, drum kits)");
+        int midi = 0;
+        for (auto instance : at->edit.getAllInputDevices())
+            if (instance->getInputDevice().getDeviceType() == te::InputDevice::physicalMidiDevice)
+            {
+                const bool on = instance->getTargets().contains (at->itemID);
+                auto name = instance->getInputDevice().getName();
+                ++midi;
+                m.addItem (name == "All MIDI Ins" ? String ("Any MIDI keyboard or controller") : name + " (MIDI)", true, on, [instance, on, toggle] { toggle (instance, on); });
+            }
+        if (midi == 0) m.addItem ("No MIDI keyboards or pads plugged in", false, false, nullptr);
+    }
+    m.addSeparator();
+    m.addItem ("Audio Setup...", StudioHooks::showAudioSetup != nullptr, false, [] { if (StudioHooks::showAudioSetup) StudioHooks::showAudioSetup(); });
+
+    // where the track's sound goes: the main mix, or a group first
+    if (! groups::isFxTrack (*at))
+    {
+        m.addSectionHeader ("Send this track's sound to");
+        const auto current = groups::of (*at);
+        m.addItem ("Master (the main mix: what you hear and export)", true, current == nullptr, [this, safeTrack]
+        {
+            groups::route (*safeTrack, nullptr);
+            updateInputName();
+        });
+        for (auto* g : groups::all (at->edit))
+        {
+            te::AudioTrack::Ptr group (g);
+            m.addItem ("Group: " + g->getName() + " (then the master)", groups::canRoute (*at, *g), current == g, [this, safeTrack, group]
+            {
+                groups::route (*safeTrack, group.get());
+                updateInputName();
+            });
+        }
+        if (groups::all (at->edit).isEmpty())
+            m.addItem ("(Groups you add show here: Project > Add Group Track)", false, false, nullptr);
+    }
+    m.showMenuAsync (PopupMenu::Options().withTargetComponent (&inputButton));
+}
+
 //==============================================================================
 PluginComponent::PluginComponent (EditViewState& evs, te::Plugin::Ptr p)
     : editViewState (evs), plugin (p)
 {
     setButtonText (plugin->getName().substring (0, 18));
-    setTooltip (plugin->getName() + ": click to open, right-click to remove");
+    setTooltip (plugin->getName() + ": click to open, right-click for more");
+}
+
+void PluginComponent::paintButton (Graphics& g, bool over, bool down)
+{
+    auto r = getLocalBounds().toFloat().reduced (0.5f);
+    auto c = theme::raised;
+    if (down) c = c.brighter (0.15f);
+    else if (over) c = c.brighter (0.08f);
+    g.setColour (c);
+    g.fillRoundedRectangle (r, 4.0f);
+    const bool on = plugin->isEnabled();
+    g.setColour (on ? theme::accent : theme::muted);
+    g.fillEllipse (r.removeFromLeft (r.getHeight()).reduced (r.getHeight() * 0.36f));
+    g.setColour (on ? theme::paper : theme::muted);
+    g.setFont (FontOptions (13.0f));
+    g.drawText (plugin->getName() + (on ? String() : String (" (bypassed)")), r.withTrimmedRight (6).toNearestInt(), Justification::centredLeft, true);
 }
 
 PluginComponent::~PluginComponent()
@@ -1322,8 +1424,27 @@ void PluginComponent::clicked (const ModifierKeys& modifiers)
     if (modifiers.isPopupMenu())
     {
         PopupMenu m;
-        m.addItem ("Delete", [this] { plugin->deleteFromParent(); });
-        m.showAt (this);
+        te::Plugin::Ptr p (plugin);
+        m.addItem ("Open " + p->getName(), [p] { p->showWindowExplicitly(); });
+        m.addItem ("Bypass", true, ! p->isEnabled(), [p] { p->setEnabled (! p->isEnabled()); });
+        m.addSeparator();
+        auto* list = p->getOwnerList();
+        const int index = list != nullptr ? list->indexOf (p.get()) : -1;
+        m.addItem ("Move Up", list != nullptr && index > 0, false, [p, list, index]
+        {
+            auto s = p->state; auto parent = s.getParent();
+            parent.moveChild (parent.indexOf (s), parent.indexOf (list->getPlugins()[index - 1]->state), &p->edit.getUndoManager());
+        });
+        m.addItem ("Move Down", list != nullptr && index >= 0 && index + 1 < list->size()
+                                && dynamic_cast<te::VolumeAndPanPlugin*> (list->getPlugins()[index + 1].get()) == nullptr
+                                && dynamic_cast<te::LevelMeterPlugin*> (list->getPlugins()[index + 1].get()) == nullptr, false, [p, list, index]
+        {
+            auto s = p->state; auto parent = s.getParent();
+            parent.moveChild (parent.indexOf (s), parent.indexOf (list->getPlugins()[index + 1]->state), &p->edit.getUndoManager());
+        });
+        m.addSeparator();
+        m.addItem ("Remove " + p->getName(), [p] { p->deleteFromParent(); });
+        m.showMenuAsync (PopupMenu::Options().withTargetComponent (this));
     }
     else
     {
@@ -1376,19 +1497,21 @@ void TrackFooterComponent::valueTreeChildOrderChanged (juce::ValueTree&, int, in
 
 void TrackFooterComponent::paint (Graphics& g)
 {
-    g.setColour (editViewState.selectionManager.isSelected (track.get()) ? theme::raised : theme::surface);
+    g.setColour (editViewState.selectionManager.isSelected (track.get()) ? theme::surface.interpolatedWith (track->getColour(), 0.30f) : theme::surface);
     g.fillRect (getLocalBounds());
     if (plugins.isEmpty())
     {
-        g.setColour (theme::muted);
-        g.setFont (FontOptions (11.0f));
-        g.drawText ("Effects", getLocalBounds().reduced (8, 6).withTrimmedLeft (30).removeFromTop (22), Justification::centredLeft);
+        g.setColour (theme::text2);
+        g.setFont (FontOptions (13.0f));
+        g.drawText ("Plug-ins", getLocalBounds().reduced (8, 6).withTrimmedLeft (30).removeFromTop (22), Justification::centredLeft);
     }
 }
 
-void TrackFooterComponent::mouseDown (const MouseEvent&)
+void TrackFooterComponent::mouseDown (const MouseEvent& e)
 {
     editViewState.selectionManager.selectOnly (track.get());
+    if (e.mods.isPopupMenu())
+        showEffectsMenu (track, &editViewState.selectionManager, &addButton);
 }
 
 void TrackFooterComponent::resized()
@@ -1396,13 +1519,13 @@ void TrackFooterComponent::resized()
     // the effect chain, top to bottom (the track's own volume/meter aren't shown)
     auto r = getLocalBounds().reduced (8, 6);
     addButton.setBounds (r.removeFromTop (22).removeFromLeft (22));
-    addButton.setTooltip ("Add an effect");
-    r.removeFromTop (3);
+    addButton.setTooltip ("Add a plug-in");
+    r.removeFromTop (4);
     for (auto p : plugins)
     {
-        p->setVisible (r.getHeight() >= 16);
-        p->setBounds (r.removeFromTop (16));
-        r.removeFromTop (2);
+        p->setVisible (r.getHeight() >= 20);
+        p->setBounds (r.removeFromTop (22));
+        r.removeFromTop (3);
     }
 }
 
@@ -1446,7 +1569,7 @@ TrackComponent::~TrackComponent()
 
 void TrackComponent::paint (Graphics& g)
 {
-    g.fillAll (editViewState.selectionManager.isSelected (track.get()) ? theme::surface : theme::subtle);
+    g.fillAll (editViewState.selectionManager.isSelected (track.get()) ? theme::subtle.interpolatedWith (track->getColour(), 0.07f) : theme::subtle);
 
     // a faint line per bar
     auto& ts = editViewState.edit.tempoSequence;
@@ -1474,6 +1597,17 @@ void TrackComponent::mouseDown (const MouseEvent& e)
             draggingPoint = p->getCurve().addPoint (t, valueAtY (e.y), 0.0f, &um);
         }
         repaint();
+        return;
+    }
+    if (e.mods.isPopupMenu())
+    {
+        if (! editViewState.selectionManager.isSelected (track.get())) editViewState.selectionManager.selectOnly (track.get());
+        if (StudioHooks::fillTrackMenu)
+        {
+            PopupMenu m;
+            StudioHooks::fillTrackMenu (m, *track, te::TimePosition::fromSeconds (jmax (0.0, editViewState.xToTime (e.x, getWidth()).inSeconds())));
+            m.showMenuAsync (PopupMenu::Options().withMousePosition());
+        }
         return;
     }
     if (! e.mods.isShiftDown()) editViewState.selectionManager.selectOnly (track.get());
