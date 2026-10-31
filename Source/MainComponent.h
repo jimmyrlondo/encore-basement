@@ -1301,7 +1301,7 @@ public:
         mark.removeFromLeft (10);
         g.setColour (theme::text2);
         g.setFont (juce::FontOptions (11.0f, juce::Font::bold));
-        g.drawText ("ENCORE:", mark.withTrimmedBottom (mark.getHeight() / 2 - 2), juce::Justification::bottomLeft);
+        g.drawText ("ENCORE: BASEMENT", mark.withTrimmedBottom (mark.getHeight() / 2 - 2), juce::Justification::bottomLeft);
         g.setColour (theme::paper);
         g.setFont (juce::FontOptions (20.0f, juce::Font::bold));
         g.drawText ("STUDIO", mark.withTrimmedTop (mark.getHeight() / 2 - 2), juce::Justification::topLeft);

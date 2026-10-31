@@ -1100,7 +1100,7 @@ public:
         mark.removeFromLeft (14);
         g.setColour (theme::text2);
         g.setFont (hubui::font (14.0f, true));
-        g.drawText ("ENCORE:", mark.removeFromTop (26), juce::Justification::bottomLeft);
+        g.drawText ("ENCORE: BASEMENT", mark.removeFromTop (26), juce::Justification::bottomLeft);
         g.setColour (theme::paper);
         g.setFont (hubui::font (30.0f, true));
         g.drawText ("STUDIO", mark.withTrimmedLeft (-2), juce::Justification::topLeft);

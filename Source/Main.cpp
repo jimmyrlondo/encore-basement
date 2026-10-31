@@ -81,8 +81,12 @@ public:
             quit();
             return;
         }
-        if (args.contains ("--profile"))
-            studioProfile() = args.fromFirstOccurrenceOf ("--profile", false, false).trim().unquoted();
+        // --profile <name>: only the next word (a song path can follow it)
+        {
+            auto tokens = juce::StringArray::fromTokens (args, true);
+            const int at = tokens.indexOf ("--profile");
+            if (at >= 0 && at + 1 < tokens.size()) studioProfile() = tokens[at + 1].unquoted();
+        }
         carryOverOldSettings();
         juce::Logger::setCurrentLogger (&logger);
         // a crash leaves its last words in Encore Studio.log (for Help > Report a Problem next time)
