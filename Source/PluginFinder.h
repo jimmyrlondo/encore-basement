@@ -1,4 +1,4 @@
-// Encore: Studio
+// Encore: Basement Studio
 // Copyright (C) 2026 Encore Studio. AGPLv3 (see LICENSE).
 //
 // Finds your plugins in the background. Every launch checks the plugin folders

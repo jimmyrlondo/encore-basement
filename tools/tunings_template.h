@@ -1,4 +1,4 @@
-// Encore: Studio
+// Encore: Basement Studio
 // Copyright (C) 2026 Encore Studio. AGPLv3 (see LICENSE).
 //
 // The tuner's instruments, tunings, temperaments and reference pitches.

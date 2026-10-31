@@ -1,11 +1,11 @@
-Encore: Studio
+Encore: Basement Studio
 
 Record, edit and mix your songs. Free and open source.
 
 Your songs, recordings and masters live in your own music folder (you pick it
-the first time Encore: Studio opens), never inside this program's folder, so
+the first time Encore: Basement Studio opens), never inside this program's folder, so
 updating or uninstalling never touches them.
 
-Encore: Studio is free software under the GNU Affero General Public License,
+Encore: Basement Studio is free software under the GNU Affero General Public License,
 version 3 (LICENSE.txt in the install folder). The source is at
 github.com/jimmyrlondo/encore-studio.

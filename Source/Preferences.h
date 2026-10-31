@@ -1,4 +1,4 @@
-// Encore: Studio
+// Encore: Basement Studio
 // Copyright (C) 2026 Encore Studio. AGPLv3 (see LICENSE).
 //
 // Studio > Preferences: a normal settings window. Pages down the left (General,
@@ -119,7 +119,7 @@ namespace prefs
             startWith.addItem ("The last song I had open", 2);
             startWith.onChange = [this] { props.setValue ("startWith", startWith.getSelectedId() == 2 ? "last" : "hub"); };
             addAndMakeVisible (startWith);
-            updates.setButtonText ("Check for a newer Encore Studio once a day");
+            updates.setButtonText ("Check for a newer Encore Basement Studio once a day");
             updates.onClick = [this] { props.setValue ("checkUpdates", updates.getToggleState()); };
             addAndMakeVisible (updates);
             clearRecent.onClick = [this] { recent::save (props, {}); refresh(); };
@@ -128,7 +128,7 @@ namespace prefs
             addAndMakeVisible (folderPath);
             changeFolder.onClick = [this]
             {
-                auto chooser = std::make_shared<juce::FileChooser> ("Where should Encore Studio keep your songs?", juce::File (props.getValue ("projectsFolder")));
+                auto chooser = std::make_shared<juce::FileChooser> ("Where should Encore Basement Studio keep your songs?", juce::File (props.getValue ("projectsFolder")));
                 chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories, [this, chooser] (const juce::FileChooser&)
                 {
                     if (chooser->getResult() == juce::File()) return;
@@ -180,7 +180,7 @@ namespace prefs
         juce::PropertiesFile& props;
         juce::GroupComponent* startGroup = nullptr;
         juce::GroupComponent* songsGroup = nullptr;
-        juce::Label startL { {}, "When Encore Studio opens" }, updatesL { {}, "Updates" }, recentL { {}, "Recent songs" }, folderL { {}, "Songs folder" }, folderNote;
+        juce::Label startL { {}, "When Encore Basement Studio opens" }, updatesL { {}, "Updates" }, recentL { {}, "Recent songs" }, folderL { {}, "Songs folder" }, folderNote;
         juce::ComboBox startWith;
         juce::ToggleButton updates;
         juce::TextButton clearRecent, changeFolder { "Change..." };
@@ -376,7 +376,7 @@ namespace prefs
         /** Every action with its keys, by menu, as text */
         juce::String listAsText()
         {
-            juce::String out ("Encore: Studio keyboard shortcuts\n\n");
+            juce::String out ("Encore: Basement Studio keyboard shortcuts\n\n");
             for (auto& cat : commands.getCommandCategories())
             {
                 out << cat << "\n";
@@ -402,7 +402,7 @@ namespace prefs
         void saveAsText()
         {
             auto chooser = std::make_shared<juce::FileChooser> ("Save the shortcut list",
-                juce::File::getSpecialLocation (juce::File::userDocumentsDirectory).getChildFile ("Encore Studio shortcuts.txt"), "*.txt");
+                juce::File::getSpecialLocation (juce::File::userDocumentsDirectory).getChildFile ("Encore Basement Studio shortcuts.txt"), "*.txt");
             chooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::warnAboutOverwriting, [this, chooser] (const juce::FileChooser&)
             {
                 auto f = chooser->getResult();

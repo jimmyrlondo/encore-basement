@@ -2,7 +2,7 @@
 
 ## 0.4.0 (not released yet)
 
-**Encore: Basement is now Encore: Studio.** Your settings and songs carry
+**Encore: Basement is now Encore: Basement Studio.** Your settings and songs carry
 over by themselves. New songs are saved as .encore files, and .basement songs
 still open as they are.
 

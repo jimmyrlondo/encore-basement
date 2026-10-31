@@ -1,4 +1,4 @@
-// Encore: Studio
+// Encore: Basement Studio
 // Copyright (C) 2026 Encore Studio. AGPLv3 (see LICENSE).
 //
 // "Encore Studio Bridge32.exe": a small 32-bit program that runs one 32-bit

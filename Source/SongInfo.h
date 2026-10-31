@@ -1,4 +1,4 @@
-// Encore: Studio
+// Encore: Basement Studio
 // Copyright (C) 2026 Encore Studio. AGPLv3 (see LICENSE).
 //
 // What a song is beyond its audio: title, artist, album, genre, key, notes and

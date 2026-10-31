@@ -1,4 +1,4 @@
-// Encore: Studio
+// Encore: Basement Studio
 // Copyright (C) 2026 Encore Studio. AGPLv3 (see LICENSE).
 //
 // The Hub: the first thing you see. Jump back into a recent song, or set up a
@@ -924,7 +924,7 @@ private:
 
     void chooseWhere()
     {
-        auto chooser = std::make_shared<juce::FileChooser> ("Where should Encore Studio keep your songs? (Pick a roomy drive)", projectsFolder());
+        auto chooser = std::make_shared<juce::FileChooser> ("Where should Encore Basement Studio keep your songs? (Pick a roomy drive)", projectsFolder());
         chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories,
                               [this, chooser] (const juce::FileChooser&)
                               {

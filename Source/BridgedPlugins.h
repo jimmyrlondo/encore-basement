@@ -1,4 +1,4 @@
-// Encore: Studio
+// Encore: Basement Studio
 // Copyright (C) 2026 Encore Studio. AGPLv3 (see LICENSE).
 //
 // 32-bit plugins (Windows): Studio is 64-bit and can't load a 32-bit .dll or

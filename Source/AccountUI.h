@@ -1,4 +1,4 @@
-// Encore: Studio
+// Encore: Basement Studio
 // Copyright (C) 2026 Encore Studio. AGPLv3 (see LICENSE).
 //
 // The first screen (who you're making music as) and Account > Edit Profile.
@@ -173,7 +173,7 @@ public:
         mark.removeFromLeft (14);
         g.setColour (theme::paper);
         g.setFont (hubui::font (24.0f, true));
-        g.drawText (firstRun ? "Welcome to Encore: Studio" : "Your profile", mark.removeFromTop (32), juce::Justification::bottomLeft);
+        g.drawText (firstRun ? "Welcome to Encore: Basement Studio" : "Your profile", mark.removeFromTop (32), juce::Justification::bottomLeft);
         g.setColour (theme::text2);
         g.setFont (hubui::font (14.0f));
         g.drawText ("Who are you making music as?", mark, juce::Justification::topLeft);
@@ -303,7 +303,7 @@ private:
 
     void chooseLibrary()
     {
-        auto chooser = std::make_shared<juce::FileChooser> ("Where should Encore Studio keep your music? (Pick a roomy drive)", library);
+        auto chooser = std::make_shared<juce::FileChooser> ("Where should Encore Basement Studio keep your music? (Pick a roomy drive)", library);
         juce::Component::SafePointer<AccountComponent> safe (this);
         chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories, [safe, chooser] (const juce::FileChooser&)
         {

@@ -17,7 +17,7 @@ redirect** (RFC 8252).
 1. Encore Studio opens the browser at
    `https://encoremusic.studio/oauth/authorize?client_id=basement&response_type=code&code_challenge=...&code_challenge_method=S256&redirect_uri=http://127.0.0.1:<port>/callback&scope=releases:write&state=...`
 2. The artist signs in on Encore as usual (existing accounts, existing 2FA) and
-   approves "Encore: Studio wants to upload releases to your account".
+   approves "Encore: Basement Studio wants to upload releases to your account".
 3. Encore redirects to the loopback address with `?code=...&state=...`.
 4. Encore Studio exchanges the code at `POST /oauth/token` (with the PKCE verifier)
    and gets an access token plus a refresh token.
@@ -53,7 +53,7 @@ Encore Studio already writes:
   "loudness": "-14 LUFS",
   "stems": ["stems/Kick.wav", "stems/Vocal.wav"],
   "cover": "cover.jpg",
-  "madeWith": "Encore: Studio 0.4.0",
+  "madeWith": "Encore: Basement Studio 0.4.0",
   "madeAt": "2026-10-28T19:02:11.000-04:00"
 }
 ```

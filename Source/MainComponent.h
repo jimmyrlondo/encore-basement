@@ -1,4 +1,4 @@
-// Encore: Studio
+// Encore: Basement Studio
 // Copyright (C) 2026 Encore Studio. AGPLv3 (see LICENSE).
 //
 // The main window: a song (a Tracktion "Edit") with its tracks, the transport,
@@ -256,7 +256,7 @@ public:
 
     void showWarningMessage (const juce::String& message) override
     {
-        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Encore Studio", message);
+        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Encore Basement Studio", message);
     }
 };
 
@@ -830,7 +830,7 @@ public:
 
         hubui::styleLabel (note, 12.0f, theme::muted);
         note.setText ("The package goes in the song's folder, under Encore. Then Encore opens in your browser: upload the files from there. "
-                      "Signing in from Encore Studio and uploading in one click come next.", juce::dontSendNotification);
+                      "Signing in from Encore Basement Studio and uploading in one click come next.", juce::dontSendNotification);
         addAndMakeVisible (note);
 
         send.setColour (juce::TextButton::buttonColourId, theme::brand);
@@ -1200,7 +1200,7 @@ public:
         if (crashedLastSession)
             juce::Timer::callAfterDelay (3000, [safe = juce::Component::SafePointer<MainComponent> (this)]
             {
-                if (safe) safe->warn ("Encore Studio didn't close properly last time. Help > Report a Problem sends us what happened.");
+                if (safe) safe->warn ("Encore Basement Studio didn't close properly last time. Help > Report a Problem sends us what happened.");
             });
         auto last = juce::File (props().getValue ("lastSong"));
         if (last.existsAsFile() && recent::load (props()).isEmpty()) // songs made before the Hub existed
@@ -1396,7 +1396,7 @@ public:
 
     void updateTitle()
     {
-        if (onTitleChange) onTitleChange (edit ? "Encore: Studio - " + songTitle() : juce::String ("Encore: Studio"));
+        if (onTitleChange) onTitleChange (edit ? "Encore: Basement Studio - " + songTitle() : juce::String ("Encore: Basement Studio"));
     }
 
     //==============================================================================
@@ -1759,7 +1759,7 @@ public:
             case cmdUpdates:        set ("Check for Updates...", "Help"); break;
             case cmdAutoUpdates:    set ("Check for Updates Once a Day", "Help"); info.setTicked (props().getBoolValue ("checkUpdates", true)); break;
             case cmdLogFolder:      set ("Open Log Folder", "Help"); break;
-            case cmdAbout:          set ("About Encore: Studio", "Help"); break;
+            case cmdAbout:          set ("About Encore: Basement Studio", "Help"); break;
             default: break;
         }
     }
@@ -3225,7 +3225,7 @@ private:
             for (auto& f : stemFiles) st.add (f);
             rel->setProperty ("stems", st);
             if (choice.cover.existsAsFile()) rel->setProperty ("cover", "cover" + choice.cover.getFileExtension().toLowerCase());
-            rel->setProperty ("madeWith", "Encore: Studio " + juce::String (ProjectInfo::versionString));
+            rel->setProperty ("madeWith", "Encore: Basement Studio " + juce::String (ProjectInfo::versionString));
             rel->setProperty ("madeAt", juce::Time::getCurrentTime().toISO8601 (true));
             dir.getChildFile ("release.json").replaceWithText (juce::JSON::toString (juce::var (rel)));
 
@@ -3576,7 +3576,7 @@ private:
                   << (session.songs.isEmpty() ? juce::String() : ", " + juce::String (session.songs.size()) + " songs marked") << ".";
             auto* w = new juce::AlertWindow ("Import a Live Recording", about, juce::MessageBoxIconType::NoIcon);
             juce::StringArray modes { "One song: the whole show" + juce::String (session.songs.isEmpty() ? "" : ", a marker at each song") };
-            if (! session.songs.isEmpty()) modes.add ("A Encore Studio song for each song in the show (to mix them one by one)");
+            if (! session.songs.isEmpty()) modes.add ("An Encore Basement Studio song for each song in the show (to mix them one by one)");
             w->addComboBox ("mode", modes, "Make");
             w->addComboBox ("silent", { "Leave out inputs with nothing on them", "Bring in every input" }, "Inputs");
             w->addButton ("Import", 1, juce::KeyPress (juce::KeyPress::returnKey));
@@ -3964,7 +3964,7 @@ private:
     // Help > Check for Updates (and once a day by itself, unless that's switched off)
     void checkForUpdates (bool asked)
     {
-        if (asked) status ("Checking for a newer Encore Studio...");
+        if (asked) status ("Checking for a newer Encore Basement Studio...");
         else
         {
             const auto last = juce::Time (props().getValue ("lastUpdateCheck", "0").getLargeIntValue());
@@ -3980,7 +3980,7 @@ private:
             self.props().setValue ("lastUpdateCheck", juce::String (juce::Time::getCurrentTime().toMilliseconds()));
             if (! support::isNewer (r.version, mine))
             {
-                if (asked) self.status ("You have the newest Encore Studio (" + mine + ").");
+                if (asked) self.status ("You have the newest Encore Basement Studio (" + mine + ").");
                 return;
             }
             // asked about once per new version when it's automatic
@@ -3990,7 +3990,7 @@ private:
             if (notes.length() > 600) notes = notes.substring (0, 600).upToLastOccurrenceOf ("\n", false, false) + "\n...";
             juce::AlertWindow::showAsync (juce::MessageBoxOptions()
                                             .withIconType (juce::MessageBoxIconType::NoIcon)
-                                            .withTitle ("Encore Studio " + r.version + " is out")
+                                            .withTitle ("Encore Basement Studio " + r.version + " is out")
                                             .withMessage ("You have " + mine + ". Download the new one, unzip it, and run it from its folder "
                                                           "(your songs and settings carry over).\n\n" + notes)
                                             .withButton ("Download", 1)
@@ -4009,7 +4009,7 @@ private:
     {
         juce::String s;
         const juce::String nl = juce::newLine;
-        s << "Encore Studio " << ProjectInfo::versionString << " (" << studioProfile() << ")" << nl
+        s << "Encore Basement Studio " << ProjectInfo::versionString << " (" << studioProfile() << ")" << nl
           << "System: " << juce::SystemStats::getOperatingSystemName() << ", " << juce::SystemStats::getCpuModel()
           << ", " << juce::SystemStats::getNumCpus() << " cores, " << juce::SystemStats::getMemorySizeInMegabytes() << " MB" << nl;
         auto& dm = engine.getDeviceManager().deviceManager;
@@ -4042,7 +4042,7 @@ private:
             auto zip = support::makeReport (what, systemInfo(), includeSong ? songFile : juce::File());
             if (zip == juce::File()) { warn ("Couldn't make the report on your Desktop."); return; }
             zip.revealToUser();
-            const juce::String body = "Encore Studio " + juce::String (ProjectInfo::versionString) + " on " + juce::SystemStats::getOperatingSystemName()
+            const juce::String body = "Encore Basement Studio " + juce::String (ProjectInfo::versionString) + " on " + juce::SystemStats::getOperatingSystemName()
                                       + "\n\nWhat happened:\n\n\n(Drag " + zip.getFileName() + " from your Desktop in here.)";
             juce::URL ("https://github.com/" + juce::String (support::repo()) + "/issues/new")
                 .withParameter ("title", "Problem: ")
@@ -4055,8 +4055,8 @@ private:
 
     void showAbout()
     {
-        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::NoIcon, "Encore: Studio " + juce::String (ProjectInfo::versionString),
-            "A free, open-source DAW from Encore Studio.\n\n"
+        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::NoIcon, "Encore: Basement Studio " + juce::String (ProjectInfo::versionString),
+            "A free, open-source DAW from Encore Music.\n\n"
             "Copyright (C) 2026 Encore Studio. Free software under the GNU AGPLv3.\n"
             "Built on Tracktion Engine (GPLv3) and JUCE (AGPLv3).\n\n"
             "github.com/jimmyrlondo/encore-studio");
@@ -4123,7 +4123,7 @@ private:
         if (! f.existsAsFile() || f.getLastModificationTime() <= songFile.getLastModificationTime()) return;
         auto when = f.getLastModificationTime().formatted ("%b %d, %H:%M");
         juce::AlertWindow::showOkCancelBox (juce::MessageBoxIconType::QuestionIcon, "Recover unsaved changes?",
-            "Encore Studio didn't close properly last time. There's an automatic copy of \"" + songTitle() + "\" from " + when
+            "Encore Basement Studio didn't close properly last time. There's an automatic copy of \"" + songTitle() + "\" from " + when
             + " that's newer than the last save.\n\nOpen the recovered copy? (The last saved version is kept as \"before recovery\".)",
             "Recover", "Keep the last save", this, juce::ModalCallbackFunction::create ([this, f] (int r)
         {

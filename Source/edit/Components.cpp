@@ -5,7 +5,7 @@
     |  |  |  |  \ '-'  \ `--.|  \  \  |  |  |  |' '-' '|  ||  |       Corporation
     `---' `--'   `--`--'`---'`--'`--' `---' `--' `---' `--''--'    www.tracktion.com
 
-    Modified for Encore: Studio (2026): Encore colours, clip dragging, a bar
+    Modified for Encore: Basement Studio (2026): Encore colours, clip dragging, a bar
     ruler, wheel zoom/scroll, volume and pan on the track headers. Licensed
     under the GPL v3 (or later) as part of Studio (AGPLv3).
 */

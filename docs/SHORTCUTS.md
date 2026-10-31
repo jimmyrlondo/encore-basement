@@ -1,4 +1,4 @@
-# Encore: Studio keyboard shortcuts (0.4.0 defaults)
+# Encore: Basement Studio keyboard shortcuts (0.4.0 defaults)
 
 Every action Studio has, with its shortcut today. Change any of them in Preferences > Keyboard Shortcuts
 (Help > Keyboard Shortcuts, or Ctrl+Alt+K). A dash means no shortcut yet.
@@ -168,4 +168,4 @@ Every action Studio has, with its shortcut today. Change any of them in Preferen
 | Check for Updates... | - |
 | Check for Updates Once a Day | - |
 | Open Log Folder | - |
-| About Encore: Studio | - |
+| About Encore: Basement Studio | - |

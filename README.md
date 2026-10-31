@@ -1,4 +1,4 @@
-# Encore: Studio
+# Encore: Basement Studio
 
 A free, open-source DAW for bands and home studios, from [Encore](https://encoremusic.studio).
 Record, edit and mix on your own computer, with Encore's own plugins built in,

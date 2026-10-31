@@ -1,4 +1,4 @@
-# Encore: Studio, an open-source DAW (AGPLv3).
+# Encore: Basement Studio, an open-source DAW (AGPLv3).
 # Built on JUCE (AGPLv3) and Tracktion Engine (GPLv3), both git submodules.
 #
 #   git clone https://github.com/jimmyrlondo/encore-studio.git
@@ -54,7 +54,7 @@ juce_add_gui_app(EncoreStudio
     BUNDLE_ID com.encoremusic.studio
     VERSION ${PROJECT_VERSION}
     MICROPHONE_PERMISSION_ENABLED TRUE
-    MICROPHONE_PERMISSION_TEXT "Encore Studio records from your audio inputs."
+    MICROPHONE_PERMISSION_TEXT "Encore Basement Studio records from your audio inputs."
     ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/Assets/encore-icon.png"
     ICON_SMALL "${CMAKE_CURRENT_SOURCE_DIR}/Assets/encore-icon.png"
     NEEDS_CURL FALSE

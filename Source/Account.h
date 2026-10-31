@@ -1,4 +1,4 @@
-// Encore: Studio
+// Encore: Basement Studio
 // Copyright (C) 2026 Encore Studio. AGPLv3 (see LICENSE).
 //
 // Who you're making music as, and where each artist's music lives.
@@ -169,7 +169,7 @@ namespace library
         dir.getChildFile ("artist.json").replaceWithText (juce::JSON::toString (juce::var (o)));
         auto readme = dir.getChildFile ("What goes where.txt");
         if (! readme.existsAsFile())
-            readme.replaceWithText (a.name + "'s music, kept by Encore: Studio\r\n\r\n"
+            readme.replaceWithText (a.name + "'s music, kept by Encore: Basement Studio\r\n\r\n"
                                     "Songs     Every song's session: the song file, its recordings and imported audio.\r\n"
                                     "          Back up or move a song by copying its folder.\r\n"
                                     "Releases  Singles, EPs and albums, as they go to Encore.\r\n"
